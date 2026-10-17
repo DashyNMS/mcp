@@ -75,12 +75,14 @@ internal sealed class FakeLibreNms
         Client.Health.Returns(new DeviceHealthApi(Transport));
         Client.Logs.Returns(new LogsApi(Transport));
         Client.Arp.Returns(new ArpApi(Transport));
+        Client.DeviceGroups.Returns(new DeviceGroupsApi(Transport));
 
         Time = new FakeTimeProvider(Now);
         Directory = new DeviceDirectory(Client, Time);
         Resolver = new DeviceResolver(Directory);
         Runner = new ToolRunner(new Redactor(), Options, NullLogger<ToolRunner>.Instance);
-        Timeline = new DeviceTimeline(Client, Options, Time);
+        Timeline = new DeviceTimeline(Client, Options);
+        Scope = new DeviceScope(Client, Directory, Time);
     }
 
     public FakeTransport Transport { get; }
@@ -98,6 +100,8 @@ internal sealed class FakeLibreNms
     public ToolRunner Runner { get; }
 
     public DeviceTimeline Timeline { get; }
+
+    public DeviceScope Scope { get; }
 
     public static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement;
 
@@ -126,7 +130,7 @@ internal sealed class FakeLibreNms
               {"id":11,"device_id":2,"rule_id":4,"state":1,"timestamp":"2026-10-17 09:00:00","hostname":"edge-sw3.example.com","severity":"critical","name":"Device down"}
             ]}
             """)
-        .On("rules", """{"status":"ok","rules":[{"id":3,"name":"Port down"},{"id":4,"name":"Device down"}]}""")
+        .On("rules", """{"status":"ok","rules":[{"id":3,"name":"Port down","severity":"critical"},{"id":4,"name":"Device down","severity":"warning"}]}""")
         .On("devices/1/health/processor", """{"status":"ok","graphs":[{"sensor_id":5},{"sensor_id":6}]}""")
         .On("devices/1/health/processor/5", """{"status":"ok","graphs":[{"processor_id":5,"device_id":1,"processor_descr":"CPU 0","processor_usage":37}]}""")
         .On("devices/1/health/processor/6", """{"status":"ok","graphs":[{"processor_id":6,"device_id":1,"processor_descr":"CPU 1","processor_usage":61}]}""")
@@ -162,5 +166,27 @@ internal sealed class FakeLibreNms
             {"status":"ok","logs":[{"id":1,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-10-17 09:40:00"}]}
             """)
         // 09:00 to 09:10 UTC on 17 October 2026, as Unix timestamps.
-        .On("devices/1/outages", """{"status":"ok","outages":[{"going_down":1792227600,"up_again":1792228200}]}""");
+        .On("devices/1/outages", """{"status":"ok","outages":[{"going_down":1792227600,"up_again":1792228200}]}""")
+        .On("devicegroups", """
+            {"status":"ok","groups":[
+              {"id":1,"name":"Core switches","desc":"Distribution and core","type":"static"},
+              {"id":2,"name":"Edge switches","type":"dynamic"},
+              {"id":3,"name":"Access","type":"dynamic"}
+            ]}
+            """)
+        .On("devicegroups/1", """{"status":"ok","devices":[{"device_id":1}]}""")
+        .On("devicegroups/2", """{"status":"ok","devices":[{"device_id":2}]}""")
+        .On("devicegroups/3", """{"status":"ok","devices":[]}""")
+        // The whole network's alert log: device 1's port alert raised at
+        // 09:40 and still open; device 2's raised and recovered overnight;
+        // and one from a week ago, outside a 24-hour window.
+        .On("logs/alertlog", """
+            {"status":"ok","logs":[
+              {"id":5,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-10-17 09:40:00"},
+              {"id":4,"rule_id":4,"device_id":2,"state":0,"time_logged":"2026-10-17 03:30:00"},
+              {"id":3,"rule_id":4,"device_id":2,"state":1,"time_logged":"2026-10-17 02:00:00"},
+              {"id":2,"rule_id":4,"device_id":2,"state":0,"time_logged":"2026-10-10 05:00:00"},
+              {"id":1,"rule_id":4,"device_id":2,"state":1,"time_logged":"2026-10-10 04:00:00"}
+            ]}
+            """);
 }

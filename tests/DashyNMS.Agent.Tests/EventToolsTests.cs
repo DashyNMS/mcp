@@ -16,7 +16,7 @@ public sealed class EventToolsTests
     [Fact]
     public async Task Events_merge_the_logs_newest_first_inside_the_window()
     {
-        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", 24, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", 24, cancellationToken: CancellationToken.None));
 
         Assert.Equal("In the last 24 hours: 1 event, 1 alert change, 1 outage.", root.GetProperty("summary").GetString());
         var entries = root.GetProperty("data").GetProperty("entries");
@@ -35,9 +35,9 @@ public sealed class EventToolsTests
     [Fact]
     public async Task A_longer_window_reaches_older_events()
     {
-        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", 168, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", 168, cancellationToken: CancellationToken.None));
 
-        Assert.StartsWith("In the last 168 hours: 2 events", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith("In the last 7 days: 2 events", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public sealed class EventToolsTests
     [InlineData(169)]
     public async Task Hours_out_of_range_is_an_error(int hours)
     {
-        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", hours, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().DeviceEvents("core-sw1", hours, cancellationToken: CancellationToken.None));
 
         Assert.Equal("error", root.GetProperty("status").GetString());
     }
@@ -53,7 +53,7 @@ public sealed class EventToolsTests
     [Fact]
     public async Task What_changed_says_which_sources_are_not_configured()
     {
-        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None));
 
         Assert.EndsWith("Unimus isn't configured. Graylog isn't configured.", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
         Assert.False(root.GetProperty("data").GetProperty("unimus").GetProperty("configured").GetBoolean());
@@ -92,7 +92,7 @@ public sealed class EventToolsTests
         _graylog.SearchAsync(Arg.Any<string>(), 24 * 3600, 10, 0, "timestamp:desc", null, Arg.Any<CancellationToken>())
             .Returns(new GraylogSearchResult { TotalResults = 42 });
 
-        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None));
         var unimus = root.GetProperty("data").GetProperty("unimus");
 
         Assert.True(unimus.GetProperty("config_changed").GetBoolean());
@@ -172,7 +172,7 @@ public sealed class EventToolsTests
             ],
         });
 
-        var unimus = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, CancellationToken.None)).GetProperty("data").GetProperty("unimus");
+        var unimus = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None)).GetProperty("data").GetProperty("unimus");
 
         Assert.False(unimus.GetProperty("config_changed").GetBoolean());
         await _unimus.DidNotReceive().GetDiffAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -184,7 +184,7 @@ public sealed class EventToolsTests
         _unimus.IsConfigured.Returns(true);
         _unimus.ListAllDevicesAsync(Arg.Any<CancellationToken>()).Returns<IReadOnlyList<UnimusDevice>>(_ => throw new UnimusApiException("Unimus is down."));
 
-        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None));
 
         Assert.Equal("ok", root.GetProperty("status").GetString());
         Assert.StartsWith("Unimus:", root.GetProperty("data").GetProperty("unimus").GetProperty("error").GetString(), StringComparison.Ordinal);

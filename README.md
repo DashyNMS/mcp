@@ -26,7 +26,7 @@ It's a [Model Context Protocol](https://modelcontextprotocol.io) server, built o
 ## What you can ask
 
 **Find anything**
-By part of a name, an IP address, or a MAC address. A MAC is looked up in LibreNMS's ARP tables, so you find the router or switch that saw it. *(`find_device`)*
+By part of a name, an IP address, or a MAC address, or list devices by status, device group or location: "which devices are down at the north site?". A MAC is looked up in LibreNMS's ARP tables, so you find the router or switch that saw it. *(`find_device`, `list_groups_and_locations`)*
 
 **Is it OK?**
 One answer per device: up or down, uptime, maintenance, open alerts, CPU, memory, the fullest storage, and the ports that are down or counting errors. *(`device_health`)*
@@ -34,13 +34,13 @@ One answer per device: up or down, uptime, maintenance, open alerts, CPU, memory
 **What's on that port?**
 State, speed, VLANs, traffic, errors, its description, and the neighbour LibreNMS sees on it over LLDP or CDP. *(`port_status`)*
 
-**What's alerting?**
-Every open alert, grouped by device and newest first. Ask for just critical alerts, or just one device. *(`active_alerts`)*
+**What's alerting, and what alerted?**
+Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
 
 **What happened, and what changed?**
-A device's event log, alert changes and outages, for anything from the last hour to the last week. With Unimus and Graylog connected, you also get the config diff between its last two backups and the messages it sent. *(`device_events`, `what_changed`)*
+A device's event log, alert changes and outages for any window: "the last 6 hours", "since Friday", or "between 2 and 4 last night". With Unimus and Graylog connected, you also get the config diff for a change inside that window and the messages the device sent. *(`device_events`, `what_changed`)*
 
-Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you.
+Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you. Long lists come back a page at a time, so a broad question still gets a complete answer. A window can reach back up to a month, and when LibreNMS's logs don't go back that far, the answer says so.
 
 ## Safe by design
 

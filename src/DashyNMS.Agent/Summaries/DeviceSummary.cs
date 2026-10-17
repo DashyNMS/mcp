@@ -32,10 +32,34 @@ public sealed record DeviceSummary(
             Sources.Utc(device.LastPolled, options));
     }
 
+    /// <summary>Full when asked for, otherwise the few fields that tell devices apart (#35).</summary>
+    public static object Shape(Device device, AgentOptions options, bool verbose)
+        => verbose ? From(device, options) : DeviceBrief.From(device);
+
     public static string StatusOf(Device device) => device switch
     {
         { Disabled: true } => "disabled",
         { Status: true } => "up",
         _ => "down",
     };
+}
+
+/// <summary>
+/// The short form of a device for long lists (#35): enough to tell devices
+/// apart and pick one, at a fraction of the full record's size. Tools return
+/// <see cref="DeviceSummary"/> instead when asked to be verbose.
+/// </summary>
+public sealed record DeviceBrief(int DeviceId, string? Hostname, string? Display, string? Ip, string? Location, string Status)
+{
+    public static DeviceBrief From(Device device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return new DeviceBrief(
+            device.DeviceId,
+            device.Hostname,
+            string.Equals(device.Display, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Display,
+            string.Equals(device.Ip, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Ip,
+            string.IsNullOrWhiteSpace(device.Location) ? null : device.Location,
+            DeviceSummary.StatusOf(device));
+    }
 }

@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DeviceDirectory>();
         services.AddSingleton<DeviceResolver>();
         services.AddSingleton<DeviceTimeline>();
+        services.AddSingleton<DeviceScope>();
 
         return services;
     }
