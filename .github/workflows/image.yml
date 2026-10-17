@@ -1,0 +1,91 @@
+name: Container image
+
+# Pull requests build and smoke-test the image without publishing it.
+# main publishes ghcr.io/dashynms/mcp:edge; a v* tag publishes the version
+# (1.2.3, 1.2) and latest.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/dashynms/mcp
+
+jobs:
+  image:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=DashyNMS MCP
+            org.opencontainers.image.description=Read-only MCP server for LibreNMS
+
+      # Build the runner's own architecture first and check it starts, so a
+      # broken image never gets as far as the registry.
+      - name: Build for the smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: dashynms-mcp:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # With no settings the server must refuse to start, name what's missing
+      # and exit with code 2 - proof the runtime, app and config check all work.
+      - name: Smoke test
+        run: |
+          set +e
+          output=$(docker run --rm dashynms-mcp:smoke 2>&1 </dev/null)
+          code=$?
+          set -e
+          echo "$output"
+          test "$code" -eq 2
+          grep -q "LIBRENMS_URL is not set" <<<"$output"
+          test "$(docker image inspect dashynms-mcp:smoke --format '{{.Config.User}}')" != ""
+
+      - name: Sign in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true

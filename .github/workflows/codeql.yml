@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
   security-events: write
+  # The CodeQL action reads its own workflow run when it uploads results;
+  # without this the upload fails with "Resource not accessible by integration".
+  actions: read
 
 jobs:
   analyze:
@@ -28,7 +31,7 @@ jobs:
           global-json-file: global.json
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: csharp
 
@@ -36,4 +39,4 @@ jobs:
         run: dotnet build DashyNMS.Mcp.slnx -c Release
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
