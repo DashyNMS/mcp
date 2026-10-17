@@ -25,4 +25,4 @@ jobs:
         run: dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror
 
       - name: Test
-        run: dotnet test tests/DashyNMS.Agent.Tests -c Release --no-build
+        run: dotnet test DashyNMS.Mcp.slnx -c Release --no-build

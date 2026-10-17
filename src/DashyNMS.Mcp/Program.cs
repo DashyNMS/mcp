@@ -1,5 +1,6 @@
 using DashyNMS.Agent;
 using DashyNMS.Agent.Tools;
+using DashyNMS.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,19 @@ var builder = Host.CreateApplicationBuilder(args);
 // stdout carries the MCP protocol, so every log line goes to stderr.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
+var options = McpOptions.TryLoad(key => builder.Configuration[key], out var errors);
+if (options is null)
+{
+    foreach (var error in errors)
+    {
+        Console.Error.WriteLine(error);
+    }
+
+    return 2;
+}
+
+builder.Services.AddSingleton(options);
+builder.Services.AddSingleton<LibreNmsStartup>();
 builder.Services.AddDashyNmsAgent();
 builder.Services
     .AddMcpServer(o =>
@@ -28,4 +42,17 @@ builder.Services
     .WithStdioServerTransport()
     .WithToolsFromAssembly(ToolsAssembly.Assembly);
 
-await builder.Build().RunAsync();
+using var host = builder.Build();
+
+// Connect before the transport starts, so a bad address or token stops the
+// server with one clear line instead of failing every tool call.
+var failure = await host.Services.GetRequiredService<LibreNmsStartup>()
+    .ConnectAsync(options.Connection, CancellationToken.None);
+if (failure is not null)
+{
+    Console.Error.WriteLine(failure);
+    return 1;
+}
+
+await host.RunAsync();
+return 0;
