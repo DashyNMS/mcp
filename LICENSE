@@ -1,27 +1,95 @@
-Copyright (c) 2026 Thomas Pickup. All rights reserved.
+Copyright (c) 2026 Thomas Pickup
 
-DashyNMS MCP, including its source code, designs, graphics and text, is
-the property of Thomas Pickup.
+DashyNMS MCP is source-available under the PolyForm Internal Use License
+1.0.0, reproduced below without changes. In short: you may build, install,
+run and change the server for your own organisation's internal use, from
+source or from the published container image, but you may not distribute it,
+sell it, or offer it to others. The notices after the licence are part of
+this file but do not change its terms.
 
-The source code is published so that people can see how the server works and
-review it for security. You may view it, and GitHub's terms let you fork the
-repository on GitHub, but no other permission is granted. In particular, you
-may not, without prior written permission:
+---
 
-  - copy, reproduce or redistribute the code, or any part of it;
-  - modify it, or create works based on it;
-  - build, publish or distribute the server, or any software made from this code,
-    through any channel;
-  - use it for any commercial purpose.
+# PolyForm Internal Use License 1.0.0
 
-Reporting bugs and security issues is welcome; see SECURITY.md.
+<https://polyformproject.org/licenses/internal-use/1.0.0>
 
-"DashyNMS" and the DashyNMS logo are trademarks of Thomas Pickup and may not
-be used to identify any other product or service.
+## Acceptance
 
-Third-party components keep their own licences: the NuGet packages the
-server uses are under their publishers' licences.
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license), and you may not distribute the software.
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+## Internal Business Use
+
+Use of the software for the internal business operations of you and your company is use for a permitted purpose.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.
+
+---
+
+## Notices
+
+### Required notice
+
+Copyright (c) 2026 Thomas Pickup (https://github.com/DashyNMS/mcp)
+
+### DesktopNMS.Core
+
+The server compiles and includes DesktopNMS.Core from
+[DashyNMS/desktop](https://github.com/DashyNMS/desktop), checked out here as
+the `external/desktop` submodule. The licensor offers the copy of
+DesktopNMS.Core that is built into this server under the licence above, as
+part of the software. DesktopNMS.Core on its own, and everything else in the
+desktop repository, remain under that repository's own licence.
+
+### Trademarks
+
+"DashyNMS" and the DashyNMS logo are trademarks of Thomas Pickup. The licence
+above grants no rights to use them, other than to refer truthfully to the
+software, and they may not be used to identify any other product or service.
+
+### Third-party components
+
+Third-party components keep their own licences: the .NET runtime and the
+NuGet packages the server uses are under their publishers' licences, and the
+container image's base layers are under Microsoft's and Canonical's terms.

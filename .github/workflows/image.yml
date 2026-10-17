@@ -40,9 +40,17 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
             type=ref,event=pr
+          # PolyForm Internal Use isn't on the SPDX list, hence LicenseRef-;
+          # GitHub can't detect it either, so it's set here rather than
+          # left as NOASSERTION.
           labels: |
             org.opencontainers.image.title=DashyNMS MCP
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
+            org.opencontainers.image.licenses=LicenseRef-PolyForm-Internal-Use-1.0.0
+          annotations: |
+            org.opencontainers.image.title=DashyNMS MCP
+            org.opencontainers.image.description=Read-only MCP server for LibreNMS
+            org.opencontainers.image.licenses=LicenseRef-PolyForm-Internal-Use-1.0.0
 
       # Build the runner's own architecture first and check it starts, so a
       # broken image never gets as far as the registry.
@@ -85,6 +93,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
