@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ToolRunner>();
         services.AddSingleton<DeviceDirectory>();
         services.AddSingleton<DeviceResolver>();
+        services.AddSingleton<DeviceTimeline>();
 
         return services;
     }
