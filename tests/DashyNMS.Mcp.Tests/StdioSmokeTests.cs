@@ -13,7 +13,7 @@ namespace DashyNMS.Mcp.Tests;
 public sealed class StdioSmokeTests
 {
     [Fact]
-    public async Task Server_lists_six_read_only_tools_and_answers_a_call()
+    public async Task Server_lists_its_read_only_tools_and_answers_a_call()
     {
         using var librenms = new StandInLibreNms();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -58,7 +58,7 @@ public sealed class StdioSmokeTests
 
             var list = await Request(2, "tools/list", "{}");
             var tools = list.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
-            Assert.Equal(6, tools.Count);
+            Assert.Equal(7, tools.Count);
             Assert.All(tools, tool =>
             {
                 Assert.True(tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean(), tool.GetProperty("name").GetString());

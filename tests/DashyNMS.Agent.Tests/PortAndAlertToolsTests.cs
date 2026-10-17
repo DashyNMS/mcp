@@ -8,7 +8,7 @@ public sealed class PortAndAlertToolsTests
 
     private PortTools Ports() => new(_nms.Client, _nms.Resolver, _nms.Runner, _nms.Options);
 
-    private AlertTools Alerts() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Runner, _nms.Options, _nms.Time);
+    private AlertTools Alerts() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
     [Fact]
     public async Task Port_status_shows_state_rates_and_neighbour()
@@ -63,7 +63,7 @@ public sealed class PortAndAlertToolsTests
     [Fact]
     public async Task Alerts_filter_by_severity_and_device()
     {
-        var critical = FakeLibreNms.Parse(await Alerts().ActiveAlerts("critical", "core-sw1", CancellationToken.None));
+        var critical = FakeLibreNms.Parse(await Alerts().ActiveAlerts("critical", "core-sw1", cancellationToken: CancellationToken.None));
 
         Assert.Equal("1 open alert on 1 device (1 critical, 0 warning).", critical.GetProperty("summary").GetString());
     }

@@ -19,9 +19,9 @@ public sealed class ToolCatalogueTests
             .Where(p => p.Item2 is not null);
 
     [Fact]
-    public void The_six_tools_are_there()
+    public void The_tools_are_there()
     {
-        string[] expected = ["active_alerts", "device_events", "device_health", "find_device", "port_status", "what_changed"];
+        string[] expected = ["active_alerts", "device_events", "device_health", "find_device", "list_groups_and_locations", "port_status", "what_changed"];
 
         Assert.Equal(expected, Tools().Select(t => t.Tool.Name).Order().ToArray());
     }

@@ -6,18 +6,18 @@ public sealed class DeviceToolsTests
 {
     private readonly FakeLibreNms _nms = new();
 
-    private DeviceTools Tools() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Runner, _nms.Options);
+    private DeviceTools Tools() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options);
 
     [Fact]
     public async Task Find_ranks_exact_matches_first()
     {
-        var root = FakeLibreNms.Parse(await Tools().FindDevice("sw", CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().FindDevice("sw", cancellationToken: CancellationToken.None));
 
         Assert.Equal("ok", root.GetProperty("status").GetString());
         var devices = root.GetProperty("data").GetProperty("devices");
         Assert.Equal(2, devices.GetArrayLength());
 
-        var exact = FakeLibreNms.Parse(await Tools().FindDevice("edge-sw3", CancellationToken.None));
+        var exact = FakeLibreNms.Parse(await Tools().FindDevice("edge-sw3", cancellationToken: CancellationToken.None));
         var first = exact.GetProperty("data").GetProperty("devices")[0];
         Assert.Equal(2, first.GetProperty("device_id").GetInt32());
         Assert.Equal("down", first.GetProperty("status").GetString());
@@ -28,7 +28,7 @@ public sealed class DeviceToolsTests
     [Fact]
     public async Task Find_with_no_match_is_still_ok()
     {
-        var root = FakeLibreNms.Parse(await Tools().FindDevice("nothing-here", CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().FindDevice("nothing-here", cancellationToken: CancellationToken.None));
 
         Assert.Equal("ok", root.GetProperty("status").GetString());
         Assert.Equal("No devices match.", root.GetProperty("summary").GetString());
@@ -40,7 +40,7 @@ public sealed class DeviceToolsTests
     [InlineData("aabb.ccdd.eeff")]
     public async Task Find_by_mac_uses_arp(string mac)
     {
-        var root = FakeLibreNms.Parse(await Tools().FindDevice(mac, CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().FindDevice(mac, cancellationToken: CancellationToken.None));
 
         var match = root.GetProperty("data").GetProperty("arp_matches")[0];
         Assert.Equal(1, match.GetProperty("device").GetProperty("device_id").GetInt32());
@@ -51,7 +51,7 @@ public sealed class DeviceToolsTests
     [Fact]
     public async Task Health_combines_state_alerts_sensors_and_ports()
     {
-        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("core-sw1", CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("core-sw1", cancellationToken: CancellationToken.None));
         var data = root.GetProperty("data");
 
         Assert.Equal("Device is up, 2 open alerts, 1 port down while enabled; 1 part couldn't be fetched.", root.GetProperty("summary").GetString());
@@ -77,7 +77,7 @@ public sealed class DeviceToolsTests
     [Fact]
     public async Task Health_reports_the_part_it_could_not_fetch()
     {
-        var data = FakeLibreNms.Parse(await Tools().DeviceHealth("1", CancellationToken.None)).GetProperty("data");
+        var data = FakeLibreNms.Parse(await Tools().DeviceHealth("1", cancellationToken: CancellationToken.None)).GetProperty("data");
 
         var unavailable = data.GetProperty("unavailable");
         Assert.Equal("storage", unavailable[0].GetProperty("source").GetString());
@@ -88,7 +88,7 @@ public sealed class DeviceToolsTests
     [Fact]
     public async Task Health_for_an_unknown_device_is_an_error()
     {
-        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("nope", CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("nope", cancellationToken: CancellationToken.None));
 
         Assert.Equal("error", root.GetProperty("status").GetString());
     }
