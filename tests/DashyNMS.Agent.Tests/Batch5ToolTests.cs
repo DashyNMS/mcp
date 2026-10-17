@@ -146,6 +146,32 @@ public sealed class Batch5ToolTests
     }
 
     [Fact]
+    public void Diff_lines_without_text_are_blank_lines()
+    {
+        // Unimus sends some lines (blank ones, seen on a real pfSense diff)
+        // as "text": null, which overwrites the model's empty default.
+        var diff = new UnimusBackupDiff
+        {
+            LineGroups =
+            [
+                new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new UnimusDiffLine { Text = null! }], RevisedLines = [new UnimusDiffLine { Text = null! }] },
+                new UnimusDiffLineGroup
+                {
+                    Type = "CHANGED",
+                    OriginalLines = [new UnimusDiffLine { Text = null! }],
+                    RevisedLines = [new UnimusDiffLine { Text = "<descr>new rule</descr>" }],
+                },
+            ],
+        };
+
+        var rendered = ConfigDiff.Render(diff);
+
+        Assert.Equal("- \n+ <descr>new rule</descr>", rendered.Text);
+        Assert.Equal(1, rendered.Removed);
+        Assert.Equal(1, rendered.Added);
+    }
+
+    [Fact]
     public async Task Diff_in_summary_mode_counts_only()
     {
         var data = FakeLibreNms.Parse(await Tools(ConfigText.Summary).ConfigDiffTool("core-sw1", cancellationToken: CancellationToken.None)).GetProperty("data");
