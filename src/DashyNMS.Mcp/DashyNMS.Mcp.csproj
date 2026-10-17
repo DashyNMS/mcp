@@ -20,4 +20,9 @@
     <InternalsVisibleTo Include="DashyNMS.Mcp.Tests" />
   </ItemGroup>
 
+  <!-- The DashyNMS logo, sent to MCP clients as the server's icon. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/icon.png" LogicalName="DashyNMS.Mcp.icon.png" />
+  </ItemGroup>
+
 </Project>

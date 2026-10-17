@@ -99,6 +99,29 @@ public sealed class McpOptionsTests
         Assert.Contains(errors, e => e.StartsWith(McpOptions.MaxResultBytesKey, StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(null, DashyNMS.Agent.ConfigText.Full)]
+    [InlineData("full", DashyNMS.Agent.ConfigText.Full)]
+    [InlineData("Summary", DashyNMS.Agent.ConfigText.Summary)]
+    [InlineData("off", DashyNMS.Agent.ConfigText.Off)]
+    public void Config_text_setting(string? value, DashyNMS.Agent.ConfigText expected)
+    {
+        var values = Minimal();
+        values[McpOptions.ConfigTextKey] = value;
+
+        Assert.Equal(expected, Load(values, out _)!.ConfigText);
+    }
+
+    [Fact]
+    public void Unknown_config_text_setting_is_an_error()
+    {
+        var values = Minimal();
+        values[McpOptions.ConfigTextKey] = "some";
+
+        Assert.Null(Load(values, out var errors));
+        Assert.StartsWith(McpOptions.ConfigTextKey, Assert.Single(errors), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Bad_url_scheme_is_rejected()
     {

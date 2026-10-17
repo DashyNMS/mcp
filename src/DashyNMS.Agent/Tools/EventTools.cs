@@ -18,6 +18,7 @@ namespace DashyNMS.Agent.Tools;
 public sealed class EventTools(
     IUnimusApi unimus,
     IGraylogApi graylog,
+    UnimusDirectory unimusDevices,
     DeviceResolver resolver,
     DeviceTimeline timeline,
     ToolRunner runner,
@@ -160,11 +161,12 @@ public sealed class EventTools(
             return (new { configured = false }, "Unimus isn't configured.");
         }
 
-        var lookup = await Sources.TryAsync(async () =>
+        if (options.ConfigText == ConfigText.Off)
         {
-            var all = await unimus.ListAllDevicesAsync(cancellationToken).ConfigureAwait(false);
-            return UnimusDeviceMatcher.Match(all, UnimusAddressCandidates.ForDevice(device, myDomain: null));
-        }, cancellationToken).ConfigureAwait(false);
+            return (new { configured = true, turned_off = "Config data is turned off on this server (MCP_CONFIG_TEXT=off)." }, "Config data is turned off.");
+        }
+
+        var lookup = await Sources.TryAsync(() => unimusDevices.MatchAsync(device, cancellationToken), cancellationToken).ConfigureAwait(false);
 
         if (lookup.Error is { } lookupError)
         {
@@ -208,7 +210,8 @@ public sealed class EventTools(
             }, "No config change in Unimus.");
         }
 
-        var (text, lines, omittedLines) = Render(diff);
+        var rendered = ConfigDiff.Render(diff, MaxDiffLines);
+        var full = options.ConfigText == ConfigText.Full;
         return (new
         {
             configured = true,
@@ -216,47 +219,20 @@ public sealed class EventTools(
             config_changed = true,
             changed_at = list[index].ValidSinceUtc,
             previous_version_since = list[index + 1].ValidSinceUtc,
-            changed_lines = lines,
-            config_diff = text,
-            config_diff_lines_omitted = omittedLines > 0 ? omittedLines : (int?)null,
-        }, $"Unimus shows a config change ({DeviceTools.Count(lines, "changed line")}).");
+            changed_lines = rendered.Lines,
+            lines_removed = rendered.Removed,
+            lines_added = rendered.Added,
+            config_diff = full ? rendered.Text : null,
+            config_diff_lines_omitted = full && rendered.Omitted > 0 ? rendered.Omitted : (int?)null,
+            config_text = full ? null : "Left out on this server (MCP_CONFIG_TEXT=summary).",
+        }, $"Unimus shows a config change ({DeviceTools.Count(rendered.Lines, "changed line")}).");
     }
 
-    /// <summary>The changed lines as a unified-style diff: "- old", "+ new", common lines left out.</summary>
-    /// <remarks>
-    /// Private keys are blanked line by line here, before anything is cut,
-    /// following each side of the diff through the unchanged lines too: a
-    /// rotated key's diff holds only its body lines (BEGIN and END are
-    /// unchanged), and a long one can be cut between BEGIN and END - either
-    /// way the redactor would never see a whole block.
-    /// </remarks>
+    /// <summary>The diff as text, as <see cref="ConfigDiff.Render"/> - kept for the tests that check what_changed's own rendering.</summary>
     internal static (string Text, int Lines, int Omitted) Render(UnimusBackupDiff diff)
     {
-        var lines = new List<string>();
-        bool originalInKey = false, revisedInKey = false;
-        foreach (var group in diff.LineGroups)
-        {
-            if (group.IsCommon)
-            {
-                foreach (var line in group.OriginalLines)
-                {
-                    Redactor.MaskPrivateKeyLine(line.Text, ref originalInKey);
-                }
-
-                foreach (var line in group.RevisedLines.Count > 0 ? group.RevisedLines : group.OriginalLines)
-                {
-                    Redactor.MaskPrivateKeyLine(line.Text, ref revisedInKey);
-                }
-
-                continue;
-            }
-
-            lines.AddRange(group.OriginalLines.Select(l => "- " + Redactor.MaskPrivateKeyLine(l.Text, ref originalInKey)));
-            lines.AddRange(group.RevisedLines.Select(l => "+ " + Redactor.MaskPrivateKeyLine(l.Text, ref revisedInKey)));
-        }
-
-        var shown = ToolResult.Take(lines, MaxDiffLines, out var omitted);
-        return (string.Join('\n', shown), lines.Count, omitted);
+        var rendered = ConfigDiff.Render(diff, MaxDiffLines);
+        return (rendered.Text, rendered.Lines, rendered.Omitted);
     }
 
     /// <summary>Messages from the device in the window, matched the way LibreNMS's own Graylog tab matches them.</summary>

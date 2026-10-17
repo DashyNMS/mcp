@@ -63,8 +63,9 @@ internal sealed class FakeLibreNms
     /// <summary>"Now" for every test: 10:00 UTC on 17 October 2026.</summary>
     public static readonly DateTimeOffset Now = new(2026, 10, 17, 10, 0, 0, TimeSpan.Zero);
 
-    public FakeLibreNms()
+    public FakeLibreNms(AgentOptions? options = null)
     {
+        Options = options ?? new();
         Transport = Estate(new FakeTransport());
         Client = Substitute.For<ILibreNmsClient>();
         Client.Devices.Returns(new DevicesApi(Transport));
@@ -100,7 +101,7 @@ internal sealed class FakeLibreNms
 
     public FakeTimeProvider Time { get; }
 
-    public AgentOptions Options { get; } = new();
+    public AgentOptions Options { get; }
 
     public DeviceDirectory Directory { get; }
 

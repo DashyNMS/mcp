@@ -53,12 +53,19 @@ public sealed class StdioSmokeTests
             }
 
             var init = await Request(1, "initialize", """{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}""");
-            Assert.Equal("dashynms", init.GetProperty("result").GetProperty("serverInfo").GetProperty("name").GetString());
+            var serverInfo = init.GetProperty("result").GetProperty("serverInfo");
+            Assert.Equal("dashynms", serverInfo.GetProperty("name").GetString());
+            Assert.Equal("DashyNMS", serverInfo.GetProperty("title").GetString());
+
+            // The logo, embedded, so a client shows it rather than a letter.
+            var icon = serverInfo.GetProperty("icons")[0];
+            Assert.StartsWith("data:image/png;base64,iVBOR", icon.GetProperty("src").GetString(), StringComparison.Ordinal);
+            Assert.Equal("image/png", icon.GetProperty("mimeType").GetString());
             await server.StandardInput.WriteLineAsync("""{"jsonrpc":"2.0","method":"notifications/initialized"}""");
 
             var list = await Request(2, "tools/list", "{}");
             var tools = list.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
-            Assert.Equal(18, tools.Count);
+            Assert.Equal(21, tools.Count);
             Assert.All(tools, tool =>
             {
                 Assert.True(tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean(), tool.GetProperty("name").GetString());
