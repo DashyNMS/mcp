@@ -1,0 +1,48 @@
+# Everything here is pinned (actions by commit SHA, base images by digest,
+# packages by version, the desktop submodule by commit), so nothing moves
+# unless Dependabot proposes it. Minor and patch updates are grouped per
+# ecosystem to keep the PR count down; majors come one at a time.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  # Bumps the base images' digests when Microsoft ships patched images,
+  # and their tags when a new .NET version comes out.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      base-images:
+        update-types: [minor, patch, digest]
+
+  - package-ecosystem: nuget
+    directories:
+      - /src/*
+      - /tests/*
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # Released together, so they're updated together.
+      microsoft-extensions:
+        patterns: ["Microsoft.Extensions.*"]
+      packages:
+        update-types: [minor, patch]
+
+  # DashyNMS/desktop's Core, compiled into the server - a bump is how its
+  # fixes arrive here.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
