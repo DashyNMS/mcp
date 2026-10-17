@@ -35,6 +35,17 @@ public sealed class RedactorTests
     [InlineData(" key-string 7 104D000A0618", $" key-string 7 {R}")]
     [InlineData(" encrypted-key \"QWxhZGRpbjpvcGVuIHNlc2FtZQ==\"", $" encrypted-key {R}")]
     [InlineData("psk Sup3rPSK", $"psk {R}")]
+    // Communities outside "snmp-server community": Cisco trap hosts, AOS-S trap hosts, Juniper
+    [InlineData("snmp-server host 10.0.0.9 version 2c TrapC0mm", $"snmp-server host 10.0.0.9 version 2c {R}")]
+    [InlineData("snmp-server host 10.0.0.9 informs version 2c TrapC0mm udp-port 162", $"snmp-server host 10.0.0.9 informs version 2c {R} udp-port 162")]
+    [InlineData("snmp-server host 10.0.0.9 TrapC0mm", $"snmp-server host 10.0.0.9 {R}")]
+    [InlineData("snmp-server host 10.0.0.5 community \"TrapC0mm\" trap-level all", $"snmp-server host 10.0.0.5 community {R} trap-level all")]
+    [InlineData("set snmp community Jun1perC0mm authorization read-only", $"set snmp community {R} authorization read-only")]
+    [InlineData("    community Jun1perC0mm {", $"    community {R} {{")]
+    // Keys with an algorithm word before the value: NTP, OSPF, Cisco WLAN
+    [InlineData("ntp authentication-key 1 md5 NtpK3y 7", $"ntp authentication-key 1 md5 {R} 7")]
+    [InlineData(" ip ospf message-digest-key 1 md5 0spfK3y", $" ip ospf message-digest-key 1 md5 {R}")]
+    [InlineData(" wpa-psk ascii 0 WlanK3y", $" wpa-psk ascii 0 {R}")]
     // Linux and ini-style assignments
     [InlineData("wpa_passphrase=CorrectHorse", $"wpa_passphrase={R}")]
     [InlineData("password = hunter2", $"password = {R}")]
@@ -54,6 +65,9 @@ public sealed class RedactorTests
     [InlineData("radius-server host 10.0.0.5 auth-port 1812")]
     [InlineData("Port 1/1/7 link down")]
     [InlineData("hostname core-sw1")]
+    [InlineData(" neighbor 10.0.0.2 send-community both")]
+    [InlineData("ip community-list standard CUSTOMERS permit 65000:100")]
+    [InlineData("snmp-server host 10.0.0.9 version 3 priv monitor")]
     [InlineData("<descr>LAN interface</descr>")]
     [InlineData("-----BEGIN CERTIFICATE-----\nMIIBszCCAVmg\n-----END CERTIFICATE-----")]
     public void Leaves_ordinary_text_alone(string input)
@@ -113,7 +127,8 @@ public sealed class RedactorTests
     public void Redacting_twice_changes_nothing_more()
     {
         var once = _redactor.Redact(
-            "enable secret 5 abc\npassword=xyz\nsnmp-server community pub RO\ntacacs-server key 7 0822\nsnmp-server user u g v3 auth sha a priv aes 128 b");
+            "enable secret 5 abc\npassword=xyz\nsnmp-server community pub RO\ntacacs-server key 7 0822\nsnmp-server user u g v3 auth sha a priv aes 128 b\n" +
+            "snmp-server host 10.0.0.9 version 2c c\nntp authentication-key 1 md5 k 7\n wpa-psk ascii 0 w\nset snmp community j authorization read-only");
 
         Assert.Equal(once, _redactor.Redact(once));
     }

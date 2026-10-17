@@ -39,6 +39,12 @@ public sealed partial class Redactor
     [
         // Cisco and AOS-S: snmp-server community public RO / snmp-server community "public" operator
         SnmpCommunity(),
+        // Trap and inform hosts carry the community too: AOS-S and Juniper name
+        // it ("... community x"), Cisco just puts it after the host and version.
+        SnmpLineCommunity(),
+        SnmpHostCommunity(),
+        // Juniper's brace form: "community public {" under snmp { }
+        JuniperCommunityBlock(),
         // SNMPv3 users: ... auth sha <secret> priv aes 128 <secret>
         SnmpV3Auth(),
         SnmpV3Priv(),
@@ -47,6 +53,7 @@ public sealed partial class Redactor
         // radius-server host 10.0.0.1 key 7 <x> / tacacs-server key <x> / crypto isakmp key 0 <x> address ...
         RadiusTacacsKey(),
         // password 7 <x> / enable secret 5 <x> / pre-shared-key ascii-text <x> / key-string <x>
+        // ntp authentication-key 1 md5 <x> / message-digest-key 1 md5 <x> / wpa-psk ascii 0 <x>
         KeywordValue(),
         // password=<x> / psk: <x> / api_key = <x> (Linux, ini, YAML, JSON-ish)
         KeywordAssignment(),
@@ -72,8 +79,51 @@ public sealed partial class Redactor
         return text;
     }
 
+    /// <summary>
+    /// For text that arrives line by line without its whole block (a config
+    /// diff): returns the line as it is for a BEGIN or END line, or the marker
+    /// for a line inside a private key, tracking which in <paramref name="inKey"/>.
+    /// </summary>
+    public static string MaskPrivateKeyLine(string line, ref bool inKey)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        if (PrivateKeyBegin().IsMatch(line))
+        {
+            inKey = !PrivateKeyEnd().IsMatch(line);
+            return line;
+        }
+
+        if (PrivateKeyEnd().IsMatch(line))
+        {
+            inKey = false;
+            return line;
+        }
+
+        return inKey ? Marker : line;
+    }
+
+    [GeneratedRegex(@"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")]
+    private static partial Regex PrivateKeyBegin();
+
+    [GeneratedRegex(@"-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----")]
+    private static partial Regex PrivateKeyEnd();
+
     [GeneratedRegex(@"(?<prefix>\bsnmp-server\s+community\s+)" + Value, RegexOptions.IgnoreCase)]
     private static partial Regex SnmpCommunity();
+
+    /// <summary>"community x" anywhere on an SNMP line - not BGP's send-community or community-list.</summary>
+    [GeneratedRegex(@"(?<prefix>\bsnmp(?:-server)?\b[^\r\n]*?(?<![\w-])community\s+)" + Value, RegexOptions.IgnoreCase)]
+    private static partial Regex SnmpLineCommunity();
+
+    /// <summary>
+    /// Cisco: snmp-server host 10.0.0.9 [traps|informs] [version 1|2c] community -
+    /// with version 3 that word is a user name, so it's left alone.
+    /// </summary>
+    [GeneratedRegex(@"(?<prefix>\bsnmp-server\s+host\s+\S+(?:\s+(?:traps|informs))?(?:\s+version\s+(?:1|2c))?\s+)(?!(?:traps|informs|version|community|vrf)\b)" + Value, RegexOptions.IgnoreCase)]
+    private static partial Regex SnmpHostCommunity();
+
+    [GeneratedRegex(@"(?<prefix>^[ \t]*community\s+)(?=\S+\s*\{)" + Value, RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+    private static partial Regex JuniperCommunityBlock();
 
     [GeneratedRegex(@"(?<prefix>\bauth\s+(?:md5|sha(?:-?\d+)?)\s+)" + Value, RegexOptions.IgnoreCase)]
     private static partial Regex SnmpV3Auth();
@@ -87,7 +137,12 @@ public sealed partial class Redactor
     [GeneratedRegex(@"(?<prefix>\b(?:radius|tacacs|isakmp)(?:-server)?\b[^\r\n]*?\bkey\s+(?>(?:\d\s+)?))" + Value, RegexOptions.IgnoreCase)]
     private static partial Regex RadiusTacacsKey();
 
-    [GeneratedRegex(@"(?<prefix>\b(?:password|passwd|secret|pre-shared-key|psk|encrypted-key|key-string|authentication-key)\s+(?>(?:\d{1,2}\s+)?)(?>(?:ascii-text|hex-key|ascii|hex|plain-text|cipher)\s+)?)(?!manager\b|operator\b)" + Value, RegexOptions.IgnoreCase)]
+    /// <summary>
+    /// The keyword, then up to two type words or numbers in either order (the
+    /// "7" in "password 7", "1 md5" in NTP and OSPF keys, "ascii 0" in a WLAN
+    /// PSK), then the value. Atomic, so a type word is never taken for the value.
+    /// </summary>
+    [GeneratedRegex(@"(?<prefix>\b(?:password|passwd|secret|pre-shared-key|psk|wpa-psk|encrypted-key|key-string|authentication-key|message-digest-key)\s+(?>(?:(?:\d{1,3}|ascii-text|hex-key|ascii|hex|plain-text|cipher|md5|sha1|sha256|sha512)\s+){0,2}))(?!manager\b|operator\b)" + Value, RegexOptions.IgnoreCase)]
     private static partial Regex KeywordValue();
 
     [GeneratedRegex(@"(?<prefix>\b(?:password|passwd|passphrase|wpa_passphrase|secret|psk|pre-shared-key|api[_-]?key|apikey|token|key)""?\s*[=:]\s*)" + Value, RegexOptions.IgnoreCase)]
