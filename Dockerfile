@@ -7,7 +7,10 @@
 # The SDK runs on the build machine's own architecture and cross-compiles for
 # the target (TARGETARCH, set by buildx), so an arm64 image builds as fast as
 # an amd64 one, with no emulation.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+#
+# Base images are pinned by digest (the multi-arch index, so every platform
+# still resolves) and kept current by Dependabot.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
 ARG TARGETARCH
 WORKDIR /src
 
@@ -33,7 +36,7 @@ RUN dotnet publish src/DashyNMS.Mcp -c Release --no-restore -a $TARGETARCH --sel
 
 # Ubuntu chiseled: the .NET runtime and CA certificates, no shell or package
 # manager, and a non-root user by default.
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled@sha256:75e4232c875a07e46e447ca0a56a61f7cd72d9fb361639018a19e9fc605c6827
 WORKDIR /app
 COPY --from=build /app .
 
