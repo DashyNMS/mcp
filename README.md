@@ -34,6 +34,15 @@ One answer per device: up or down, uptime, maintenance, open alerts, CPU, memory
 **What's on that port?**
 State, speed, VLANs, traffic, errors, its description, and the neighbour LibreNMS sees on it over LLDP or CDP. *(`port_status`)*
 
+**Everything else about a device**
+Its inventory with models and serials, VLANs with their tagged and untagged ports, the MAC and ARP tables, PoE budget, wireless, BGP and OSPF, availability over the last day to year, and its own IP addresses. Ask for just the parts you need. *(`device_details`)*
+
+**Is anything running hot?**
+Temperatures, fans, optical power, voltages and more, for one device or across the network, worst first, judged the same way as DashyNMS's Health tab. *(`device_sensors`, `health_overview`)*
+
+**What's it connected to?**
+Every LLDP and CDP neighbour of a device, including ones that report it when it doesn't report them back. *(`device_neighbours`)*
+
 **What's alerting, and what alerted?**
 Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
 
@@ -74,6 +83,8 @@ You can also build it yourself from source; see the [developer guide](docs/DEVEL
 - An API token for a **read-only** LibreNMS user. In LibreNMS, open the settings menu, then **API → API Tokens**, and create one for that user.
 - Docker, or the .NET 10 SDK to build from source.
 - Optionally, Unimus (1.7 or later) and Graylog, for `what_changed`.
+
+LibreNMS only gives its network-wide sensor list to users with **global read** access. Without it, `device_sensors` still works, reading one device at a time, and `health_overview` works when it's narrowed to a device group or location of up to 25 devices.
 
 ## Set it up
 
