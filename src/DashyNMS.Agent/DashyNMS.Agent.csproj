@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The tool layer: task-shaped read tools over Core, plus redaction and
+    result caps. Kept apart from the host on purpose - it is the part that
+    later moves into the desktop repo next to Core, so the DashyNMS mobile
+    chat tab can run the same tools without a server.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>DashyNMS.Agent</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DesktopNMS.Core.Portable/DesktopNMS.Core.Portable.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DashyNMS.Agent.Tests" />
+  </ItemGroup>
+
+</Project>
