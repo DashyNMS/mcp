@@ -88,6 +88,11 @@ public static class ConfigDiff
     /// rotated key's diff holds only its body lines (BEGIN and END are
     /// unchanged), and a long one can be cut between BEGIN and END - either
     /// way the redactor would never see a whole block.
+    /// <para>
+    /// Unimus sends some lines - blank ones, on a real pfSense diff - as
+    /// "text": null, which overwrites the model's empty default, so a missing
+    /// line is read as an empty one.
+    /// </para>
     /// </remarks>
     public static (string Text, int Lines, int Removed, int Added, int Omitted) Render(UnimusBackupDiff diff, int maxLines = MaxLines)
     {
@@ -101,12 +106,12 @@ public static class ConfigDiff
             {
                 foreach (var line in group.OriginalLines)
                 {
-                    Redactor.MaskPrivateKeyLine(line.Text, ref originalInKey);
+                    Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey);
                 }
 
                 foreach (var line in group.RevisedLines.Count > 0 ? group.RevisedLines : group.OriginalLines)
                 {
-                    Redactor.MaskPrivateKeyLine(line.Text, ref revisedInKey);
+                    Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey);
                 }
 
                 continue;
@@ -114,13 +119,13 @@ public static class ConfigDiff
 
             foreach (var line in group.OriginalLines)
             {
-                lines.Add("- " + Redactor.MaskPrivateKeyLine(line.Text, ref originalInKey));
+                lines.Add("- " + Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey));
                 removed++;
             }
 
             foreach (var line in group.RevisedLines)
             {
-                lines.Add("+ " + Redactor.MaskPrivateKeyLine(line.Text, ref revisedInKey));
+                lines.Add("+ " + Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey));
                 added++;
             }
         }
