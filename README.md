@@ -132,4 +132,9 @@ Everything a tool returns from your network (device names, port aliases, log lin
 
 ## Licence
 
-See [LICENSE](LICENSE).
+DashyNMS MCP is source-available under the [PolyForm Internal Use License 1.0.0](https://polyformproject.org/licenses/internal-use/1.0.0):
+
+- **You may** build, install and run it, from source or the published image, and change it, for your own organisation's internal use, at no cost.
+- **You may not** distribute it, sell it, run it as a service for other organisations, or use the DashyNMS name for anything else.
+
+The copy of DashyNMS desktop's Core library built into the server is covered by the same terms. The rest of the desktop repository keeps its own licence. [LICENSE](LICENSE) has the full text and notices. For any other use, ask first.
