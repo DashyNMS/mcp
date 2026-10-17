@@ -15,7 +15,10 @@ updates:
         update-types: [minor, patch]
 
   # Bumps the base images' digests when Microsoft ships patched images,
-  # and their tags when a new .NET version comes out.
+  # and their tags when a new .NET version comes out. Grouped by name rather
+  # than update type: update-types only knows major/minor/patch, and a
+  # digest-only bump is none of those. The SDK and runtime images must move
+  # together anyway, majors included.
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -23,7 +26,7 @@ updates:
       day: monday
     groups:
       base-images:
-        update-types: [minor, patch, digest]
+        patterns: ["*"]
 
   - package-ecosystem: nuget
     directories:
