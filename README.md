@@ -52,6 +52,9 @@ The event log and alert log for every device over any window, newest first: "any
 **What's alerting, and what alerted?**
 Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
 
+**What's configured, and what changed?**
+With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, and you can choose to send no config text at all. *(`config_backup`, `config_diff`, `recent_config_changes`)*
+
 **Why did it fire, and what are we alerting on?**
 For any alert: what the rule matched and the values that tripped it, the rule's condition and procedure, and how often it has fired on that device in the last 30 days, to tell a one-off from a flapping alert. For the rules themselves: what each watches for, what it applies to, its template, and which are noisiest. *(`alert_details`, `alert_rules`)*
 
@@ -68,7 +71,7 @@ Each tool takes a device however you'd name it: hostname, display name, IP addre
 - **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
 - **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for.
 
-What the tools return still goes to whichever model your client uses. Unimus diffs are redacted, but they're still your configuration. If that shouldn't leave your network, leave Unimus unset.
+What the tools return still goes to whichever model your client uses. Config backups and diffs are redacted, but they're still your configuration. If that shouldn't leave your network, set `MCP_CONFIG_TEXT=summary`, which keeps the answers to "did it change, when, and by how much?" without any config text, or `off`.
 
 ## Get it
 
@@ -134,7 +137,8 @@ All settings are environment variables.
 | `LIBRENMS_TRUSTED_CERTS` | No | | SHA-256 fingerprints of certificates to trust when the normal checks reject them, comma-separated |
 | `LIBRENMS_TIMEOUT` | No | `30` | Request timeout in seconds, at least 5, for every source |
 | `LIBRENMS_TIMESTAMPS_UTC` | No | `true` | Whether LibreNMS stores times in UTC. Leave it on with Docker, as the image has no time zone data. |
-| `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on config diffs in `what_changed`. Set both or neither. |
+| `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on the config tools and config diffs in `what_changed`. Set both or neither. |
+| `MCP_CONFIG_TEXT` | No | `full` | How much config the tools return: `full` (redacted text), `summary` (when it changed and how many lines, no text), or `off` (nothing from Unimus) |
 | `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
 | `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
 | `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 or newer, or `2.0` |

@@ -14,6 +14,7 @@ public sealed class Batch1ToolTests
     private EventTools Events() => new(
         NSubstitute.Substitute.For<DesktopNMS.Core.Api.IUnimusApi>(),
         NSubstitute.Substitute.For<DesktopNMS.Core.Api.IGraylogApi>(),
+        new DashyNMS.Agent.Devices.UnimusDirectory(NSubstitute.Substitute.For<DesktopNMS.Core.Api.IUnimusApi>(), _nms.Options, _nms.Time),
         _nms.Resolver,
         _nms.Timeline,
         _nms.Runner,
@@ -173,7 +174,8 @@ public sealed class Batch1ToolTests
     {
         var graylog = NSubstitute.Substitute.For<DesktopNMS.Core.Api.IGraylogApi>();
         graylog.IsConfigured.Returns(true);
-        var tools = new EventTools(NSubstitute.Substitute.For<DesktopNMS.Core.Api.IUnimusApi>(), graylog, _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
+        var unimus = NSubstitute.Substitute.For<DesktopNMS.Core.Api.IUnimusApi>();
+        var tools = new EventTools(unimus, graylog, new DashyNMS.Agent.Devices.UnimusDirectory(unimus, _nms.Options, _nms.Time), _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
 
         var root = FakeLibreNms.Parse(await tools.WhatChanged("core-sw1", since: "2026-10-16T00:00:00Z", until: "2026-10-16T06:00:00Z", cancellationToken: CancellationToken.None));
 

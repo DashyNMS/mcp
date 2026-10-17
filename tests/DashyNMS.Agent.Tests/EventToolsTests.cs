@@ -11,7 +11,7 @@ public sealed class EventToolsTests
     private readonly IUnimusApi _unimus = Substitute.For<IUnimusApi>();
     private readonly IGraylogApi _graylog = Substitute.For<IGraylogApi>();
 
-    private EventTools Tools() => new(_unimus, _graylog, _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
+    private EventTools Tools() => new(_unimus, _graylog, new DashyNMS.Agent.Devices.UnimusDirectory(_unimus, _nms.Options, _nms.Time), _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
 
     [Fact]
     public async Task Events_merge_the_logs_newest_first_inside_the_window()

@@ -32,6 +32,7 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     MaxResultBytes = options.MaxResultBytes,
     ServerTimestampsAreUtc = options.TimestampsAreUtc,
     GraylogQueryField = options.GraylogField,
+    ConfigText = options.ConfigText,
 });
 builder.Services
     .AddMcpServer(o =>
@@ -40,6 +41,9 @@ builder.Services
         {
             Name = "dashynms",
             Version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            Title = "DashyNMS",
+            WebsiteUrl = "https://github.com/DashyNMS/mcp",
+            Icons = ServerIcon.All,
         };
         // Syslog lines, port aliases and config text are attacker-writable,
         // so say up front that tool output is evidence, not instructions.

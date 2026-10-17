@@ -32,6 +32,7 @@ public sealed class McpOptions
     public const string GraylogQueryField = "GRAYLOG_QUERY_FIELD";
     public const string GraylogTrustedCerts = "GRAYLOG_TRUSTED_CERTS";
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
+    public const string ConfigTextKey = "MCP_CONFIG_TEXT";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
@@ -45,7 +46,8 @@ public sealed class McpOptions
         UnimusConnection? unimus,
         GraylogConnection? graylog,
         string graylogQueryField,
-        int maxResultBytes)
+        int maxResultBytes,
+        DashyNMS.Agent.ConfigText configText)
     {
         Connection = connection;
         TimestampsAreUtc = timestampsAreUtc;
@@ -53,6 +55,7 @@ public sealed class McpOptions
         Graylog = graylog;
         GraylogField = graylogQueryField;
         MaxResultBytes = maxResultBytes;
+        ConfigText = configText;
     }
 
     /// <summary>
@@ -85,6 +88,9 @@ public sealed class McpOptions
 
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
+
+    /// <summary>How much configuration text the Unimus tools return: full (the default), summary or off - see <see cref="DashyNMS.Agent.ConfigText"/>.</summary>
+    public DashyNMS.Agent.ConfigText ConfigText { get; }
 
     /// <summary>
     /// Reads and checks every setting. Returns null and lists every problem
@@ -127,6 +133,7 @@ public sealed class McpOptions
         var graylog = LoadGraylog(lookup, timeout, problems);
         var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
+        var configText = ParseConfigText(lookup, problems);
 
         errors = problems;
         if (problems.Count > 0)
@@ -142,7 +149,7 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, maxResultBytes);
+        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, maxResultBytes, configText);
     }
 
     private static UnimusConnection? LoadUnimus(Func<string, string?> lookup, int timeout, List<string> problems)
@@ -242,6 +249,22 @@ public sealed class McpOptions
         }
 
         return value;
+    }
+
+    private static DashyNMS.Agent.ConfigText ParseConfigText(Func<string, string?> lookup, List<string> problems)
+    {
+        switch (Value(lookup, ConfigTextKey)?.ToLowerInvariant())
+        {
+            case null or "full":
+                return DashyNMS.Agent.ConfigText.Full;
+            case "summary":
+                return DashyNMS.Agent.ConfigText.Summary;
+            case "off" or "none":
+                return DashyNMS.Agent.ConfigText.Off;
+            case var other:
+                problems.Add($"{ConfigTextKey}: '{other}' should be full, summary or off.");
+                return DashyNMS.Agent.ConfigText.Full;
+        }
     }
 
     private static bool ParseBool(Func<string, string?> lookup, string key, bool fallback, List<string> problems)

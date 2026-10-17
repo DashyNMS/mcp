@@ -44,6 +44,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DeviceScope>();
         services.AddSingleton<FleetCache>();
         services.AddSingleton<SensorSource>();
+        services.AddSingleton<UnimusDirectory>();
 
         return services;
     }
