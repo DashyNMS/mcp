@@ -80,6 +80,9 @@ internal sealed class FakeLibreNms
         Client.Vlans.Returns(new VlansApi(Transport));
         Client.Fdb.Returns(new FdbApi(Transport));
         Client.Routing.Returns(new RoutingApi(Transport));
+        Client.AlertTemplates.Returns(new AlertTemplatesApi(Transport));
+        Client.Locations.Returns(new LocationsApi(Transport));
+        Client.System.Returns(new SystemApi(Transport));
 
         Time = new FakeTimeProvider(Now);
         Directory = new DeviceDirectory(Client, Time);
@@ -140,7 +143,38 @@ internal sealed class FakeLibreNms
               {"id":11,"device_id":2,"rule_id":4,"state":1,"timestamp":"2026-10-17 09:00:00","hostname":"edge-sw3.example.com","severity":"critical","name":"Device down"}
             ]}
             """)
-        .On("rules", """{"status":"ok","rules":[{"id":3,"name":"Port down","severity":"critical"},{"id":4,"name":"Device down","severity":"warning"}]}""")
+        .On("rules", """
+            {"status":"ok","rules":[
+              {"id":3,"name":"Port down","severity":"critical","rule":"ports.ifOperStatus = \"down\" AND ports.ifAdminStatus = \"up\"","builder":"{\"condition\":\"AND\",\"rules\":[{\"id\":\"ports.ifOperStatus\",\"field\":\"ports.ifOperStatus\",\"operator\":\"equal\",\"value\":\"down\"},{\"id\":\"ports.ifAdminStatus\",\"field\":\"ports.ifAdminStatus\",\"operator\":\"equal\",\"value\":\"up\"}],\"valid\":true}","devices":[],"groups":[1],"locations":[],"disabled":0,
+               "proc":"https://wiki.example.com/port-down","notes":"Check the patching first."},
+              {"id":4,"name":"Device down","severity":"warning","rule":"macros.device_down = 1","devices":[2],"groups":[],"locations":[],"disabled":0},
+              {"id":5,"name":"High CPU","severity":"warning","rule":"processors.processor_usage >= 90","devices":[],"groups":[],"locations":[1],"disabled":0},
+              {"id":6,"name":"Old test rule","severity":"critical","rule":"devices.status = 0","devices":[],"groups":[],"locations":[],"disabled":1}
+            ]}
+            """)
+        .On("alerts/10", """
+            {"status":"ok","alerts":[{"id":10,"device_id":1,"rule_id":3,"state":1,"timestamp":"2026-10-17 09:40:00","hostname":"core-sw1.example.com","severity":"critical","name":"Port down"}]}
+            """)
+        .On("alert_templates", """{"status":"ok","alert_templates":[{"id":1,"name":"Port template","alert_rules":[3]}]}""")
+        .On("resources/locations", """{"status":"ok","locations":[{"id":1,"location":"Paddock"},{"id":2,"location":"Pit lane"}]}""")
+        .On("system", """{"status":"ok","system":[{"local_ver":"26.10.0"}]}""")
+        // Every port in the network, as the Top widgets' snapshot reads it.
+        .On("ports", """
+            {"status":"ok","ports":[
+              {"port_id":101,"device_id":1,"ifName":"1/1/1","ifAlias":"Uplink to edge-sw3","ifAdminStatus":"up","ifOperStatus":"up","ifSpeed":10000000000,"ifInOctets_rate":125000000,"ifOutOctets_rate":25000000,"ifInErrors_rate":0,"ifOutErrors_rate":0},
+              {"port_id":107,"device_id":1,"ifName":"1/1/7","ifAlias":"Camera 7","ifAdminStatus":"up","ifOperStatus":"down","ifSpeed":1000000000},
+              {"port_id":108,"device_id":1,"ifName":"1/1/8","ifAlias":"Camera 8","ifAdminStatus":"up","ifOperStatus":"up","ifSpeed":1000000000,"ifInOctets_rate":1250000,"ifOutOctets_rate":250000,"ifInErrors_rate":2.5,"ifOutErrors_rate":0},
+              {"port_id":249,"device_id":2,"ifName":"49","ifAdminStatus":"up","ifOperStatus":"up","ifSpeed":10000000000,"ifInOctets_rate":25000000,"ifOutOctets_rate":100000000,"ifInErrors_rate":0.5,"ifOutErrors_rate":1}
+            ]}
+            """)
+        .On("logs/eventlog", """
+            {"status":"ok","logs":[
+              {"event_id":12,"device_id":2,"datetime":"2026-10-17 09:50:00","message":"Device status changed to Down","type":"system","severity":5},
+              {"event_id":2,"device_id":1,"datetime":"2026-10-17 09:30:00","message":"Interface 1/1/7 went down","type":"interface","severity":4},
+              {"event_id":11,"device_id":2,"datetime":"2026-10-17 06:00:00","message":"Device rebooted","type":"reboot","severity":3},
+              {"event_id":1,"device_id":1,"datetime":"2026-10-10 12:00:00","message":"Device rebooted","type":"reboot","severity":3}
+            ]}
+            """)
         .On("devices/1/health/processor", """{"status":"ok","graphs":[{"sensor_id":5},{"sensor_id":6}]}""")
         .On("devices/1/health/processor/5", """{"status":"ok","graphs":[{"processor_id":5,"device_id":1,"processor_descr":"CPU 0","processor_usage":37}]}""")
         .On("devices/1/health/processor/6", """{"status":"ok","graphs":[{"processor_id":6,"device_id":1,"processor_descr":"CPU 1","processor_usage":61}]}""")
@@ -172,8 +206,17 @@ internal sealed class FakeLibreNms
               {"event_id":1,"device_id":1,"datetime":"2026-10-10 12:00:00","message":"Device rebooted","type":"reboot","severity":3}
             ]}
             """)
+        // Device 1's alert log: today's port alert with the row that tripped
+        // it, and two earlier firings of the same rule (one 40 days ago, so
+        // outside the 30 days alert_details counts).
         .On("logs/alertlog/1", """
-            {"status":"ok","logs":[{"id":1,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-10-17 09:40:00"}]}
+            {"status":"ok","logs":[
+              {"id":1,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-10-17 09:40:00",
+               "details":{"contacts":{},"rule":[{"device_id":1,"hostname":"core-sw1.example.com","port_id":107,"ifName":"1/1/7","ifAlias":"Camera 7","ifOperStatus":"down","ifAdminStatus":"up"}]}},
+              {"id":-1,"rule_id":3,"device_id":1,"state":0,"time_logged":"2026-10-08 10:00:00"},
+              {"id":-2,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-10-08 09:00:00"},
+              {"id":-3,"rule_id":3,"device_id":1,"state":1,"time_logged":"2026-09-07 09:00:00"}
+            ]}
             """)
         // 09:00 to 09:10 UTC on 17 October 2026, as Unix timestamps.
         .On("devices/1/outages", """{"status":"ok","outages":[{"going_down":1792227600,"up_again":1792228200}]}""")

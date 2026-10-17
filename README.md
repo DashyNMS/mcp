@@ -43,8 +43,17 @@ Temperatures, fans, optical power, voltages and more, for one device or across t
 **What's it connected to?**
 Every LLDP and CDP neighbour of a device, including ones that report it when it doesn't report them back. *(`device_neighbours`)*
 
+**How's the network?**
+One call for the dashboard's numbers: devices up and down, where the outages are, alerts by severity, ports down or counting errors. Then the busiest ports, the ports counting the most errors, and the devices with the most traffic or the most port problems. *(`network_overview`, `top_interfaces`, `top_errors`, `top_devices`)*
+
+**What happened across the network?**
+The event log and alert log for every device over any window, newest first: "anything reboot today?". Filter by type, severity, device, group or location. *(`network_events`)*
+
 **What's alerting, and what alerted?**
 Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
+
+**Why did it fire, and what are we alerting on?**
+For any alert: what the rule matched and the values that tripped it, the rule's condition and procedure, and how often it has fired on that device in the last 30 days, to tell a one-off from a flapping alert. For the rules themselves: what each watches for, what it applies to, its template, and which are noisiest. *(`alert_details`, `alert_rules`)*
 
 **What happened, and what changed?**
 A device's event log, alert changes and outages for any window: "the last 6 hours", "since Friday", or "between 2 and 4 last night". With Unimus and Graylog connected, you also get the config diff for a change inside that window and the messages the device sent. *(`device_events`, `what_changed`)*
