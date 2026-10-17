@@ -1,116 +1,120 @@
-# DashyNMS MCP
+<p align="center">
+  <img src="https://dashynms.pckp.net/assets/img/favicon.svg" alt="" width="96" height="96">
+</p>
 
-A read-only [Model Context Protocol](https://modelcontextprotocol.io) server for LibreNMS, so Claude Desktop, Claude Code or any other MCP client can answer questions about your network: what a device's health is, which alerts are open, what changed on a switch in the last day.
+<h1 align="center">DashyNMS MCP</h1>
 
-It reuses the LibreNMS, Unimus and Graylog clients from [DashyNMS desktop](https://github.com/DashyNMS/desktop)'s Core library.
+<p align="center">
+  <strong>Ask Claude about your LibreNMS network.</strong><br>
+  For Claude Desktop, Claude Code and any other MCP client.
+</p>
 
-> **Status:** proof of concept.
+<p align="center">
+  <a href="https://github.com/DashyNMS/mcp/pkgs/container/mcp">Container image</a> ·
+  <a href="https://github.com/DashyNMS/mcp/issues">Issues</a> ·
+  <a href="https://github.com/DashyNMS/mcp/milestones">Roadmap</a>
+</p>
 
-## Tools
+---
 
-Every tool only reads. Each takes a device as a hostname, display name, IP address or LibreNMS device ID.
+"What's alerting right now?" "How is the core switch doing?" "What changed on this firewall since yesterday?" DashyNMS MCP lets an AI assistant answer questions like these from your own [LibreNMS](https://www.librenms.org/) server, with the evidence beside every answer, and without being able to change a thing.
 
-| Tool | Answers |
-| --- | --- |
-| `find_device` | Which devices match a name, IP or MAC address (MACs through LibreNMS's ARP tables) |
-| `device_health` | Is a device OK: status, uptime, maintenance, open alerts, CPU, memory and storage peaks, problem ports |
-| `port_status` | One port: state, speed, traffic, errors, alias and its LLDP/CDP neighbour |
-| `active_alerts` | What's alerting now, grouped by device, optionally by severity or device |
-| `device_events` | A device's event log, alert changes and outages for the last 1 to 168 hours |
-| `what_changed` | The same timeline, plus the Unimus config diff and Graylog messages when those are configured |
+It's a [Model Context Protocol](https://modelcontextprotocol.io) server, built on the same LibreNMS, Unimus and Graylog code as [DashyNMS desktop](https://github.com/DashyNMS/desktop) and [DashyNMS Mobile](https://github.com/DashyNMS/mobile).
 
-Results are JSON. Secrets (SNMP communities, passwords, keys, private keys and pfSense secrets) are redacted before anything leaves the server. Results are capped at `MCP_MAX_RESULT_BYTES`, and a cut result says so.
+> **Status:** early. It works end to end, and the [v1.1.0 milestone](https://github.com/DashyNMS/mcp/milestones) tracks what comes next.
 
-## Building
+## What you can ask
 
-You need the .NET 10 SDK.
+**Find anything**
+By part of a name, an IP address, or a MAC address. A MAC is looked up in LibreNMS's ARP tables, so you find the router or switch that saw it. *(`find_device`)*
 
-```bash
-git clone --recurse-submodules https://github.com/DashyNMS/mcp.git
-cd mcp
-dotnet build DashyNMS.Mcp.slnx
-dotnet test DashyNMS.Mcp.slnx
-```
+**Is it OK?**
+One answer per device: up or down, uptime, maintenance, open alerts, CPU, memory, the fullest storage, and the ports that are down or counting errors. *(`device_health`)*
 
-If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
+**What's on that port?**
+State, speed, VLANs, traffic, errors, its description, and the neighbour LibreNMS sees on it over LLDP or CDP. *(`port_status`)*
 
-For an MCP client, publish the server once and point the client at the published program:
+**What's alerting?**
+Every open alert, grouped by device and newest first. Ask for just critical alerts, or just one device. *(`active_alerts`)*
 
-```bash
-dotnet publish src/DashyNMS.Mcp -c Release -o publish
-```
+**What happened, and what changed?**
+A device's event log, alert changes and outages, for anything from the last hour to the last week. With Unimus and Graylog connected, you also get the config diff between its last two backups and the messages it sent. *(`device_events`, `what_changed`)*
 
-Don't use `dotnet run` in a client's configuration. It can write build output to stdout, which the server uses for the MCP protocol.
+Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you.
 
-## Using it with Claude
+## Safe by design
 
-Claude Code (on Windows the program is `publish\dashynms-mcp.exe`; use its full path):
+- **It only reads.** There are no tools that change anything. Give it the token of a read-only LibreNMS user too, so LibreNMS itself would refuse a change. Do the same for Unimus and Graylog.
+- **Secrets stay out of answers.** SNMP communities, passwords and hashes, RADIUS, TACACS, IPsec, NTP and OSPF keys, API keys, private keys and pfSense secrets are redacted before anything leaves the server.
+- **Your network's text is treated as data.** Device names, port descriptions, log lines and config text never appear as the server's own words, and the assistant is told not to take instructions from them.
+- **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
+- **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for.
 
-```bash
-claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- /path/to/mcp/publish/dashynms-mcp
-```
+What the tools return still goes to whichever model your client uses. Unimus diffs are redacted, but they're still your configuration. If that shouldn't leave your network, leave Unimus unset.
 
-Claude Desktop, in `claude_desktop_config.json`:
+## Get it
 
-```json
-{
-  "mcpServers": {
-    "dashynms": {
-      "command": "C:\\path\\to\\mcp\\publish\\dashynms-mcp.exe",
-      "env": {
-        "LIBRENMS_URL": "https://librenms.example.com",
-        "LIBRENMS_TOKEN": "your-token"
-      }
-    }
-  }
-}
-```
-
-## Docker
-
-The image is about 45 MB to pull and runs as a non-root user on Ubuntu's chiseled .NET runtime image, which has no shell or package manager. It is built for amd64 and arm64 and published to GitHub's container registry:
-
-| Tag | What it is |
-| --- | --- |
-| `ghcr.io/dashynms/mcp:edge` | The latest build from `main` |
-| `ghcr.io/dashynms/mcp:1.2.3`, `:1.2`, `:latest` | A release, from a `v1.2.3` tag |
-| `ghcr.io/dashynms/mcp:sha-abc1234` | One exact commit |
+The easiest way is the container image. It's about 45 MB to pull, built for amd64 and arm64, runs as a non-root user and has no shell:
 
 ```bash
 docker pull ghcr.io/dashynms/mcp:edge
 ```
 
-Or build it yourself from the repo root, with the submodule checked out:
+| Tag | What it is |
+| --- | --- |
+| `edge` | The latest build from `main` |
+| `latest`, `1.2.3`, `1.2` | A release |
+| `sha-abc1234` | One exact commit |
+
+You can also build it yourself from source; see the [developer guide](docs/DEVELOPMENT.md).
+
+## What you need
+
+- A LibreNMS server you can reach, with its API turned on.
+- An API token for a **read-only** LibreNMS user. In LibreNMS, open the settings menu, then **API → API Tokens**, and create one for that user.
+- Docker, or the .NET 10 SDK to build from source.
+- Optionally, Unimus (1.7 or later) and Graylog, for `what_changed`.
+
+## Set it up
+
+The server talks to the client over stdin and stdout, so the client starts it, and Docker needs `-i`.
+
+**Claude Code**: a bare `-e NAME` hands the value through from Claude Code, so the token stays out of the Docker command:
 
 ```bash
-docker build -t dashynms-mcp .
+claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- docker run -i --rm -e LIBRENMS_URL -e LIBRENMS_TOKEN ghcr.io/dashynms/mcp:edge
 ```
 
-The examples below use the local name `dashynms-mcp`; put `ghcr.io/dashynms/mcp:edge` in its place to use the published image.
+**Claude Desktop**: put your settings in an env file outside any repo (one `NAME=value` per line, no quotes), then add this to `claude_desktop_config.json` through **Settings → Developer → Edit Config**:
 
-The server talks MCP over stdin and stdout, so the client starts the container itself and `-i` is required. A bare `-e NAME` passes that variable through from the client's environment, so the token stays out of the command line:
-
-```bash
-claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- docker run -i --rm -e LIBRENMS_URL -e LIBRENMS_TOKEN dashynms-mcp
+```json
+{
+  "mcpServers": {
+    "dashynms": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\dashynms.env", "ghcr.io/dashynms/mcp:edge"]
+    }
+  }
+}
 ```
 
-Or keep the settings in an env file outside the repo (`NAME=value` per line, no quotes) and use `docker run -i --rm --env-file C:\path\to\dashynms.env dashynms-mcp`. In Claude Desktop, `command` is `docker` and `args` are the same words.
+Quit Claude Desktop completely (from the tray icon, not just the window) and open it again. It reads the file only at startup, and while it's running it can write over changes you make to the file.
 
-The image doesn't include time zone data, so leave `LIBRENMS_TIMESTAMPS_UTC` at `true` when using Docker. That's LibreNMS's usual setup.
+When the server starts, it checks its settings and tests your LibreNMS address and token before it answers anything. If something's wrong, it stops with one plain line on stderr. Claude Desktop shows that line under **Settings → Developer**.
 
-## Configuration
+## Settings
 
-The server is configured only through environment variables. It checks them, then tests the LibreNMS address and token, before it accepts any MCP traffic. If anything is wrong it stops with a plain message on stderr.
+All settings are environment variables.
 
-| Variable | Required | Default | Purpose |
+| Variable | Required | Default | What it's for |
 | --- | --- | --- | --- |
-| `LIBRENMS_URL` | Yes | | Address of your LibreNMS server. The API URL (`.../api/v0`) works too. |
-| `LIBRENMS_TOKEN` | Yes | | API token of a read-only LibreNMS user |
+| `LIBRENMS_URL` | Yes | | Your LibreNMS address. The API URL (`.../api/v0`) works too. |
+| `LIBRENMS_TOKEN` | Yes | | A read-only user's API token |
 | `LIBRENMS_BACKUP_URL` | No | | Another address for the same server, used when the main one doesn't answer |
-| `LIBRENMS_TRUSTED_CERTS` | No | | Comma-separated SHA-256 fingerprints of certificates to trust when the normal checks reject them (self-signed or internal CA) |
-| `LIBRENMS_TIMEOUT` | No | `30` | Request timeout in seconds (at least 5), for every source |
-| `LIBRENMS_TIMESTAMPS_UTC` | No | `true` | Whether LibreNMS stores timestamps in UTC. Set `false` if it stores local time, and run the server in the same time zone. |
-| `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on Unimus config diffs in `what_changed`. Set both or neither. |
+| `LIBRENMS_TRUSTED_CERTS` | No | | SHA-256 fingerprints of certificates to trust when the normal checks reject them, comma-separated |
+| `LIBRENMS_TIMEOUT` | No | `30` | Request timeout in seconds, at least 5, for every source |
+| `LIBRENMS_TIMESTAMPS_UTC` | No | `true` | Whether LibreNMS stores times in UTC. Leave it on with Docker, as the image has no time zone data. |
+| `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on config diffs in `what_changed`. Set both or neither. |
 | `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
 | `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
 | `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 or newer, or `2.0` |
@@ -118,23 +122,16 @@ The server is configured only through environment variables. It checks them, the
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
-Unimus and Graylog aren't tested at startup. If one can't be reached, `what_changed` reports that source's error and still returns the rest.
+Unimus and Graylog aren't tested at startup. If one can't be reached, `what_changed` says so and still returns everything else.
 
-### Self-signed and internal CA certificates
+**Self-signed or internal CA certificates:** the server can't ask whether to trust a certificate, so if yours doesn't pass the normal checks, startup stops. It prints the certificate's subject, issuer, dates and fingerprint. Check the fingerprint against your server's own certificate, then add it to `LIBRENMS_TRUSTED_CERTS`. Only that exact certificate is trusted, so when it's renewed you add the new one. There's no setting that trusts every certificate.
 
-The server can't ask you whether to trust a certificate. If your LibreNMS certificate doesn't pass the normal checks, startup fails and prints the certificate's subject, issuer, validity dates and fingerprint. Check the fingerprint against the server's own certificate, then add it to `LIBRENMS_TRUSTED_CERTS`. Only that exact certificate is trusted. When it is renewed, startup fails again and prints the new fingerprint. There is no setting that trusts every certificate.
+## Help and feedback
 
-## Security
+- Found a bug or have an idea? [Open an issue](https://github.com/DashyNMS/mcp/issues). Planned work is tracked there too, under the [milestones](https://github.com/DashyNMS/mcp/milestones).
 
-The server only reads. Give it the API token of a **read-only LibreNMS user**, so LibreNMS itself refuses any change even if something goes wrong. Use a Unimus token and a Graylog user that can only read, too.
+---
 
-Everything a tool returns from your network (device names, port aliases, log lines, config text) is marked as data, not instructions, but it still goes to the model you connect. Unimus config diffs are redacted, yet still contain your configuration. Leave Unimus unset if that shouldn't leave your network. See [SECURITY.md](SECURITY.md) to report a problem.
-
-## Licence
-
-DashyNMS MCP is source-available under the [PolyForm Internal Use License 1.0.0](https://polyformproject.org/licenses/internal-use/1.0.0):
-
-- **You may** build, install and run it, from source or the published image, and change it, for your own organisation's internal use, at no cost.
-- **You may not** distribute it, sell it, run it as a service for other organisations, or use the DashyNMS name for anything else.
-
-The copy of DashyNMS desktop's Core library built into the server is covered by the same terms. The rest of the desktop repository keeps its own licence. [LICENSE](LICENSE) has the full text and notices. For any other use, ask first.
+<sub>DashyNMS isn't affiliated with LibreNMS, Graylog, Unimus or Anthropic. LibreNMS, Graylog, Unimus and Claude are trademarks of their respective owners.<br>
+Source-available under the PolyForm Internal Use License 1.0.0: free to build, run and change for your own organisation's internal use, but not to distribute or offer to others; see [LICENSE](LICENSE).<br>
+Found a security problem? See [SECURITY.md](SECURITY.md). Technical notes are in the [developer guide](docs/DEVELOPMENT.md).</sub>
