@@ -18,10 +18,28 @@ public sealed class FleetCache(ILibreNmsClient client, TimeProvider time)
 {
     private readonly Cached<Sensor> _sensors = new(ct => client.Sensors.ListAsync(ct), time);
     private readonly Cached<NetworkLink> _links = new(ct => client.Links.ListAllAsync(ct), time);
+    private readonly Cached<Port> _ports = new(ct => client.Ports.ListAllStatusAsync(ct), time);
+    private readonly Cached<AlertRule> _rules = new(ct => client.Rules.ListAsync(ct), time);
+    private readonly Cached<AlertTemplate> _templates = new(ct => client.AlertTemplates.ListAsync(ct), time);
+    private readonly Cached<Location> _locations = new(ct => client.Locations.ListAsync(ct), time);
 
     public Task<IReadOnlyList<Sensor>> GetSensorsAsync(CancellationToken cancellationToken) => _sensors.GetAsync(cancellationToken);
 
     public Task<IReadOnlyList<NetworkLink>> GetLinksAsync(CancellationToken cancellationToken) => _links.GetAsync(cancellationToken);
+
+    /// <summary>
+    /// Every port's state and rates in one call - the same snapshot desktop's
+    /// Top widgets share (#26). Thousands of rows on a big network, which is
+    /// why it's cached rather than read per question.
+    /// </summary>
+    public Task<IReadOnlyList<Port>> GetPortsAsync(CancellationToken cancellationToken) => _ports.GetAsync(cancellationToken);
+
+    public Task<IReadOnlyList<AlertRule>> GetRulesAsync(CancellationToken cancellationToken) => _rules.GetAsync(cancellationToken);
+
+    public Task<IReadOnlyList<AlertTemplate>> GetTemplatesAsync(CancellationToken cancellationToken) => _templates.GetAsync(cancellationToken);
+
+    /// <summary>LibreNMS's Locations resource, by ID - what an alert rule's "locations" refer to, unlike a device's free-text location.</summary>
+    public Task<IReadOnlyList<Location>> GetLocationsAsync(CancellationToken cancellationToken) => _locations.GetAsync(cancellationToken);
 
     /// <summary>One list, refreshed after <see cref="DeviceDirectory.Lifetime"/>, with parallel callers sharing a fetch.</summary>
     private sealed class Cached<T>(Func<CancellationToken, Task<IReadOnlyList<T>>> fetch, TimeProvider time)
