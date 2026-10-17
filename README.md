@@ -68,11 +68,25 @@ Claude Desktop, in `claude_desktop_config.json`:
 
 ## Docker
 
-The image is about 45 MB to pull and runs as a non-root user on Ubuntu's chiseled .NET runtime image, which has no shell or package manager. Build it from the repo root, with the submodule checked out:
+The image is about 45 MB to pull and runs as a non-root user on Ubuntu's chiseled .NET runtime image, which has no shell or package manager. It is built for amd64 and arm64 and published to GitHub's container registry:
+
+| Tag | What it is |
+| --- | --- |
+| `ghcr.io/dashynms/mcp:edge` | The latest build from `main` |
+| `ghcr.io/dashynms/mcp:1.2.3`, `:1.2`, `:latest` | A release, from a `v1.2.3` tag |
+| `ghcr.io/dashynms/mcp:sha-abc1234` | One exact commit |
+
+```bash
+docker pull ghcr.io/dashynms/mcp:edge
+```
+
+Or build it yourself from the repo root, with the submodule checked out:
 
 ```bash
 docker build -t dashynms-mcp .
 ```
+
+The examples below use the local name `dashynms-mcp`; put `ghcr.io/dashynms/mcp:edge` in its place to use the published image.
 
 The server talks MCP over stdin and stdout, so the client starts the container itself and `-i` is required. A bare `-e NAME` passes that variable through from the client's environment, so the token stays out of the command line:
 
