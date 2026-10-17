@@ -23,7 +23,7 @@ public sealed class McpOptions
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
 
     public const int DefaultTimeoutSeconds = 30;
-    public const int DefaultMaxResultBytes = 16 * 1024;
+    public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
 
     /// <summary>Below this a single device summary wouldn't fit, so a smaller cap is a mistake rather than a choice.</summary>
     public const int MinimumMaxResultBytes = 1024;

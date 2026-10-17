@@ -23,7 +23,7 @@ if (options is null)
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<LibreNmsStartup>();
-builder.Services.AddDashyNmsAgent();
+builder.Services.AddDashyNmsAgent(new AgentOptions { MaxResultBytes = options.MaxResultBytes });
 builder.Services
     .AddMcpServer(o =>
     {
