@@ -14,7 +14,7 @@ You need the .NET 10 SDK.
 git clone --recurse-submodules https://github.com/DashyNMS/mcp.git
 cd mcp
 dotnet build DashyNMS.Mcp.slnx
-dotnet test tests/DashyNMS.Agent.Tests
+dotnet test DashyNMS.Mcp.slnx
 ```
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
