@@ -42,6 +42,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DeviceResolver>();
         services.AddSingleton<DeviceTimeline>();
         services.AddSingleton<DeviceScope>();
+        services.AddSingleton<FleetCache>();
+        services.AddSingleton<SensorSource>();
 
         return services;
     }

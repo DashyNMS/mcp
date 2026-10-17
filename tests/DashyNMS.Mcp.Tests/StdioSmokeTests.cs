@@ -58,7 +58,7 @@ public sealed class StdioSmokeTests
 
             var list = await Request(2, "tools/list", "{}");
             var tools = list.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
-            Assert.Equal(7, tools.Count);
+            Assert.Equal(11, tools.Count);
             Assert.All(tools, tool =>
             {
                 Assert.True(tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean(), tool.GetProperty("name").GetString());
