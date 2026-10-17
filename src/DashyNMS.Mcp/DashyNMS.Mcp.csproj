@@ -16,4 +16,8 @@
     <ProjectReference Include="../DashyNMS.Agent/DashyNMS.Agent.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DashyNMS.Mcp.Tests" />
+  </ItemGroup>
+
 </Project>
