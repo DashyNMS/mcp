@@ -1,0 +1,12 @@
+# Only what the Dockerfile copies is needed; keep build output, git data and
+# local secrets out of the build context.
+**/bin/
+**/obj/
+**/.git
+**/.vs/
+**/TestResults/
+publish/
+artifacts/
+tests/
+*.env
+.env

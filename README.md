@@ -66,6 +66,24 @@ Claude Desktop, in `claude_desktop_config.json`:
 }
 ```
 
+## Docker
+
+The image is about 45 MB to pull and runs as a non-root user on Ubuntu's chiseled .NET runtime image, which has no shell or package manager. Build it from the repo root, with the submodule checked out:
+
+```bash
+docker build -t dashynms-mcp .
+```
+
+The server talks MCP over stdin and stdout, so the client starts the container itself and `-i` is required. A bare `-e NAME` passes that variable through from the client's environment, so the token stays out of the command line:
+
+```bash
+claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- docker run -i --rm -e LIBRENMS_URL -e LIBRENMS_TOKEN dashynms-mcp
+```
+
+Or keep the settings in an env file outside the repo (`NAME=value` per line, no quotes) and use `docker run -i --rm --env-file C:\path\to\dashynms.env dashynms-mcp`. In Claude Desktop, `command` is `docker` and `args` are the same words.
+
+The image doesn't include time zone data, so leave `LIBRENMS_TIMESTAMPS_UTC` at `true` when using Docker. That's LibreNMS's usual setup.
+
 ## Configuration
 
 The server is configured only through environment variables. It checks them, then tests the LibreNMS address and token, before it accepts any MCP traffic. If anything is wrong it stops with a plain message on stderr.
