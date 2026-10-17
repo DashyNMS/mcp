@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
@@ -177,13 +178,36 @@ public sealed class EventTools(
     }
 
     /// <summary>The changed lines as a unified-style diff: "- old", "+ new", common lines left out.</summary>
+    /// <remarks>
+    /// Private keys are blanked line by line here, before anything is cut,
+    /// following each side of the diff through the unchanged lines too: a
+    /// rotated key's diff holds only its body lines (BEGIN and END are
+    /// unchanged), and a long one can be cut between BEGIN and END - either
+    /// way the redactor would never see a whole block.
+    /// </remarks>
     internal static (string Text, int Lines, int Omitted) Render(UnimusBackupDiff diff)
     {
         var lines = new List<string>();
-        foreach (var group in diff.LineGroups.Where(g => !g.IsCommon))
+        bool originalInKey = false, revisedInKey = false;
+        foreach (var group in diff.LineGroups)
         {
-            lines.AddRange(group.OriginalLines.Select(l => "- " + l.Text));
-            lines.AddRange(group.RevisedLines.Select(l => "+ " + l.Text));
+            if (group.IsCommon)
+            {
+                foreach (var line in group.OriginalLines)
+                {
+                    Redactor.MaskPrivateKeyLine(line.Text, ref originalInKey);
+                }
+
+                foreach (var line in group.RevisedLines.Count > 0 ? group.RevisedLines : group.OriginalLines)
+                {
+                    Redactor.MaskPrivateKeyLine(line.Text, ref revisedInKey);
+                }
+
+                continue;
+            }
+
+            lines.AddRange(group.OriginalLines.Select(l => "- " + Redactor.MaskPrivateKeyLine(l.Text, ref originalInKey)));
+            lines.AddRange(group.RevisedLines.Select(l => "+ " + Redactor.MaskPrivateKeyLine(l.Text, ref revisedInKey)));
         }
 
         var shown = ToolResult.Take(lines, MaxDiffLines, out var omitted);

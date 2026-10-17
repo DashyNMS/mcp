@@ -109,6 +109,56 @@ public sealed class EventToolsTests
     }
 
     [Fact]
+    public void A_rotated_private_key_shows_only_that_it_changed()
+    {
+        // Unimus sends the BEGIN and END lines as unchanged context, so only
+        // the key's body lines are in the diff - with no block for the
+        // redactor's PEM rule to see.
+        var diff = new UnimusBackupDiff
+        {
+            LineGroups =
+            [
+                new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new UnimusDiffLine { Text = "-----BEGIN RSA PRIVATE KEY-----" }], RevisedLines = [new UnimusDiffLine { Text = "-----BEGIN RSA PRIVATE KEY-----" }] },
+                new UnimusDiffLineGroup
+                {
+                    Type = "CHANGED",
+                    OriginalLines = [new UnimusDiffLine { Text = "MIIEowIBAAKCAQEAoldkeymaterial" }],
+                    RevisedLines = [new UnimusDiffLine { Text = "MIIEpAIBAAKCAQEAnewkeymaterial" }],
+                },
+                new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new UnimusDiffLine { Text = "-----END RSA PRIVATE KEY-----" }], RevisedLines = [new UnimusDiffLine { Text = "-----END RSA PRIVATE KEY-----" }] },
+                new UnimusDiffLineGroup { Type = "INSERTED", RevisedLines = [new UnimusDiffLine { Text = "hostname core-sw1" }] },
+            ],
+        };
+
+        var (text, lines, _) = EventTools.Render(diff);
+
+        Assert.Equal($"- {Redactor.Marker}\n+ {Redactor.Marker}\n+ hostname core-sw1", text);
+        Assert.Equal(3, lines);
+    }
+
+    [Fact]
+    public void A_key_cut_by_the_line_limit_is_still_hidden()
+    {
+        var body = Enumerable.Range(0, EventTools.MaxDiffLines + 50).Select(i => new UnimusDiffLine { Text = $"QUJDREVGR0hJSktMTU5PUFFSU1RVVldY{i:D4}" }).ToList();
+        var diff = new UnimusBackupDiff
+        {
+            LineGroups =
+            [
+                new UnimusDiffLineGroup
+                {
+                    Type = "INSERTED",
+                    RevisedLines = [new UnimusDiffLine { Text = "-----BEGIN PRIVATE KEY-----" }, .. body, new UnimusDiffLine { Text = "-----END PRIVATE KEY-----" }],
+                },
+            ],
+        };
+
+        var (text, _, omitted) = EventTools.Render(diff);
+
+        Assert.True(omitted > 0);
+        Assert.DoesNotContain("QUJDREVGR0hJSktMTU5PUFFSU1RVVldY", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task No_diff_when_the_newest_backup_is_older_than_the_window()
     {
         _unimus.IsConfigured.Returns(true);

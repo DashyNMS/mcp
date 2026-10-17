@@ -11,7 +11,10 @@ var builder = Host.CreateApplicationBuilder(args);
 // stdout carries the MCP protocol, so every log line goes to stderr.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
-var options = McpOptions.TryLoad(key => builder.Configuration[key], out var errors);
+// The environment only, not the host's whole configuration: that also reads
+// appsettings.json from the working directory and the command line, so a
+// file someone left there could point the server at another LibreNMS.
+var options = McpOptions.TryLoad(Environment.GetEnvironmentVariable, out var errors);
 if (options is null)
 {
     foreach (var error in errors)
