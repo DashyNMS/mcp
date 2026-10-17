@@ -4,7 +4,22 @@ A read-only [Model Context Protocol](https://modelcontextprotocol.io) server for
 
 It reuses the LibreNMS, Unimus and Graylog clients from [DashyNMS desktop](https://github.com/DashyNMS/desktop)'s Core library.
 
-> **Status:** proof of concept. The project builds, but no tools are available yet.
+> **Status:** proof of concept.
+
+## Tools
+
+Every tool only reads. Each takes a device as a hostname, display name, IP address or LibreNMS device ID.
+
+| Tool | Answers |
+| --- | --- |
+| `find_device` | Which devices match a name, IP or MAC address (MACs through LibreNMS's ARP tables) |
+| `device_health` | Is a device OK: status, uptime, maintenance, open alerts, CPU, memory and storage peaks, problem ports |
+| `port_status` | One port: state, speed, traffic, errors, alias and its LLDP/CDP neighbour |
+| `active_alerts` | What's alerting now, grouped by device, optionally by severity or device |
+| `device_events` | A device's event log, alert changes and outages for the last 1 to 168 hours |
+| `what_changed` | The same timeline, plus the Unimus config diff and Graylog messages when those are configured |
+
+Results are JSON. Secrets (SNMP communities, passwords, keys, private keys and pfSense secrets) are redacted before anything leaves the server. Results are capped at `MCP_MAX_RESULT_BYTES`, and a cut result says so.
 
 ## Building
 
@@ -19,6 +34,38 @@ dotnet test DashyNMS.Mcp.slnx
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
+For an MCP client, publish the server once and point the client at the published program:
+
+```bash
+dotnet publish src/DashyNMS.Mcp -c Release -o publish
+```
+
+Don't use `dotnet run` in a client's configuration. It can write build output to stdout, which the server uses for the MCP protocol.
+
+## Using it with Claude
+
+Claude Code (on Windows the program is `publish\dashynms-mcp.exe`; use its full path):
+
+```bash
+claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- /path/to/mcp/publish/dashynms-mcp
+```
+
+Claude Desktop, in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "dashynms": {
+      "command": "C:\\path\\to\\mcp\\publish\\dashynms-mcp.exe",
+      "env": {
+        "LIBRENMS_URL": "https://librenms.example.com",
+        "LIBRENMS_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
 ## Configuration
 
 The server is configured only through environment variables. It checks them, then tests the LibreNMS address and token, before it accepts any MCP traffic. If anything is wrong it stops with a plain message on stderr.
@@ -29,8 +76,17 @@ The server is configured only through environment variables. It checks them, the
 | `LIBRENMS_TOKEN` | Yes | | API token of a read-only LibreNMS user |
 | `LIBRENMS_BACKUP_URL` | No | | Another address for the same server, used when the main one doesn't answer |
 | `LIBRENMS_TRUSTED_CERTS` | No | | Comma-separated SHA-256 fingerprints of certificates to trust when the normal checks reject them (self-signed or internal CA) |
-| `LIBRENMS_TIMEOUT` | No | `30` | Request timeout in seconds (at least 5) |
+| `LIBRENMS_TIMEOUT` | No | `30` | Request timeout in seconds (at least 5), for every source |
+| `LIBRENMS_TIMESTAMPS_UTC` | No | `true` | Whether LibreNMS stores timestamps in UTC. Set `false` if it stores local time, and run the server in the same time zone. |
+| `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on Unimus config diffs in `what_changed`. Set both or neither. |
+| `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
+| `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
+| `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 or newer, or `2.0` |
+| `GRAYLOG_QUERY_FIELD` | No | `source` | The Graylog field matched against a device's addresses, as LibreNMS's `graylog.query_field` |
+| `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
+
+Unimus and Graylog aren't tested at startup. If one can't be reached, `what_changed` reports that source's error and still returns the rest.
 
 ### Self-signed and internal CA certificates
 
@@ -38,7 +94,9 @@ The server can't ask you whether to trust a certificate. If your LibreNMS certif
 
 ## Security
 
-The server only reads. Give it the API token of a **read-only LibreNMS user**, so LibreNMS itself refuses any change even if something goes wrong. See [SECURITY.md](SECURITY.md) to report a problem.
+The server only reads. Give it the API token of a **read-only LibreNMS user**, so LibreNMS itself refuses any change even if something goes wrong. Use a Unimus token and a Graylog user that can only read, too.
+
+Everything a tool returns from your network (device names, port aliases, log lines, config text) is marked as data, not instructions, but it still goes to the model you connect. Unimus config diffs are redacted, yet still contain your configuration. Leave Unimus unset if that shouldn't leave your network. See [SECURITY.md](SECURITY.md) to report a problem.
 
 ## Licence
 

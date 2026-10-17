@@ -1,6 +1,7 @@
 using DashyNMS.Agent;
 using DashyNMS.Agent.Tools;
 using DashyNMS.Mcp;
+using DesktopNMS.Core.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,12 @@ if (options is null)
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<LibreNmsStartup>();
-builder.Services.AddDashyNmsAgent(new AgentOptions { MaxResultBytes = options.MaxResultBytes });
+builder.Services.AddDashyNmsAgent(new AgentOptions
+{
+    MaxResultBytes = options.MaxResultBytes,
+    ServerTimestampsAreUtc = options.TimestampsAreUtc,
+    GraylogQueryField = options.GraylogField,
+});
 builder.Services
     .AddMcpServer(o =>
     {
@@ -52,6 +58,18 @@ if (failure is not null)
 {
     Console.Error.WriteLine(failure);
     return 1;
+}
+
+// Unimus and Graylog are extras: not tested here, so one being down only
+// shows up in what_changed, as that source's own error.
+if (options.Unimus is { } unimus)
+{
+    host.Services.GetRequiredService<IUnimusApi>().Configure(unimus);
+}
+
+if (options.Graylog is { } graylog)
+{
+    host.Services.GetRequiredService<IGraylogApi>().Configure(graylog);
 }
 
 await host.RunAsync();

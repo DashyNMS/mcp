@@ -1,5 +1,6 @@
 using System.Globalization;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Configuration;
 
 namespace DashyNMS.Mcp;
 
@@ -10,8 +11,8 @@ namespace DashyNMS.Mcp;
 /// <remarks>
 /// Environment variables only, on purpose: the server runs under an MCP
 /// client or in a container, with no person to ask and nowhere it should
-/// write. Secrets are kept in <see cref="Connection"/> and never echoed back
-/// in an error.
+/// write. Secrets are kept in the connections and never echoed back in an
+/// error.
 /// </remarks>
 public sealed class McpOptions
 {
@@ -20,6 +21,16 @@ public sealed class McpOptions
     public const string LibreNmsBackupUrl = "LIBRENMS_BACKUP_URL";
     public const string LibreNmsTrustedCerts = "LIBRENMS_TRUSTED_CERTS";
     public const string LibreNmsTimeout = "LIBRENMS_TIMEOUT";
+    public const string LibreNmsTimestampsUtc = "LIBRENMS_TIMESTAMPS_UTC";
+    public const string UnimusUrl = "UNIMUS_URL";
+    public const string UnimusToken = "UNIMUS_TOKEN";
+    public const string UnimusTrustedCerts = "UNIMUS_TRUSTED_CERTS";
+    public const string GraylogUrl = "GRAYLOG_URL";
+    public const string GraylogUsername = "GRAYLOG_USERNAME";
+    public const string GraylogPassword = "GRAYLOG_PASSWORD";
+    public const string GraylogVersion = "GRAYLOG_VERSION";
+    public const string GraylogQueryField = "GRAYLOG_QUERY_FIELD";
+    public const string GraylogTrustedCerts = "GRAYLOG_TRUSTED_CERTS";
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
 
     public const int DefaultTimeoutSeconds = 30;
@@ -28,9 +39,19 @@ public sealed class McpOptions
     /// <summary>Below this a single device summary wouldn't fit, so a smaller cap is a mistake rather than a choice.</summary>
     public const int MinimumMaxResultBytes = 1024;
 
-    private McpOptions(LibreNmsConnection connection, int maxResultBytes)
+    private McpOptions(
+        LibreNmsConnection connection,
+        bool timestampsAreUtc,
+        UnimusConnection? unimus,
+        GraylogConnection? graylog,
+        string graylogQueryField,
+        int maxResultBytes)
     {
         Connection = connection;
+        TimestampsAreUtc = timestampsAreUtc;
+        Unimus = unimus;
+        Graylog = graylog;
+        GraylogField = graylogQueryField;
         MaxResultBytes = maxResultBytes;
     }
 
@@ -41,8 +62,26 @@ public sealed class McpOptions
     /// fingerprint is in <see cref="LibreNmsTrustedCerts"/>, and any other is
     /// reported with its fingerprint so startup can say what to add (#189 in
     /// the desktop repo). There is deliberately no accept-everything switch.
+    /// The same goes for Unimus and Graylog.
     /// </summary>
     public LibreNmsConnection Connection { get; }
+
+    /// <summary>
+    /// Whether LibreNMS stores its timestamps in UTC, as desktop's "Server
+    /// stores timestamps in UTC" setting (on by default there too). Off, they
+    /// are read as this server's local time, so in a container set TZ to the
+    /// LibreNMS server's zone.
+    /// </summary>
+    public bool TimestampsAreUtc { get; }
+
+    /// <summary>Unimus, when both its variables are set; null leaves it out of <c>what_changed</c>.</summary>
+    public UnimusConnection? Unimus { get; }
+
+    /// <summary>Graylog, when its address, username and password are set; null leaves it out of <c>what_changed</c>.</summary>
+    public GraylogConnection? Graylog { get; }
+
+    /// <summary>The Graylog field a device's addresses are matched against - LibreNMS's own default is "source".</summary>
+    public string GraylogField { get; }
 
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
@@ -81,20 +120,12 @@ public sealed class McpOptions
             problems.Add($"{LibreNmsBackupUrl}: {backupError}");
         }
 
-        var trusted = new List<string>();
-        foreach (var entry in (Value(lookup, LibreNmsTrustedCerts) ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (IsSha256Fingerprint(entry))
-            {
-                trusted.Add(entry);
-            }
-            else
-            {
-                problems.Add($"{LibreNmsTrustedCerts}: '{entry}' is not a SHA-256 fingerprint (64 hex digits, colons optional).");
-            }
-        }
-
+        var trusted = Fingerprints(lookup, LibreNmsTrustedCerts, problems);
         var timeout = ParseInt(lookup, LibreNmsTimeout, DefaultTimeoutSeconds, minimum: 1, problems);
+        var timestampsAreUtc = ParseBool(lookup, LibreNmsTimestampsUtc, fallback: true, problems);
+        var unimus = LoadUnimus(lookup, timeout, problems);
+        var graylog = LoadGraylog(lookup, timeout, problems);
+        var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
 
         errors = problems;
@@ -111,12 +142,90 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, maxResultBytes);
+        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, maxResultBytes);
+    }
+
+    private static UnimusConnection? LoadUnimus(Func<string, string?> lookup, int timeout, List<string> problems)
+    {
+        var url = Value(lookup, UnimusUrl);
+        var token = Value(lookup, UnimusToken);
+        var trusted = Fingerprints(lookup, UnimusTrustedCerts, problems);
+        if (url is null && token is null)
+        {
+            return null;
+        }
+
+        if (url is null || token is null)
+        {
+            problems.Add($"Set both {UnimusUrl} and {UnimusToken} to use Unimus, or neither.");
+            return null;
+        }
+
+        if (!UnimusConnection.TryParseWebRoot(url, out var webRoot, out var error) || webRoot is null)
+        {
+            problems.Add($"{UnimusUrl}: {error}");
+            return null;
+        }
+
+        return new UnimusConnection(webRoot, token, allowUntrustedCertificate: true, timeoutSeconds: timeout, trustedCertificates: trusted);
+    }
+
+    private static GraylogConnection? LoadGraylog(Func<string, string?> lookup, int timeout, List<string> problems)
+    {
+        var url = Value(lookup, GraylogUrl);
+        var username = Value(lookup, GraylogUsername);
+        var password = Value(lookup, GraylogPassword);
+        var trusted = Fingerprints(lookup, GraylogTrustedCerts, problems);
+        if (url is null && username is null && password is null)
+        {
+            return null;
+        }
+
+        if (url is null || username is null || password is null)
+        {
+            problems.Add($"Set {GraylogUrl}, {GraylogUsername} and {GraylogPassword} to use Graylog, or none of them. With an access token, the token is the username and the password is \"token\".");
+            return null;
+        }
+
+        // "other" needs a custom search path LibreNMS users set by hand; the
+        // PoC sticks to the two standard API layouts.
+        var version = Value(lookup, GraylogVersion) ?? GraylogSettings.Version21;
+        if (version is not (GraylogSettings.Version20 or GraylogSettings.Version21))
+        {
+            problems.Add($"{GraylogVersion}: '{version}' isn't supported. Use {GraylogSettings.Version21} for Graylog 2.1 or newer, or {GraylogSettings.Version20}.");
+            return null;
+        }
+
+        if (!GraylogConnection.TryParseRoot(url, port: null, out var root, out var error) || root is null)
+        {
+            problems.Add($"{GraylogUrl}: {error}");
+            return null;
+        }
+
+        return new GraylogConnection(root, version, baseUri: null, username, password, allowUntrustedCertificate: true, timeoutSeconds: timeout, trustedCertificates: trusted);
     }
 
     /// <summary>Unset and blank are the same: a blank line in a compose file or .env shouldn't count as a value.</summary>
     private static string? Value(Func<string, string?> lookup, string key)
         => lookup(key) is { } value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+
+    private static List<string> Fingerprints(Func<string, string?> lookup, string key, List<string> problems)
+    {
+        var trusted = new List<string>();
+        foreach (var entry in (Value(lookup, key) ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (IsSha256Fingerprint(entry))
+            {
+                trusted.Add(entry);
+            }
+            else
+            {
+                problems.Add($"{key}: '{entry}' is not a SHA-256 fingerprint (64 hex digits, colons optional).");
+            }
+        }
+
+        return trusted;
+    }
 
     private static int ParseInt(Func<string, string?> lookup, string key, int fallback, int minimum, List<string> problems)
     {
@@ -133,6 +242,22 @@ public sealed class McpOptions
         }
 
         return value;
+    }
+
+    private static bool ParseBool(Func<string, string?> lookup, string key, bool fallback, List<string> problems)
+    {
+        switch (Value(lookup, key)?.ToLowerInvariant())
+        {
+            case null:
+                return fallback;
+            case "true" or "1" or "yes" or "on":
+                return true;
+            case "false" or "0" or "no" or "off":
+                return false;
+            case var other:
+                problems.Add($"{key}: '{other}' should be true or false.");
+                return fallback;
+        }
     }
 
     /// <summary>Accepts the forms browsers and openssl print: "AB:CD:...", "ab cd ...", or 64 bare hex digits.</summary>

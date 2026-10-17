@@ -30,41 +30,41 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
         {
             throw;
         }
+        catch (ToolException expected)
+        {
+            result = ToolResult.Error(expected.Message, expected.Details);
+        }
         catch (Exception ex)
         {
-            result = Describe(tool, ex);
+            if (ToolErrors.MessageFor(ex) is { } message)
+            {
+                logger.LogWarning(ex, "{Tool}: request failed", tool);
+                result = ToolResult.Error(message);
+            }
+            else
+            {
+                logger.LogError(ex, "{Tool} failed unexpectedly", tool);
+                result = ToolResult.Error($"Something went wrong running {tool}. The server log has the details.");
+            }
         }
 
         return ToolResult.Render(result, redactor, options.MaxResultBytes);
     }
+}
 
-    private JsonObject Describe(string tool, Exception ex)
+/// <summary>Plain-English messages for the failures a tool expects from its sources.</summary>
+public static class ToolErrors
+{
+    /// <summary>The message for an expected failure, or null for one that's a bug.</summary>
+    public static string? MessageFor(Exception ex) => ex switch
     {
-        switch (ex)
-        {
-            case ToolException expected:
-                return ToolResult.Error(expected.Message, expected.Details);
+        ToolException expected => expected.Message,
+        LibreNmsApiException libreNms => $"LibreNMS: {libreNms.ToUserMessage()}",
+        UnimusApiException unimus => $"Unimus: {unimus.ToUserMessage()}",
+        GraylogApiException graylog => $"Graylog: {graylog.ToUserMessage()}",
 
-            case LibreNmsApiException libreNms:
-                logger.LogWarning(ex, "{Tool}: LibreNMS request failed", tool);
-                return ToolResult.Error($"LibreNMS: {libreNms.ToUserMessage()}");
-
-            case UnimusApiException unimus:
-                logger.LogWarning(ex, "{Tool}: Unimus request failed", tool);
-                return ToolResult.Error($"Unimus: {unimus.ToUserMessage()}");
-
-            case GraylogApiException graylog:
-                logger.LogWarning(ex, "{Tool}: Graylog request failed", tool);
-                return ToolResult.Error($"Graylog: {graylog.ToUserMessage()}");
-
-            case OperationCanceledException:
-                // Not our caller's cancellation, so a request timed out.
-                logger.LogWarning(ex, "{Tool}: request timed out", tool);
-                return ToolResult.Error("A request timed out. The server may be busy; try again, or ask about less at once.");
-
-            default:
-                logger.LogError(ex, "{Tool} failed unexpectedly", tool);
-                return ToolResult.Error($"Something went wrong running {tool}. The server log has the details.");
-        }
-    }
+        // Not the caller's cancellation (that propagates), so a request timed out.
+        OperationCanceledException => "A request timed out. The server may be busy; try again, or ask about less at once.",
+        _ => null,
+    };
 }
