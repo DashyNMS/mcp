@@ -247,7 +247,8 @@ public sealed class Batch6ToolTests
         Assert.Equal(1, edge.GetProperty("macs_on_port").GetInt32());
 
         // From the edge upwards: the core learned it on its port toward edge-sw3.
-        Assert.Equal(["edge-sw3.example.com", "core-sw1.example.com"], data.GetProperty("path").EnumerateArray().Select(p => p.GetString()!).ToArray());
+        // By display name where there is one: the core switch has one, edge-sw3 doesn't.
+        Assert.Equal(["edge-sw3.example.com", "Core switch 1"], data.GetProperty("path").EnumerateArray().Select(p => p.GetString()!).ToArray());
         var uplink = data.GetProperty("seen_on").EnumerateArray().Single(s => s.GetProperty("role").GetString() == "uplink");
         Assert.Equal("1/1/1", uplink.GetProperty("port").GetString());
         Assert.Contains("resources/fdb/aabbcc000005", nms.Transport.Requests);

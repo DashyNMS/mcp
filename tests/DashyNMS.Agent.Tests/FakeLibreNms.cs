@@ -39,8 +39,9 @@ internal sealed class FakeTransport : ILibreNmsTransport
     {
         Assert.Equal(HttpMethod.Get, method);
         Requests.Add(relativeUrl);
+        // The whole URL first, for a route whose query matters; then its path.
         var path = relativeUrl.Split('?')[0];
-        return _routes.TryGetValue(path, out var answer)
+        return _routes.TryGetValue(relativeUrl, out var answer) || _routes.TryGetValue(path, out answer)
             ? Task.FromResult(JsonDocument.Parse(answer()))
             : throw new LibreNmsApiException($"No fake for {path}", HttpStatusCode.NotFound);
     }
@@ -134,7 +135,8 @@ internal sealed class FakeLibreNms
         .On("devices/1", """
             {"status":"ok","devices":[
               {"device_id":1,"hostname":"core-sw1.example.com","sysName":"core-sw1","display":"Core switch 1","ip":"10.0.0.1",
-               "os":"arubaos-cx","status":1,"uptime":864100,"last_polled":"2026-10-17 09:58:00"}
+               "os":"arubaos-cx","status":1,"uptime":864100,"last_polled":"2026-10-17 09:58:00",
+               "location":{"id":1,"location":"Paddock","lat":51.2788,"lng":7.1598,"fixed_coordinates":true}}
             ]}
             """)
         .On("devices/1/maintenance", """{"status":"ok","is_under_maintenance":false}""")
@@ -275,6 +277,7 @@ internal sealed class FakeLibreNms
             {"status":"ok","inventory":[
               {"entPhysical_id":1,"entPhysicalIndex":1,"entPhysicalClass":"chassis","entPhysicalName":"Chassis","entPhysicalModelName":"JL658A","entPhysicalSerialNum":"SG00TEST01","entPhysicalSoftwareRev":"FL.10.13","entPhysicalIsFRU":"false"},
               {"entPhysical_id":2,"entPhysicalIndex":2,"entPhysicalClass":"powerSupply","entPhysicalName":"PSU 1","entPhysicalModelName":"JL085A","entPhysicalSerialNum":"PS00TEST01","entPhysicalIsFRU":"true"},
+              {"entPhysical_id":4,"entPhysicalIndex":4,"entPhysicalClass":"container","entPhysicalName":"Fan Tray","entPhysicalModelName":"","entPhysicalSerialNum":"","entPhysicalFirmwareRev":""},
               {"entPhysical_id":3,"entPhysicalIndex":3,"entPhysicalClass":"port","entPhysicalName":"1/1/1"}
             ]}
             """)

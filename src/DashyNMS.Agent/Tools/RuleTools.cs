@@ -13,6 +13,7 @@ namespace DashyNMS.Agent.Tools;
 [McpServerToolType]
 public sealed class RuleTools(
     ILibreNmsClient client,
+    ILibreNmsTransport transport,
     FleetCache fleet,
     DeviceDirectory directory,
     DeviceScope scopes,
@@ -57,9 +58,34 @@ public sealed class RuleTools(
         CancellationToken cancellationToken = default)
         => runner.RunAsync("alert_rules", ct => RulesAsync(name, severity, include_disabled, sort, offset, limit, verbose, ct), cancellationToken);
 
+    /// <summary>
+    /// LibreNMS's alerts/{id} answers only for an active alert unless asked
+    /// for another state (checked live in #13's trial: an acknowledged alert
+    /// came back as "no alert"), so acknowledged, then recovered, are tried next.
+    /// </summary>
+    private async Task<Alert?> FindAlertAsync(int alertId, CancellationToken cancellationToken)
+    {
+        if (await client.Alerts.GetAsync(alertId, cancellationToken).ConfigureAwait(false) is { } active)
+        {
+            return active;
+        }
+
+        var id = alertId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var state in new[] { "2", "0" })
+        {
+            var found = await transport.GetCollectionAsync<Alert>($"alerts/{id}?state={state}", "alerts", cancellationToken).ConfigureAwait(false);
+            if (found.Count > 0)
+            {
+                return found[0];
+            }
+        }
+
+        return null;
+    }
+
     private async Task<JsonObject> DetailsAsync(int alertId, CancellationToken cancellationToken)
     {
-        var alert = await client.Alerts.GetAsync(alertId, cancellationToken).ConfigureAwait(false)
+        var alert = await FindAlertAsync(alertId, cancellationToken).ConfigureAwait(false)
             ?? throw new ToolException("No alert has that ID. It may have been cleared and removed; active_alerts lists the current ones.");
 
         var rulesTask = Sources.TryAsync(() => fleet.GetRulesAsync(cancellationToken), cancellationToken);

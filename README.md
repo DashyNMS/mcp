@@ -75,10 +75,10 @@ Each tool takes a device however you'd name it: hostname, display name, IP addre
 ## Safe by design
 
 - **It only reads.** There are no tools that change anything. Give it the token of a read-only LibreNMS user too, so LibreNMS itself would refuse a change. Do the same for Unimus and Graylog.
-- **Secrets stay out of answers.** SNMP communities, passwords and hashes, RADIUS, TACACS, IPsec, NTP and OSPF keys, API keys, private keys and pfSense secrets are redacted before anything leaves the server.
+- **Secrets stay out of answers.** SNMP communities, passwords and hashes, RADIUS, TACACS, IPsec, NTP and OSPF keys, API and licence keys, private keys, and pfSense, OpenWrt and Brocade secrets are redacted before anything leaves the server, including secrets inside base64-encoded config. The rules were checked by hand against real backups from eleven vendor types.
 - **Your network's text is treated as data.** Device names, port descriptions, log lines and config text never appear as the server's own words, and the assistant is told not to take instructions from them.
 - **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
-- **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for.
+- **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for. Use https:// for every service where you can: the server warns at startup about any on plain http, whose token or password would cross the network unencrypted.
 
 What the tools return still goes to whichever model your client uses. Config backups and diffs are redacted, but they're still your configuration. If that shouldn't leave your network, set `MCP_CONFIG_TEXT=summary`, which keeps the answers to "did it change, when, and by how much?" without any config text, or `off`.
 

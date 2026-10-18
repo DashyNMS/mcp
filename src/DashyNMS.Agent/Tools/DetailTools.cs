@@ -123,20 +123,24 @@ public sealed class DetailTools(
 
         if (Use(inventory, "inventory") is { } entries)
         {
+            // Switches list empty pseudo-containers ("Fan Tray", "Power supply bay
+            // pseudocontainer") with blank fields; they say nothing, so they go.
+            static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
             Put("inventory", Paged("inventory", entries
                 .Where(e => !e.IsPort)
+                .Where(e => !string.Equals(e.Class, "container", StringComparison.OrdinalIgnoreCase) || Blank(e.Model) is not null || Blank(e.Serial) is not null)
                 .OrderBy(e => e.Index)
                 .Select(e => new
                 {
                     @class = e.Class,
                     name = e.Name,
-                    description = e.Description == e.Name ? null : e.Description,
-                    model = e.Model,
-                    serial = e.Serial,
-                    manufacturer = e.Manufacturer,
-                    hardware_rev = e.HardwareRev,
-                    firmware_rev = e.FirmwareRev,
-                    software_rev = e.SoftwareRev,
+                    description = e.Description == e.Name ? null : Blank(e.Description),
+                    model = Blank(e.Model),
+                    serial = Blank(e.Serial),
+                    manufacturer = Blank(e.Manufacturer),
+                    hardware_rev = Blank(e.HardwareRev),
+                    firmware_rev = Blank(e.FirmwareRev),
+                    software_rev = Blank(e.SoftwareRev),
                     replaceable = e.IsFieldReplaceable ? true : (bool?)null,
                 })
                 .ToList()));
@@ -299,7 +303,7 @@ public sealed class DetailTools(
         var devices = devicesTask.Result.ToDictionary(d => d.DeviceId);
         var links = linksTask.Result;
 
-        string? Name(int? deviceId) => deviceId is { } d && devices.TryGetValue(d, out var dev) ? dev.Hostname : null;
+        string? Name(int? deviceId) => deviceId is { } d && devices.TryGetValue(d, out var dev) ? DeviceSummary.NameOf(dev) : null;
 
         // What this device reports about its own ports.
         var reported = links

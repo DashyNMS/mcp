@@ -145,6 +145,27 @@ public sealed class McpOptionsTests
     }
 
     [Fact]
+    public void Plain_http_services_are_warned_about_but_still_work()
+    {
+        var values = Minimal();
+        values[McpOptions.LibreNmsUrl] = "http://librenms.example.com";
+        values[McpOptions.UnimusUrl] = "http://unimus.example.com";
+        values[McpOptions.UnimusToken] = "unimus-token";
+
+        var options = Load(values, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(2, options!.Warnings.Count);
+        Assert.StartsWith(McpOptions.LibreNmsUrl + " uses http://", options.Warnings[0], StringComparison.Ordinal);
+        Assert.StartsWith(McpOptions.UnimusUrl + " uses http://", options.Warnings[1], StringComparison.Ordinal);
+        Assert.DoesNotContain(options.Warnings, w => w.Contains("unimus-token", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Https_everywhere_gives_no_warnings()
+        => Assert.Empty(Load(Minimal(), out _)!.Warnings);
+
+    [Fact]
     public void Bad_url_scheme_is_rejected()
     {
         var values = Minimal();

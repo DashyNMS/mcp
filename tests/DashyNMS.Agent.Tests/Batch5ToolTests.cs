@@ -70,6 +70,27 @@ public sealed class Batch5ToolTests
     }
 
     [Fact]
+    public async Task A_newest_backup_not_confirmed_for_weeks_is_called_out()
+    {
+        // Unimus last confirmed this config 30 days ago: its job for the device is failing.
+        var old = new UnimusBackup { Id = 905, ValidSince = FakeLibreNms.Now.AddDays(-40).ToUnixTimeSeconds(), ValidUntil = FakeLibreNms.Now.AddDays(-30).ToUnixTimeSeconds() };
+        _unimus.GetBackupsAsync(Arg.Is(40), Arg.Is(0), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new UnimusBackupPage { Backups = [old], TotalCount = 1 });
+        _unimus.GetLatestBackupAsync(40, Arg.Any<CancellationToken>()).Returns(new UnimusBackup { Id = 905, Bytes = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(OldConfig)) });
+
+        var root = FakeLibreNms.Parse(await Tools().ConfigBackup("core-sw1", cancellationToken: CancellationToken.None));
+
+        Assert.EndsWith("Unimus last backed this device up on 2026-09-17, 30 days ago, so its backup job for it is probably failing and the config may be out of date.", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_recent_backup_says_nothing_about_staleness()
+    {
+        var root = FakeLibreNms.Parse(await Tools().ConfigBackup("core-sw1", cancellationToken: CancellationToken.None));
+
+        Assert.DoesNotContain("probably failing", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Newest_backup_is_redacted_whole_then_paged()
     {
         var root = FakeLibreNms.Parse(await Tools().ConfigBackup("core-sw1", cancellationToken: CancellationToken.None));

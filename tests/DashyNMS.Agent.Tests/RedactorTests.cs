@@ -125,6 +125,9 @@ public sealed class RedactorTests
     [InlineData("\toption password 'P4ssw0rd!'", $"\toption password {R}")]
     [InlineData("\toption 'password' 'Qu0tedNam3!'", $"\toption 'password' {R}")]
     [InlineData("pass=Secr3t12", $"pass={R}")]
+    // Licence keys (#13's trial: Mellanox)
+    [InlineData("   license install LK2-FAKE-0000-TEST-KEY0-1", $"   license install {R}")]
+    [InlineData("license key FAKE1234ABCD", $"license key {R}")]
     // Crypt hashes wherever they are: /etc/shadow lines, scripts
     [InlineData("root:$1$abcd1234$Xyz0123456789abcdefgh:19000:0:99999:7:::", $"root:{R}:19000:0:99999:7:::")]
     [InlineData("admin:$6$saltsalt$0123456789abcdefABCDEF./0123456789:19500::::::", $"admin:{R}:19500::::::")]

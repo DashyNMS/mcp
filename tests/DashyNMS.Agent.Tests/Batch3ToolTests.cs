@@ -9,10 +9,37 @@ public sealed class Batch3ToolTests
 
     private NetworkTools Network() => new(_nms.Client, _nms.Fleet, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
-    private RuleTools Rules() => new(_nms.Client, _nms.Fleet, _nms.Directory, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
+    private RuleTools Rules() => new(_nms.Client, _nms.Transport, _nms.Fleet, _nms.Directory, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
     private static int[] DeviceIds(System.Text.Json.JsonElement list)
         => list.EnumerateArray().Select(x => x.GetProperty("device").GetProperty("device_id").GetInt32()).ToArray();
+
+    [Fact]
+    public async Task Acknowledged_alert_is_found_although_alerts_by_id_only_gives_active_ones()
+    {
+        // As LibreNMS answers: nothing for the plain lookup, the alert when asked for state 2.
+        _nms.Transport
+            .On("alerts/12", """{"status":"ok","alerts":[],"count":0}""")
+            .On("alerts/12?state=2", """
+                {"status":"ok","alerts":[{"id":12,"device_id":1,"rule_id":3,"state":2,"timestamp":"2026-10-17 09:40:00","hostname":"core-sw1.example.com","severity":"critical","name":"Port down","note":"Ack (ops) cable ordered"}]}
+                """);
+
+        var root = FakeLibreNms.Parse(await Rules().AlertDetails(12, CancellationToken.None));
+
+        Assert.Equal("ok", root.GetProperty("status").GetString());
+        Assert.Equal(12, root.GetProperty("data").GetProperty("alert").GetProperty("alert_id").GetInt32());
+        Assert.Contains("acknowledged", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Alert_in_no_state_is_still_an_error()
+    {
+        _nms.Transport.On("alerts/13", """{"status":"ok","alerts":[],"count":0}""");
+
+        var root = FakeLibreNms.Parse(await Rules().AlertDetails(13, CancellationToken.None));
+
+        Assert.StartsWith("No alert has that ID", root.GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task Overview_gives_the_dashboard_counts()
