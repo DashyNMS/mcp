@@ -43,6 +43,12 @@ Temperatures, fans, optical power, voltages and more, for one device or across t
 **What's it connected to?**
 Every LLDP and CDP neighbour of a device, including ones that report it when it doesn't report them back. *(`device_neighbours`)*
 
+**Where is this plugged in?**
+From a MAC or IP address to the switch and edge port it's on, with the port's description, VLAN and state, and the switches in between. Ports that link to other switches are skipped, and if more than one port could be the answer it says so instead of guessing. *(`trace_endpoint`)*
+
+**Show me the graph**
+A device's or a port's LibreNMS graph as an image in the chat: traffic, CPU, memory, ping, temperatures and the rest, over the last hour to the last year, or between any two times. *(`graph`)*
+
 **How's the network?**
 One call for the dashboard's numbers: devices up and down, where the outages are, alerts by severity, ports down or counting errors. Then the busiest ports, the ports counting the most errors, and the devices with the most traffic or the most port problems. *(`network_overview`, `top_interfaces`, `top_errors`, `top_devices`)*
 

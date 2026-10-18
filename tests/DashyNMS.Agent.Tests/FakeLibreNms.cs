@@ -84,6 +84,7 @@ internal sealed class FakeLibreNms
         Client.AlertTemplates.Returns(new AlertTemplatesApi(Transport));
         Client.Locations.Returns(new LocationsApi(Transport));
         Client.System.Returns(new SystemApi(Transport));
+        Client.Graphs.Returns(new GraphsApi(Transport));
 
         Time = new FakeTimeProvider(Now);
         Directory = new DeviceDirectory(Client, Time);
