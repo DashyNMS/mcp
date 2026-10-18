@@ -30,6 +30,7 @@ public sealed class McpOptions
     public const string GraylogPassword = "GRAYLOG_PASSWORD";
     public const string GraylogVersion = "GRAYLOG_VERSION";
     public const string GraylogQueryField = "GRAYLOG_QUERY_FIELD";
+    public const string GraylogMatchAnyAddressKey = "GRAYLOG_MATCH_ANY_ADDRESS";
     public const string GraylogTrustedCerts = "GRAYLOG_TRUSTED_CERTS";
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
     public const string ConfigTextKey = "MCP_CONFIG_TEXT";
@@ -46,6 +47,7 @@ public sealed class McpOptions
         UnimusConnection? unimus,
         GraylogConnection? graylog,
         string graylogQueryField,
+        bool graylogMatchAnyAddress,
         int maxResultBytes,
         DashyNMS.Agent.ConfigText configText)
     {
@@ -54,6 +56,7 @@ public sealed class McpOptions
         Unimus = unimus;
         Graylog = graylog;
         GraylogField = graylogQueryField;
+        GraylogMatchAnyAddress = graylogMatchAnyAddress;
         MaxResultBytes = maxResultBytes;
         ConfigText = configText;
     }
@@ -85,6 +88,9 @@ public sealed class McpOptions
 
     /// <summary>The Graylog field a device's addresses are matched against - LibreNMS's own default is "source".</summary>
     public string GraylogField { get; }
+
+    /// <summary>Whether a device's Graylog messages are matched on its interface addresses too, as desktop's "match any address".</summary>
+    public bool GraylogMatchAnyAddress { get; }
 
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
@@ -132,6 +138,7 @@ public sealed class McpOptions
         var unimus = LoadUnimus(lookup, timeout, problems);
         var graylog = LoadGraylog(lookup, timeout, problems);
         var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
+        var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
         var configText = ParseConfigText(lookup, problems);
 
@@ -149,7 +156,7 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, maxResultBytes, configText);
+        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, graylogMatchAny, maxResultBytes, configText);
     }
 
     private static UnimusConnection? LoadUnimus(Func<string, string?> lookup, int timeout, List<string> problems)

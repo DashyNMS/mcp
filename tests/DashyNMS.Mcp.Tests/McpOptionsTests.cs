@@ -112,6 +112,28 @@ public sealed class McpOptionsTests
         Assert.Equal(expected, Load(values, out _)!.ConfigText);
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void Graylog_match_any_address_setting(string? value, bool expected)
+    {
+        var values = Minimal();
+        values[McpOptions.GraylogMatchAnyAddressKey] = value;
+
+        Assert.Equal(expected, Load(values, out _)!.GraylogMatchAnyAddress);
+    }
+
+    [Fact]
+    public void Unreadable_match_any_address_setting_is_an_error()
+    {
+        var values = Minimal();
+        values[McpOptions.GraylogMatchAnyAddressKey] = "sometimes";
+
+        Assert.Null(Load(values, out var errors));
+        Assert.StartsWith(McpOptions.GraylogMatchAnyAddressKey, Assert.Single(errors), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Unknown_config_text_setting_is_an_error()
     {

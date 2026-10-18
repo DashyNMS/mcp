@@ -32,6 +32,7 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     MaxResultBytes = options.MaxResultBytes,
     ServerTimestampsAreUtc = options.TimestampsAreUtc,
     GraylogQueryField = options.GraylogField,
+    GraylogMatchAnyAddress = options.GraylogMatchAnyAddress,
     ConfigText = options.ConfigText,
 });
 builder.Services
