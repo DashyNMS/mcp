@@ -10,8 +10,9 @@
 </p>
 
 <p align="center">
+  <a href="https://dashynms.pckp.net/mcp/">Website</a> ·
   <a href="https://github.com/DashyNMS/mcp/pkgs/container/mcp">Container image</a> ·
-  <a href="https://github.com/DashyNMS/mcp/issues">Issues</a> ·
+  <a href="https://github.com/DashyNMS/mcp/releases/latest">Release notes</a> ·
   <a href="https://github.com/DashyNMS/mcp/milestones">Roadmap</a>
 </p>
 
@@ -21,7 +22,7 @@
 
 It's a [Model Context Protocol](https://modelcontextprotocol.io) server, built on the same LibreNMS, Unimus and Graylog code as [DashyNMS desktop](https://github.com/DashyNMS/desktop) and [DashyNMS Mobile](https://github.com/DashyNMS/mobile).
 
-> **Status:** early. It works end to end, and the [v1.1.0 milestone](https://github.com/DashyNMS/mcp/milestones) tracks what comes next.
+Its features match DashyNMS desktop and mobile 1.1, and later versions follow theirs; the [milestones](https://github.com/DashyNMS/mcp/milestones) show what's next.
 
 ## What you can ask
 
@@ -58,17 +59,17 @@ The event log and alert log for every device over any window, newest first: "any
 **What did the logs say?**
 With Graylog connected: its messages across the network or from one device, over any window up to 31 days, past or present: "any errors from the core switches overnight?". You get the exact count first and the messages over time, then the busiest sources, levels and applications and the newest lines. Narrow it by text, device, severity or stream. *(`search_logs`)*
 
+**What happened to this device, and what changed?**
+A device's event log, alert changes and outages for any window: "the last 6 hours", "since Friday", or "between 2 and 4 last night". With Unimus and Graylog connected, you also get the config diff for a change inside that window and the messages the device sent. *(`device_events`, `what_changed`)*
+
 **What's alerting, and what alerted?**
 Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
 
-**What's configured, and what changed?**
-With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, and you can choose to send no config text at all. *(`config_backup`, `config_diff`, `recent_config_changes`)*
-
 **Why did it fire, and what are we alerting on?**
-For any alert: what the rule matched and the values that tripped it, the rule's condition and procedure, and how often it has fired on that device in the last 30 days, to tell a one-off from a flapping alert. For the rules themselves: what each watches for, what it applies to, its template, and which are noisiest. *(`alert_details`, `alert_rules`)*
+For any alert, open or acknowledged: what the rule matched and the values that tripped it, the rule's condition and procedure, and how often it has fired on that device in the last 30 days, to tell a one-off from a flapping alert. For the rules themselves: what each watches for, what it applies to, its template, and which are noisiest. *(`alert_details`, `alert_rules`)*
 
-**What happened, and what changed?**
-A device's event log, alert changes and outages for any window: "the last 6 hours", "since Friday", or "between 2 and 4 last night". With Unimus and Graylog connected, you also get the config diff for a change inside that window and the messages the device sent. *(`device_events`, `what_changed`)*
+**What's configured, and what changed?**
+With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, you can choose to send no config text at all, and it tells you when a device's backups have stopped. *(`config_backup`, `config_diff`, `recent_config_changes`)*
 
 Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you. Long lists come back a page at a time, so a broad question still gets a complete answer. A window can reach back up to a month, and when LibreNMS's logs don't go back that far, the answer says so.
 
@@ -87,14 +88,21 @@ What the tools return still goes to whichever model your client uses. Config bac
 The easiest way is the container image. It's about 45 MB to pull, built for amd64 and arm64, runs as a non-root user and has no shell:
 
 ```bash
-docker pull ghcr.io/dashynms/mcp:edge
+docker pull ghcr.io/dashynms/mcp:latest
 ```
 
 | Tag | What it is |
 | --- | --- |
-| `edge` | The latest build from `main` |
-| `latest`, `1.2.3`, `1.2` | A release |
+| `latest` | The newest release |
+| `1.1`, `1.1.0` | A release line, or one exact release: pin these for no surprises |
+| `edge` | The newest build from `main`, ahead of the next release |
 | `sha-abc1234` | One exact commit |
+
+Docker keeps using the copy it already has, so to update, pull again and restart your client:
+
+```bash
+docker pull ghcr.io/dashynms/mcp:latest
+```
 
 You can also build it yourself from source; see the [developer guide](docs/DEVELOPMENT.md).
 
@@ -114,7 +122,7 @@ The server talks to the client over stdin and stdout, so the client starts it, a
 **Claude Code**: a bare `-e NAME` hands the value through from Claude Code, so the token stays out of the Docker command:
 
 ```bash
-claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- docker run -i --rm -e LIBRENMS_URL -e LIBRENMS_TOKEN ghcr.io/dashynms/mcp:edge
+claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS_TOKEN=your-token -- docker run -i --rm -e LIBRENMS_URL -e LIBRENMS_TOKEN ghcr.io/dashynms/mcp:latest
 ```
 
 **Claude Desktop**: put your settings in an env file outside any repo (one `NAME=value` per line, no quotes), then add this to `claude_desktop_config.json` through **Settings → Developer → Edit Config**:
@@ -124,7 +132,7 @@ claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS
   "mcpServers": {
     "dashynms": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\dashynms.env", "ghcr.io/dashynms/mcp:edge"]
+      "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\dashynms.env", "ghcr.io/dashynms/mcp:latest"]
     }
   }
 }
@@ -156,12 +164,13 @@ All settings are environment variables.
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
-Unimus and Graylog aren't tested at startup. If one can't be reached, `what_changed` says so and still returns everything else.
+Unimus and Graylog aren't tested at startup. If one can't be reached, the tools that use it say so, and `what_changed` still returns everything else.
 
 **Self-signed or internal CA certificates:** the server can't ask whether to trust a certificate, so if yours doesn't pass the normal checks, startup stops. It prints the certificate's subject, issuer, dates and fingerprint. Check the fingerprint against your server's own certificate, then add it to `LIBRENMS_TRUSTED_CERTS`. Only that exact certificate is trusted, so when it's renewed you add the new one. There's no setting that trusts every certificate.
 
 ## Help and feedback
 
+- [Help and support](https://dashynms.pckp.net/mcp/support/): setting it up, and answers to common questions.
 - Found a bug or have an idea? [Open an issue](https://github.com/DashyNMS/mcp/issues). Planned work is tracked there too, under the [milestones](https://github.com/DashyNMS/mcp/milestones).
 
 ---
