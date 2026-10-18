@@ -21,7 +21,7 @@ public sealed class ToolCatalogueTests
     [Fact]
     public void The_tools_are_there()
     {
-        string[] expected = ["active_alerts", "alert_details", "alert_rules", "config_backup", "config_diff", "device_details", "device_events", "device_health", "device_neighbours", "device_sensors", "find_device", "graph", "health_overview", "list_groups_and_locations", "network_events", "network_overview", "port_status", "recent_config_changes", "top_devices", "top_errors", "top_interfaces", "trace_endpoint", "what_changed"];
+        string[] expected = ["active_alerts", "alert_details", "alert_rules", "config_backup", "config_diff", "device_details", "device_events", "device_health", "device_neighbours", "device_sensors", "find_device", "graph", "health_overview", "list_groups_and_locations", "network_events", "network_overview", "port_status", "recent_config_changes", "search_logs", "top_devices", "top_errors", "top_interfaces", "trace_endpoint", "what_changed"];
 
         Assert.Equal(expected, Tools().Select(t => t.Tool.Name).Order().ToArray());
     }
