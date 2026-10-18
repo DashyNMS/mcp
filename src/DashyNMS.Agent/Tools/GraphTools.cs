@@ -91,6 +91,7 @@ public sealed class GraphTools(
         "or one port's (traffic, packets, errors). Use it when a picture of a trend helps: \"show me the traffic on X this week\". " +
         "Without type, a device gives its traffic graph and the list of graph types it has; a port gives its traffic. " +
         "The time range is range (hour, day, week, month or year; a day by default), or since and until for a custom span up to 31 days. " +
+        "The legend lists every line with its figures; turn it off (legend: false) for graphs with many lines, where it would dwarf the graph. " +
         "The image has its own white background with dark text: show it as it is, on a light background, and never recolour it or place it on a dark one, where it can't be read. " +
         "For numbers rather than a picture, use port_status, device_health or device_sensors.")]
     public async Task<CallToolResult> Graph(
@@ -100,7 +101,9 @@ public sealed class GraphTools(
         [Description("How far back: hour, day, week, month or year. Defaults to day. Ignored when since is given.")] string? range = null,
         [Description("Start of a custom span: relative (\"6h\", \"3d\") or ISO 8601 (UTC unless a zone is given). Up to 31 days before until.")] string? since = null,
         [Description("End of a custom span, the same forms as since. Defaults to now.")] string? until = null,
-        [Description("Draw the legend under the graph (each line's current, average and maximum). Defaults to true.")] bool legend = true,
+        [Description("Draw the legend under the graph (each line's current, average and maximum). Defaults to true. " +
+            "Turn it off for a graph with many lines - a processor graph with a line per core, a device's traffic across dozens of ports - where the legend would be taller than the graph; " +
+            "keep it when the figures matter to the question.")] bool legend = true,
         CancellationToken cancellationToken = default)
     {
         byte[]? image = null;
