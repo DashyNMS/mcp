@@ -5,7 +5,17 @@ DashyNMS MCP is source-available under the PolyForm Internal Use License
 run and change the server for your own organisation's internal use, from
 source or from the published container image, but you may not distribute it,
 sell it, or offer it to others. The notices after the licence are part of
-this file but do not change its terms.
+this file. The additional permission below supplements the licence without
+changing the reproduced licence text.
+
+## Additional permission: bundling with DashyNMS
+
+The licensor additionally permits distribution of unmodified DashyNMS MCP
+binaries as part of the official DashyNMS desktop application and its
+installers, including preview releases, provided this licence file accompanies
+the binaries. Recipients may use the bundled server under the PolyForm
+Internal Use License below. This permission does not permit separate
+redistribution of the server or grant any additional rights to trademarks.
 
 ---
 
