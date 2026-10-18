@@ -32,6 +32,7 @@ namespace DashyNMS.Agent.Tools;
 public sealed class GraphTools(
     ILibreNmsClient client,
     ILibreNmsTransport transport,
+    SensorSource sensors,
     DeviceResolver resolver,
     ToolRunner runner,
     TimeProvider time)
@@ -90,6 +91,7 @@ public sealed class GraphTools(
         "A LibreNMS graph as an image, shown in the chat: a device's graph (traffic, processor, memory, ping, temperature and the rest of its health graphs) " +
         "or one port's (traffic, packets, errors). Use it when a picture of a trend helps: \"show me the traffic on X this week\". " +
         "Without type, a device gives its traffic graph and the list of graph types it has; a port gives its traffic. " +
+        "With sensor, one sensor alone on its own scale (one temperature, one optic's power) rather than every sensor of its kind together; device_sensors lists them with their IDs. " +
         "The time range is range (hour, day, week, month or year; a day by default), or since and until for a custom span up to 31 days. " +
         "The legend lists every line with its figures; turn it off (legend: false) for graphs with many lines, where it would dwarf the graph. " +
         "The image has its own white background with dark text: show it as it is, on a light background, and never recolour it or place it on a dark one, where it can't be read. " +
@@ -98,6 +100,7 @@ public sealed class GraphTools(
         [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
         [Description("The graph type. For a device: a name from its list (device_bits, device_processor, device_mempool, device_icmp_perf, ...) or traffic, cpu, memory, ping, temperature, storage. For a port: bits (traffic), upkts, nupkts or errors. Leave out for traffic.")] string? type = null,
         [Description("A port on the device, for that port's graph: its name (ifName), description, alias or port ID. Leave out for a device graph.")] string? port = null,
+        [Description("One sensor on the device, for that sensor's own graph: its sensor_id from device_sensors, or its description (e.g. \"Chassis Temperature\"). Type, if given, narrows it to that kind of sensor. Leave out for a device or port graph.")] string? sensor = null,
         [Description("How far back: hour, day, week, month or year. Defaults to day. Ignored when since is given.")] string? range = null,
         [Description("Start of a custom span: relative (\"6h\", \"3d\") or ISO 8601 (UTC unless a zone is given). Up to 31 days before until.")] string? since = null,
         [Description("End of a custom span, the same forms as since. Defaults to now.")] string? until = null,
@@ -111,7 +114,7 @@ public sealed class GraphTools(
             "graph",
             async ct =>
             {
-                var (result, png) = await GraphAsync(device, type, port, range, since, until, legend, ct).ConfigureAwait(false);
+                var (result, png) = await GraphAsync(device, type, port, sensor, range, since, until, legend, ct).ConfigureAwait(false);
                 image = png;
                 return result;
             },
@@ -127,12 +130,35 @@ public sealed class GraphTools(
     }
 
     private async Task<(JsonObject Result, byte[]? Png)> GraphAsync(
-        string deviceQuery, string? typeText, string? portQuery, string? rangeText, string? since, string? until, bool legend, CancellationToken cancellationToken)
+        string deviceQuery, string? typeText, string? portQuery, string? sensorQuery, string? rangeText, string? since, string? until, bool legend, CancellationToken cancellationToken)
     {
         var span = Span(rangeText, since, until);
         var device = await resolver.ResolveAsync(deviceQuery, cancellationToken).ConfigureAwait(false);
         var id = device.DeviceId;
         var query = Query(span, legend);
+
+        if (!string.IsNullOrWhiteSpace(sensorQuery))
+        {
+            if (!string.IsNullOrWhiteSpace(portQuery))
+            {
+                throw new ToolException("Give a port or a sensor, not both.");
+            }
+
+            var all = await sensors.GetForDeviceAsync(id, cancellationToken).ConfigureAwait(false);
+            var target = ResolveSensor(all, sensorQuery.Trim(), SensorClassOf(typeText));
+            var graphName = "device_" + target.SensorClass;
+            var png = await FetchAsync(
+                $"devices/{id}/graphs/health/{Uri.EscapeDataString(graphName)}/{target.SensorId.ToString(CultureInfo.InvariantCulture)}?{query}",
+                cancellationToken).ConfigureAwait(false);
+            return (ToolResult.Ok(
+                $"Graph of one {target.SensorClass} sensor over {span.Text}, shown as an image.",
+                new
+                {
+                    device = DeviceBrief.From(device),
+                    sensor = new { sensor_id = target.SensorId, description = target.Description, @class = target.SensorClass, current = target.Current },
+                    graph = new { type = graphName, span.From, span.To, span.Preset },
+                }), png);
+        }
 
         if (!string.IsNullOrWhiteSpace(portQuery))
         {
@@ -228,6 +254,67 @@ public sealed class GraphTools(
         return available.FirstOrDefault(g => string.Equals(g.Name, wanted, StringComparison.OrdinalIgnoreCase))
             ?? available.FirstOrDefault(g => string.Equals(g.Name, "device_" + wanted, StringComparison.OrdinalIgnoreCase))
             ?? available.FirstOrDefault(g => string.Equals(g.Description, text, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The sensor class a type names - "device_temperature" or "temperature" both give "temperature" - or null for no type.</summary>
+    internal static string? SensorClassOf(string? typeText)
+    {
+        if (string.IsNullOrWhiteSpace(typeText))
+        {
+            return null;
+        }
+
+        var text = typeText.Trim();
+        return text.StartsWith("device_", StringComparison.OrdinalIgnoreCase) ? text["device_".Length..] : text;
+    }
+
+    /// <summary>
+    /// Sensor ID, then an exact description, then part of one - the first
+    /// tier with a single match wins, as ports are matched. Only sensors of
+    /// <paramref name="sensorClass"/> count when it's given, so "Chassis"
+    /// with type temperature skips the chassis fan.
+    /// </summary>
+    internal static Sensor ResolveSensor(IReadOnlyList<Sensor> all, string text, string? sensorClass)
+    {
+        var sensors = all
+            .Where(s => !string.IsNullOrWhiteSpace(s.SensorClass))
+            .Where(s => sensorClass is null || string.Equals(s.SensorClass, sensorClass, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var sensorId) && sensors.FirstOrDefault(s => s.SensorId == sensorId) is { } byId)
+        {
+            return byId;
+        }
+
+        Func<Sensor, bool>[] tiers =
+        [
+            s => string.Equals(s.Description?.Trim(), text, StringComparison.OrdinalIgnoreCase),
+            s => s.Description?.Contains(text, StringComparison.OrdinalIgnoreCase) == true,
+        ];
+
+        foreach (var tier in tiers)
+        {
+            var matches = sensors.Where(tier).ToList();
+            if (matches.Count == 1)
+            {
+                return matches[0];
+            }
+
+            if (matches.Count > 1)
+            {
+                throw new ToolException(
+                    $"{matches.Count} sensors match. Ask which one is meant, or use its sensor_id.",
+                    new
+                    {
+                        candidates = matches.Take(PortTools.MaxCandidates).Select(s => new { sensor_id = s.SensorId, description = s.Description, @class = s.SensorClass }).ToList(),
+                        omitted = Math.Max(0, matches.Count - PortTools.MaxCandidates),
+                    });
+            }
+        }
+
+        throw new ToolException(sensorClass is null
+            ? "No sensor on this device matches. Use device_sensors to list them with their IDs."
+            : $"No {sensorClass} sensor on this device matches. Use device_sensors to list them with their IDs.");
     }
 
     internal static (string Type, string Description) PortType(string? text)

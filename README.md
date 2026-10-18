@@ -47,7 +47,7 @@ Every LLDP and CDP neighbour of a device, including ones that report it when it 
 From a MAC or IP address to the switch and edge port it's on, with the port's description, VLAN and state, and the switches in between. Ports that link to other switches are skipped, and if more than one port could be the answer it says so instead of guessing. *(`trace_endpoint`)*
 
 **Show me the graph**
-A device's or a port's LibreNMS graph as an image in the chat: traffic, CPU, memory, ping, temperatures and the rest, over the last hour to the last year, or between any two times. *(`graph`)*
+A device's, a port's or a single sensor's LibreNMS graph as an image in the chat: traffic, CPU, memory, ping, temperatures and the rest, or one temperature or optic on its own scale, over the last hour to the last year, or between any two times. *(`graph`)*
 
 **How's the network?**
 One call for the dashboard's numbers: devices up and down, where the outages are, alerts by severity, ports down or counting errors. Then the busiest ports, the ports counting the most errors, and the devices with the most traffic or the most port problems. *(`network_overview`, `top_interfaces`, `top_errors`, `top_devices`)*

@@ -19,7 +19,7 @@ public sealed class Batch6ToolTests
         ]}
         """;
 
-    private static GraphTools Graphs(FakeLibreNms nms) => new(nms.Client, nms.Transport, nms.Resolver, nms.Runner, nms.Time);
+    private static GraphTools Graphs(FakeLibreNms nms) => new(nms.Client, nms.Transport, nms.Sensors, nms.Resolver, nms.Runner, nms.Time);
 
     private static TraceTools Trace(FakeLibreNms nms) => new(nms.Client, nms.Transport, nms.Fleet, nms.Directory, nms.Runner, nms.Options);
 
@@ -138,6 +138,55 @@ public sealed class Batch6ToolTests
         var root = Text(await Graphs(WithGraphs()).Graph("core-sw1", range: range, since: since, until: until));
 
         Assert.Equal("error", root.GetProperty("status").GetString());
+    }
+
+    [Theory]
+    [InlineData("Module 2", null, "device_temperature/2")]
+    [InlineData("4", null, "device_dbm/4")]
+    [InlineData("1/1/50", null, "device_dbm/5")]
+    // With a type, only that kind counts: "2" isn't fan sensor 2, so it's the fan called "Fan 2".
+    [InlineData("2", "fanspeed", "device_fanspeed/3")]
+    [InlineData("chassis", "device_temperature", "device_temperature/1")]
+    public async Task One_sensor_is_drawn_on_its_own(string sensor, string? type, string route)
+    {
+        var nms = WithGraphs();
+        nms.Transport.On("devices/1/graphs/health/" + route, Png);
+
+        var result = await Graphs(nms).Graph("core-sw1", type: type, sensor: sensor);
+
+        var root = Text(result);
+        Assert.Equal("ok", root.GetProperty("status").GetString());
+        Assert.Equal(int.Parse(route.Split('/')[1], System.Globalization.CultureInfo.InvariantCulture), root.GetProperty("data").GetProperty("sensor").GetProperty("sensor_id").GetInt32());
+        Assert.IsType<ImageContentBlock>(result.Content[1]);
+        Assert.Contains(nms.Transport.Requests, r => r.StartsWith("devices/1/graphs/health/" + route + "?", StringComparison.Ordinal) && r.Contains("bg=FFFFFF", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Several_matching_sensors_are_listed_to_choose_from()
+    {
+        var root = Text(await Graphs(WithGraphs()).Graph("core-sw1", sensor: "Rx Power"));
+
+        Assert.Equal("error", root.GetProperty("status").GetString());
+        Assert.Equal([4, 5], root.GetProperty("details").GetProperty("candidates").EnumerateArray().Select(c => c.GetProperty("sensor_id").GetInt32()).ToArray());
+    }
+
+    [Theory]
+    [InlineData("Toaster", null)]
+    [InlineData("Chassis", "voltage")]
+    public async Task No_matching_sensor_is_an_error(string sensor, string? type)
+    {
+        var result = await Graphs(WithGraphs()).Graph("core-sw1", type: type, sensor: sensor);
+
+        Assert.Equal("error", Text(result).GetProperty("status").GetString());
+        Assert.Single(result.Content);
+    }
+
+    [Fact]
+    public async Task Port_and_sensor_together_is_an_error()
+    {
+        var root = Text(await Graphs(WithGraphs()).Graph("core-sw1", port: "1/1/7", sensor: "Chassis"));
+
+        Assert.Equal("Give a port or a sensor, not both.", root.GetProperty("message").GetString());
     }
 
     [Theory]
