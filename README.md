@@ -100,7 +100,7 @@ You can also build it yourself from source; see the [developer guide](docs/DEVEL
 - A LibreNMS server you can reach, with its API turned on.
 - An API token for a **read-only** LibreNMS user. In LibreNMS, open the settings menu, then **API → API Tokens**, and create one for that user.
 - Docker, or the .NET 10 SDK to build from source.
-- Optionally, Unimus (1.7 or later) and Graylog, for `what_changed`.
+- Optionally, Unimus (1.7 or later) and Graylog (2.1 or later, tested up to 7.2), for `what_changed`.
 
 LibreNMS only gives its network-wide sensor list to users with **global read** access. Without it, `device_sensors` still works, reading one device at a time, and `health_overview` works when it's narrowed to a device group or location of up to 25 devices.
 
@@ -147,8 +147,9 @@ All settings are environment variables.
 | `MCP_CONFIG_TEXT` | No | `full` | How much config the tools return: `full` (redacted text), `summary` (when it changed and how many lines, no text), or `off` (nothing from Unimus) |
 | `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
 | `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
-| `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 or newer, or `2.0` |
+| `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 and newer, including 6.x and 7.x (tested on 7.2). `2.0` only for Graylog 2.0. |
 | `GRAYLOG_QUERY_FIELD` | No | `source` | The Graylog field matched against a device's addresses, as LibreNMS's `graylog.query_field` |
+| `GRAYLOG_MATCH_ANY_ADDRESS` | No | `false` | Also match a device's messages on every address on its interfaces, as LibreNMS's and DashyNMS desktop's "match any address". Turn it on when devices log from a VLAN or loopback address rather than the one LibreNMS polls. |
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 

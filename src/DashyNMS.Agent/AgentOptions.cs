@@ -20,6 +20,13 @@ public sealed class AgentOptions
     /// <summary>The Graylog field matched against a device's addresses, as LibreNMS's graylog.query_field.</summary>
     public string GraylogQueryField { get; init; } = "source";
 
+    /// <summary>
+    /// Whether a device's Graylog messages are matched on every address on its
+    /// interfaces too, not only its hostname, display name, IP and sysName -
+    /// desktop's and LibreNMS's "match any address" (graylog.match_any_address).
+    /// </summary>
+    public bool GraylogMatchAnyAddress { get; init; }
+
     /// <summary>How much of a device's configuration the tools may return (#16).</summary>
     public ConfigText ConfigText { get; init; } = ConfigText.Full;
 }

@@ -11,7 +11,7 @@ public sealed class EventToolsTests
     private readonly IUnimusApi _unimus = Substitute.For<IUnimusApi>();
     private readonly IGraylogApi _graylog = Substitute.For<IGraylogApi>();
 
-    private EventTools Tools() => new(_unimus, _graylog, new DashyNMS.Agent.Devices.UnimusDirectory(_unimus, _nms.Options, _nms.Time), _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
+    private EventTools Tools() => new(_nms.Client, _unimus, _graylog, new DashyNMS.Agent.Devices.UnimusDirectory(_unimus, _nms.Options, _nms.Time), _nms.Resolver, _nms.Timeline, _nms.Runner, _nms.Options, _nms.Time);
 
     [Fact]
     public async Task Events_merge_the_logs_newest_first_inside_the_window()
@@ -106,6 +106,41 @@ public sealed class EventToolsTests
         await _graylog.Received(1).SearchAsync(
             Arg.Is<string>(q => q.StartsWith("source:", StringComparison.Ordinal) && q.Contains("10.0.0.1", StringComparison.Ordinal)),
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Match_any_address_adds_the_interface_addresses_to_the_graylog_search(bool matchAny)
+    {
+        var nms = new FakeLibreNms(new AgentOptions { GraylogMatchAnyAddress = matchAny });
+        _graylog.IsConfigured.Returns(true);
+        _graylog.SearchAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new GraylogSearchResult { TotalResults = 7 });
+        var tools = new EventTools(nms.Client, _unimus, _graylog, new DashyNMS.Agent.Devices.UnimusDirectory(_unimus, nms.Options, nms.Time), nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
+
+        await tools.WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None);
+
+        // The core switch's IPv6 interface address is only searched for with the setting on.
+        await _graylog.Received(1).SearchAsync(
+            Arg.Is<string>(q => q.Contains("10.0.0.1", StringComparison.Ordinal) && q.Contains("2001:db8", StringComparison.OrdinalIgnoreCase) == matchAny),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        Assert.Equal(matchAny, nms.Transport.Requests.Contains("devices/1/ip"));
+    }
+
+    [Fact]
+    public async Task Interface_addresses_that_cant_be_read_still_leave_a_search()
+    {
+        var nms = new FakeLibreNms(new AgentOptions { GraylogMatchAnyAddress = true });
+        nms.Transport.Fails("devices/1/ip", System.Net.HttpStatusCode.Forbidden);
+        _graylog.IsConfigured.Returns(true);
+        _graylog.SearchAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new GraylogSearchResult { TotalResults = 3 });
+        var tools = new EventTools(nms.Client, _unimus, _graylog, new DashyNMS.Agent.Devices.UnimusDirectory(_unimus, nms.Options, nms.Time), nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
+
+        var root = FakeLibreNms.Parse(await tools.WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None));
+
+        Assert.Equal(3, root.GetProperty("data").GetProperty("graylog").GetProperty("message_count").GetInt64());
     }
 
     [Fact]

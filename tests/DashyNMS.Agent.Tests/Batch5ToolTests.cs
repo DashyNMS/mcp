@@ -219,7 +219,7 @@ public sealed class Batch5ToolTests
     public async Task What_changed_in_summary_mode_counts_without_text()
     {
         var nms = new FakeLibreNms(new AgentOptions { ConfigText = ConfigText.Summary });
-        var tools = new EventTools(_unimus, Substitute.For<IGraylogApi>(), new UnimusDirectory(_unimus, nms.Options, nms.Time), nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
+        var tools = new EventTools(nms.Client, _unimus, Substitute.For<IGraylogApi>(), new UnimusDirectory(_unimus, nms.Options, nms.Time), nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
 
         var unimus = FakeLibreNms.Parse(await tools.WhatChanged("core-sw1", cancellationToken: CancellationToken.None)).GetProperty("data").GetProperty("unimus");
 

@@ -16,6 +16,7 @@ namespace DashyNMS.Agent.Tools;
 /// <summary>What happened to a device, and what changed on it.</summary>
 [McpServerToolType]
 public sealed class EventTools(
+    ILibreNmsClient client,
     IUnimusApi unimus,
     IGraylogApi graylog,
     UnimusDirectory unimusDevices,
@@ -252,7 +253,18 @@ public sealed class EventTools(
             return (new { configured = true, skipped = "Graylog is only counted for windows that end now." }, "Graylog isn't counted for windows that end in the past.");
         }
 
-        var addresses = GraylogQuery.DeviceAddresses(device, resolvedHostname: null, interfaceAddresses: null);
+        // With "match any address", every interface address counts too, as desktop
+        // and LibreNMS do: a switch often logs from a VLAN interface rather than
+        // the address LibreNMS polls it on. If they can't be read, the search
+        // still runs on the device's own names and address.
+        IReadOnlyList<DeviceIpAddress>? interfaceAddresses = null;
+        if (options.GraylogMatchAnyAddress)
+        {
+            var fetched = await Sources.TryAsync(() => client.Ports.ListIpAddressesAsync(device.DeviceId, cancellationToken), cancellationToken).ConfigureAwait(false);
+            interfaceAddresses = fetched.Value;
+        }
+
+        var addresses = GraylogQuery.DeviceAddresses(device, resolvedHostname: null, interfaceAddresses);
         var query = GraylogQuery.BuildSimpleQuery(search: null, options.GraylogQueryField, addresses);
         var rangeSeconds = (int)Math.Ceiling((now - window.Since).TotalSeconds);
 
