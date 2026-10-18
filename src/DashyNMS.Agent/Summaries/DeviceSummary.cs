@@ -27,7 +27,7 @@ public sealed record DeviceSummary(
             device.Ip,
             device.Os,
             device.Hardware,
-            device.Location,
+            LocationName(device.Location),
             StatusOf(device),
             Sources.Utc(device.LastPolled, options));
     }
@@ -35,6 +35,51 @@ public sealed record DeviceSummary(
     /// <summary>Full when asked for, otherwise the few fields that tell devices apart (#35).</summary>
     public static object Shape(Device device, AgentOptions options, bool verbose)
         => verbose ? From(device, options) : DeviceBrief.From(device);
+
+    /// <summary>
+    /// A device's location as its name. The device list gives the name, but
+    /// devices/{id} gives the whole location record as JSON ({"id": 29,
+    /// "location": "...", "lat": ...}) and Core keeps it as text (found in
+    /// #13's trial), so the name is read out of that.
+    /// </summary>
+    public static string? LocationName(string? location)
+    {
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return null;
+        }
+
+        var text = location.Trim();
+        if (!text.StartsWith('{'))
+        {
+            return text;
+        }
+
+        try
+        {
+            using var record = System.Text.Json.JsonDocument.Parse(text);
+            return record.RootElement.TryGetProperty("location", out var name) && name.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(name.GetString())
+                ? name.GetString()!.Trim()
+                : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return text;
+        }
+    }
+
+    /// <summary>
+    /// The display name when it says more than the hostname. Many networks
+    /// add devices to LibreNMS by IP, so the hostname is an address and the
+    /// display name is the only readable one (found in #13's trial).
+    /// </summary>
+    public static string? DisplayOf(Device? device)
+        => device is not null && !string.IsNullOrWhiteSpace(device.Display) && !string.Equals(device.Display, device.Hostname, StringComparison.OrdinalIgnoreCase)
+            ? device.Display
+            : null;
+
+    /// <summary>The name a person would use: the display name, or the hostname.</summary>
+    public static string? NameOf(Device? device) => DisplayOf(device) ?? device?.Hostname;
 
     public static string StatusOf(Device device) => device switch
     {
@@ -59,7 +104,7 @@ public sealed record DeviceBrief(int DeviceId, string? Hostname, string? Display
             device.Hostname,
             string.Equals(device.Display, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Display,
             string.Equals(device.Ip, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Ip,
-            string.IsNullOrWhiteSpace(device.Location) ? null : device.Location,
+            DeviceSummary.LocationName(device.Location),
             DeviceSummary.StatusOf(device));
     }
 }

@@ -156,7 +156,8 @@ public sealed class ConfigTools(
         var which = backup == backups[0] ? "The newest backup" : "An earlier backup";
         var since = backup.ValidSinceUtc is { } at ? $", the config since {at:yyyy-MM-dd HH:mm} UTC" : string.Empty;
         var paging = full && (info.NextOffset is not null || info.Offset > 0) ? " " + Paging.Describe(info, "line", "lines") : string.Empty;
-        return ToolResult.Ok($"{which}{since}: {DeviceTools.Count(lines.Length, "line")}.{paging}", data);
+        var stale = UnimusDirectory.StaleNote(backups[0], time.GetUtcNow().UtcDateTime) is { } note ? " " + note : string.Empty;
+        return ToolResult.Ok($"{which}{since}: {DeviceTools.Count(lines.Length, "line")}.{paging}{stale}", data);
     }
 
     private async Task<JsonObject> DiffAsync(string query, int? fromId, int? toId, CancellationToken cancellationToken)

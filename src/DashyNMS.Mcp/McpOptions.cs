@@ -95,6 +95,33 @@ public sealed class McpOptions
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
 
+    /// <summary>
+    /// Settings that work but put credentials at risk: a service reached over
+    /// plain http sends its token or password across the network unencrypted.
+    /// Printed at startup rather than refused, since some Unimus and Graylog
+    /// servers only serve http (the pre-release review found one).
+    /// </summary>
+    public IReadOnlyList<string> Warnings
+    {
+        get
+        {
+            var warnings = new List<string>();
+            void Check(Uri? root, string key, string what)
+            {
+                if (root is not null && root.Scheme == Uri.UriSchemeHttp)
+                {
+                    warnings.Add($"{key} uses http://, so the {what} crosses the network unencrypted. Use https:// if the server supports it.");
+                }
+            }
+
+            Check(Connection.WebRoot, LibreNmsUrl, "LibreNMS API token");
+            Check(Connection.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
+            Check(Unimus?.WebRoot, UnimusUrl, "Unimus API token");
+            Check(Graylog?.Root, GraylogUrl, "Graylog password");
+            return warnings;
+        }
+    }
+
     /// <summary>How much configuration text the Unimus tools return: full (the default), summary or off - see <see cref="DashyNMS.Agent.ConfigText"/>.</summary>
     public DashyNMS.Agent.ConfigText ConfigText { get; }
 

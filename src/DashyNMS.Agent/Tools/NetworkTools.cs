@@ -129,7 +129,7 @@ public sealed class NetworkTools(
                 ignored = devices.Count(d => d.Ignore),
             },
             most_down_by_location = down
-                .GroupBy(d => string.IsNullOrWhiteSpace(d.Location) ? null : d.Location.Trim(), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(d => DeviceSummary.LocationName(d.Location) ?? "(no location)", StringComparer.OrdinalIgnoreCase)
                 .Select(g => new { location = g.Key, down = g.Count() })
                 .OrderByDescending(g => g.down)
                 .Take(MaxDownLocations)
@@ -296,7 +296,7 @@ public sealed class NetworkTools(
                 && (type is null || e.Type?.Contains(type.Trim(), StringComparison.OrdinalIgnoreCase) == true)
                 && (minimum is null || (e.Severity ?? 0) >= minimum))
             {
-                rows.Add(new NetworkEvent(at, "eventlog", e.DeviceId, devices.GetValueOrDefault(e.DeviceId)?.Hostname ?? e.Hostname, e.Type, EventSeverityName(e.Severity), null, e.Message,
+                rows.Add(new NetworkEvent(at, "eventlog", e.DeviceId, devices.GetValueOrDefault(e.DeviceId)?.Hostname ?? e.Hostname, DeviceSummary.DisplayOf(devices.GetValueOrDefault(e.DeviceId)), e.Type, EventSeverityName(e.Severity), null, e.Message,
                     string.IsNullOrWhiteSpace(e.Username) ? null : e.Username));
             }
         }
@@ -306,7 +306,7 @@ public sealed class NetworkTools(
             if (Sources.Utc(a.TimeLogged, options) is { } at && window.Contains(at) && Wanted(a.DeviceId) && type is null && minimum is null)
             {
                 var rule = ruleNames.TryGetValue(a.RuleId, out var name) && !string.IsNullOrWhiteSpace(name) ? name : $"Rule {a.RuleId}";
-                rows.Add(new NetworkEvent(at, "alertlog", a.DeviceId, devices.GetValueOrDefault(a.DeviceId)?.Hostname ?? a.Hostname, a.State.ToString().ToLowerInvariant(), null, rule, null, null));
+                rows.Add(new NetworkEvent(at, "alertlog", a.DeviceId, devices.GetValueOrDefault(a.DeviceId)?.Hostname ?? a.Hostname, DeviceSummary.DisplayOf(devices.GetValueOrDefault(a.DeviceId)), a.State.ToString().ToLowerInvariant(), null, rule, null, null));
             }
         }
 
@@ -339,7 +339,7 @@ public sealed class NetworkTools(
 
     /// <param name="Kind">The event log's type, or the alert's new state.</param>
     /// <param name="Text">The event log's own message - device text, so it's data, not ours.</param>
-    private sealed record NetworkEvent(DateTime Time, string Source, int DeviceId, string? Hostname, string? Kind, string? Severity, string? Rule, string? Text, string? User);
+    private sealed record NetworkEvent(DateTime Time, string Source, int DeviceId, string? Hostname, string? Display, string? Kind, string? Severity, string? Rule, string? Text, string? User);
 
     private static RankBy ParseRank(string? text) => text?.Trim().ToLowerInvariant() switch
     {

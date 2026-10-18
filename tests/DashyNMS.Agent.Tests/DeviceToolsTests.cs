@@ -9,6 +9,25 @@ public sealed class DeviceToolsTests
     private DeviceTools Tools() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options);
 
     [Fact]
+    public async Task Health_gives_the_location_name_though_LibreNMS_sends_a_record()
+    {
+        // devices/{id} sends the whole location record; only its name belongs in the answer.
+        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("core-sw1", CancellationToken.None));
+
+        Assert.Equal("Paddock", root.GetProperty("data").GetProperty("device").GetProperty("location").GetString());
+    }
+
+    [Theory]
+    [InlineData("Paddock", "Paddock")]
+    [InlineData("  ", null)]
+    [InlineData(null, null)]
+    [InlineData("{\"id\":29,\"location\":\"Pit lane\",\"lat\":51.2}", "Pit lane")]
+    [InlineData("{\"id\":29}", null)]
+    [InlineData("{not json", "{not json")]
+    public void Location_names(string? location, string? expected)
+        => Assert.Equal(expected, DashyNMS.Agent.Summaries.DeviceSummary.LocationName(location));
+
+    [Fact]
     public async Task Find_ranks_exact_matches_first()
     {
         var root = FakeLibreNms.Parse(await Tools().FindDevice("sw", cancellationToken: CancellationToken.None));

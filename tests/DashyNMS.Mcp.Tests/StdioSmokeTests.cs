@@ -72,6 +72,20 @@ public sealed class StdioSmokeTests
                 Assert.False(string.IsNullOrWhiteSpace(tool.GetProperty("description").GetString()));
             });
 
+            // Every parameter keeps its type, though text ones are read leniently (#13).
+            Assert.All(tools, tool =>
+            {
+                foreach (var parameter in tool.GetProperty("inputSchema").GetProperty("properties").EnumerateObject())
+                {
+                    Assert.True(parameter.Value.TryGetProperty("type", out _), $"{tool.GetProperty("name").GetString()}.{parameter.Name}");
+                }
+            });
+
+            // A model sending an ID as a number, where the schema says text, still gets an answer.
+            var numeric = await Request(4, "tools/call", """{"name":"find_device","arguments":{"query":1}}""");
+            Assert.False(numeric.GetProperty("result").TryGetProperty("isError", out var isError) && isError.GetBoolean(), numeric.ToString());
+            Assert.Equal("ok", JsonDocument.Parse(numeric.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!).RootElement.GetProperty("status").GetString());
+
             var call = await Request(3, "tools/call", """{"name":"find_device","arguments":{"query":"core"}}""");
             var text = call.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
             var result = JsonDocument.Parse(text).RootElement;

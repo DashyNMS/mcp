@@ -131,6 +131,7 @@ public sealed class Batch2ToolTests
         var inventory = FakeLibreNms.Parse(await Details().DeviceDetails("core-sw1", ["inventory"], cancellationToken: CancellationToken.None))
             .GetProperty("data").GetProperty("inventory");
 
+        // The chassis and the PSU: not the port, nor the empty fan-tray container.
         Assert.Equal(2, inventory.GetArrayLength());
         Assert.Equal("SG00TEST01", inventory[0].GetProperty("serial").GetString());
         Assert.True(inventory[1].GetProperty("replaceable").GetBoolean());
@@ -230,6 +231,6 @@ public sealed class Batch2ToolTests
         Assert.Equal("1 neighbour (1 known to LibreNMS); 1 only reported from the other side.", root.GetProperty("summary").GetString());
         Assert.Equal("neighbour", neighbour.GetProperty("seen_from").GetString());
         Assert.Equal("49", neighbour.GetProperty("local_port").GetString());
-        Assert.Equal("core-sw1.example.com", neighbour.GetProperty("remote_hostname").GetString());
+        Assert.Equal("Core switch 1", neighbour.GetProperty("remote_hostname").GetString());
     }
 }

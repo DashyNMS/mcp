@@ -208,7 +208,10 @@ public sealed class EventTools(
                 config_changed = false,
                 latest_backup_since = latest?.ValidSinceUtc,
                 last_backed_up = latest?.ValidUntilUtc,
-            }, "No config change in Unimus.");
+                warning = UnimusDirectory.StaleNote(latest, time.GetUtcNow().UtcDateTime),
+            }, UnimusDirectory.StaleNote(latest, time.GetUtcNow().UtcDateTime) is { } stale
+                ? "No config change in Unimus. " + stale
+                : "No config change in Unimus.");
         }
 
         var rendered = ConfigDiff.Render(diff, MaxDiffLines);

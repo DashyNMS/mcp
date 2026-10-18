@@ -60,6 +60,8 @@ public sealed partial class Redactor
         KeywordAssignment(),
         // option key '<x>' (OpenWrt, Teltonika)
         UciSecret(),
+        // license install <key> (Mellanox / NVIDIA Onyx), license key <key>
+        LicenceKey(),
     ];
 
     /// <summary>Redacts every secret it recognises in <paramref name="text"/>.</summary>
@@ -205,6 +207,10 @@ public sealed partial class Redactor
     /// <summary>OpenWrt and Teltonika RutOS (UCI): option key 'x', option community 'x', option 'password' 'x' - the name may be quoted too.</summary>
     [GeneratedRegex(@"(?<prefix>^[ \t]*option[ \t]+(?<q>'?)(?:key|password|passwd|community|psk|secret|auth_secret|acct_secret|pre_shared_key|preshared_key|private_key|sae_password|wpa_passphrase)\k<q>[ \t]+)" + Value, RegexOptions.IgnoreCase | RegexOptions.Multiline)]
     private static partial Regex UciSecret();
+
+    /// <summary>Licence keys are paid-for credentials, kept in the config (#13's trial: Mellanox "license install LK2-...").</summary>
+    [GeneratedRegex(@"(?<prefix>\blicen[cs]e[ \t]+(?:install|key|add)[ \t]+)" + Value, RegexOptions.IgnoreCase)]
+    private static partial Regex LicenceKey();
 
     /// <summary>
     /// A crypt(3) hash anywhere - /etc/shadow lines in a router's backup,

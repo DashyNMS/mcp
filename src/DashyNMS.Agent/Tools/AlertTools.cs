@@ -39,7 +39,7 @@ public sealed class AlertTools(
         [Description("Alerts raised until: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
         [Description("How many alerts to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
         [Description("How many alerts to return, 1 to 100. Defaults to 50.")] int limit = DefaultAlerts,
-        [Description("Include each alert's start time, note and the device's display name.")] bool verbose = false,
+        [Description("Include each alert's start time and note.")] bool verbose = false,
         CancellationToken cancellationToken = default)
         => runner.RunAsync(
             "active_alerts",
@@ -68,7 +68,7 @@ public sealed class AlertTools(
             {
                 device_id = g.Key,
                 hostname = devices.TryGetValue(g.Key, out var d) ? d.Hostname : g.First().Hostname,
-                display = verbose && d is not null && !string.Equals(d.Display, d.Hostname, StringComparison.OrdinalIgnoreCase) ? d.Display : null,
+                display = DeviceSummary.DisplayOf(d),
                 device_status = d is not null ? DeviceSummary.StatusOf(d) : null,
                 alerts = g.Select(a =>
                 {
@@ -159,7 +159,7 @@ public sealed class AlertTools(
             {
                 device_id = g.Key,
                 hostname = devices.TryGetValue(g.Key, out var d) ? d.Hostname : null,
-                display = verbose && d is not null && !string.Equals(d.Display, d.Hostname, StringComparison.OrdinalIgnoreCase) ? d.Display : null,
+                display = DeviceSummary.DisplayOf(d),
                 device_status = d is not null ? DeviceSummary.StatusOf(d) : null,
                 alerts = g.Select(r => new
                 {

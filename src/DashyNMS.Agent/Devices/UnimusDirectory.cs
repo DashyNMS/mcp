@@ -72,6 +72,27 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
         => await MatchAsync(device, cancellationToken).ConfigureAwait(false)
             ?? throw new ToolException("Unimus doesn't back up this device: no Unimus device has its hostname or address.");
 
+    /// <summary>How long Unimus can go without confirming a config before the backup is called stale.</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// A sentence when the newest backup hasn't been confirmed for a week:
+    /// Unimus re-checks a config every few hours, so silence that long
+    /// usually means its job for this device is failing (#13's trial found a
+    /// core switch six months out of date, with no word of it).
+    /// </summary>
+    public static string? StaleNote(UnimusBackup? newest, DateTime now)
+    {
+        if ((newest?.ValidUntilUtc ?? newest?.ValidSinceUtc) is not { } confirmed || now - confirmed < StaleAfter)
+        {
+            return null;
+        }
+
+        var days = (int)(now - confirmed).TotalDays;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"Unimus last backed this device up on {confirmed:yyyy-MM-dd}, {days} days ago, so its backup job for it is probably failing and the config may be out of date.");
+    }
+
     private IReadOnlyList<UnimusDevice>? Fresh()
         => _devices is { } devices && time.GetUtcNow() - _fetchedAt < DeviceDirectory.Lifetime ? devices : null;
 }

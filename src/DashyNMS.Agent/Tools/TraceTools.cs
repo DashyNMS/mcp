@@ -374,7 +374,7 @@ public sealed class TraceTools(
         return new Classified(row, port, Role.Candidate, null, other?.RemoteHostname, null);
     }
 
-    private static string? Name(Dictionary<int, Device> devices, int id) => devices.TryGetValue(id, out var d) ? d.Hostname : null;
+    private static string? Name(Dictionary<int, Device> devices, int id) => devices.TryGetValue(id, out var d) ? DeviceSummary.NameOf(d) : null;
 
     /// <summary>"aa:bb:cc:dd:ee:ff" from any common form, or null when it isn't a MAC.</summary>
     internal static string? Mac(string text)
