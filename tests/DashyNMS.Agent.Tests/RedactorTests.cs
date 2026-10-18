@@ -99,6 +99,85 @@ public sealed class RedactorTests
     public void Redacts_pfsense_secret_elements(string input, string expected)
         => Assert.Equal(expected, _redactor.Redact(input));
 
+    /// <summary>
+    /// Gaps found by checking real backups by hand (#14): the shapes are the
+    /// vendors' own, the secrets made up.
+    /// </summary>
+    [Theory]
+    // FortiOS: the ENC marker isn't the secret
+    [InlineData("    set password ENC SH2FakeHashForTestsOnly=", $"    set password ENC {R}")]
+    [InlineData("    set passwd ENC GjaYrYzVxn0u3xR6gAbCdEf==", $"    set passwd ENC {R}")]
+    [InlineData("        set psksecret ENC ZHVtbXlQU0tkdW1teQ==", $"        set psksecret ENC {R}")]
+    // AOS-CX: ciphertext and plaintext are qualifiers
+    [InlineData("user admin group administrators password ciphertext AQBapVcYpG2k1nQ0dW1teQ==", $"user admin group administrators password ciphertext {R}")]
+    [InlineData("radius-server host 10.0.0.5 key ciphertext AQBapZ2R1bW15S2V5", $"radius-server host 10.0.0.5 key ciphertext {R}")]
+    [InlineData("snmpv3 user mon auth sha auth-pass ciphertext AQBaAuth priv aes priv-pass ciphertext AQBaPriv", $"snmpv3 user mon auth sha auth-pass ciphertext {R} priv aes priv-pass ciphertext {R}")]
+    // Planet: password encrypted <hash>
+    [InlineData("username admin privilege 15 password encrypted 2b4e7c1f0a9d3e8b", $"username admin privilege 15 password encrypted {R}")]
+    // Brocade FOS configupload: camel-case keys
+    [InlineData("snmp.snmpv3Usm.0.usmAuthSecret:AbCdEf123456==", $"snmp.snmpv3Usm.0.usmAuthSecret:{R}")]
+    [InlineData("snmp.snmpv3Usm.3.usmPrivSecret:QrStUv789==", $"snmp.snmpv3Usm.3.usmPrivSecret:{R}")]
+    [InlineData("snmp.agtParty.0.authPrivSecret:XyZ0987", $"snmp.agtParty.0.authPrivSecret:{R}")]
+    [InlineData("snmp.snmpv3Usm.1.usmAuthSecret.default:AbCdEf123456==", $"snmp.snmpv3Usm.1.usmAuthSecret.default:{R}")]
+    // Teltonika RutOS / OpenWrt UCI
+    [InlineData("\toption key 'WifiK3y123'", $"\toption key {R}")]
+    [InlineData("\toption community 'C0mmunity'", $"\toption community {R}")]
+    [InlineData("\toption password 'P4ssw0rd!'", $"\toption password {R}")]
+    [InlineData("\toption 'password' 'Qu0tedNam3!'", $"\toption 'password' {R}")]
+    [InlineData("pass=Secr3t12", $"pass={R}")]
+    // Crypt hashes wherever they are: /etc/shadow lines, scripts
+    [InlineData("root:$1$abcd1234$Xyz0123456789abcdefgh:19000:0:99999:7:::", $"root:{R}:19000:0:99999:7:::")]
+    [InlineData("admin:$6$saltsalt$0123456789abcdefABCDEF./0123456789:19500::::::", $"admin:{R}:19500::::::")]
+    public void Redacts_secrets_found_in_real_backups(string input, string expected)
+        => Assert.Equal(expected, _redactor.Redact(input));
+
+    [Theory]
+    [InlineData("    set type password")]
+    [InlineData("    set type password\n    set comments \"guest account\"")]
+    [InlineData("trace.ftp.password:\nsnmp.portFilterBlockMask:0")]
+    [InlineData("passwdcfg.hash:sha512")]
+    [InlineData("password_policy:strong")]
+    [InlineData("\toption key_size '2048'")]
+    [InlineData("\toption authorization 'password'")]
+    [InlineData("hostkeyalg.ssh:ssh-ed25519")]
+    [InlineData("no service password-encryption")]
+    public void Leaves_lookalikes_from_real_backups_alone(string input)
+        => Assert.Equal(input, _redactor.Redact(input));
+
+    [Theory]
+    [InlineData("<rocommunity>C0mmunity</rocommunity>", $"<rocommunity>{R}</rocommunity>")]
+    [InlineData("<trapstring>TrapC0mm</trapstring>", $"<trapstring>{R}</trapstring>")]
+    [InlineData("<tls>IyBPcGVuVlBOIFN0YXRpYyBrZXk=</tls>", $"<tls>{R}</tls>")]
+    [InlineData("<shared_key>IyBPcGVuVlBOIFNoYXJlZA==</shared_key>", $"<shared_key>{R}</shared_key>")]
+    [InlineData("<pwhash>$2y$10$abcdefghijklmnopqrstuv</pwhash>", $"<pwhash>{R}</pwhash>")]
+    [InlineData("<device_key>q83vEjRWeJA=</device_key>", $"<device_key>{R}</device_key>")]
+    [InlineData("<ldap_bindpw>B1ndPw</ldap_bindpw>", $"<ldap_bindpw>{R}</ldap_bindpw>")]
+    [InlineData("<radius_secret>R4dius</radius_secret>", $"<radius_secret>{R}</radius_secret>")]
+    [InlineData("<privatekey>WGprivKEYdummy=</privatekey>", $"<privatekey>{R}</privatekey>")]
+    [InlineData("<presharedkey>WGpskDUMMY=</presharedkey>", $"<presharedkey>{R}</presharedkey>")]
+    public void Redacts_more_pfsense_secret_elements(string input, string expected)
+        => Assert.Equal(expected, _redactor.Redact(input));
+
+    [Fact]
+    public void Redacts_a_base64_element_whose_decoded_text_holds_a_secret()
+    {
+        // pfSense keeps the FRR config base64-encoded, and a model reads base64 as easily as text.
+        var frr = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("router bgp 65000\n neighbor 10.0.0.2 remote-as 65001\n neighbor 10.0.0.2 password BgpS3cret\n"));
+
+        Assert.Equal($"<frrrunning>{R}</frrrunning>", _redactor.Redact($"<frrrunning>{frr}</frrrunning>"));
+    }
+
+    [Fact]
+    public void Leaves_base64_elements_without_secrets_alone()
+    {
+        var banner = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Authorised users only. All activity is monitored and logged."));
+        // DER starts with 0x30 0x82 and isn't text, like any certificate.
+        var certificate = "<crt>" + Convert.ToBase64String([0x30, 0x82, 0x03, 0x77, 0x30, 0x82, 0x02, 0x5F, 0xA0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x04, 0x02, 0x00, 0x00, 0xB9, 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05, 0x05, 0x00, 0x30, 0x5A, 0x31, 0x0B, 0x30, 0x09]) + "</crt>";
+
+        Assert.Equal($"<login_message>{banner}</login_message>", _redactor.Redact($"<login_message>{banner}</login_message>"));
+        Assert.Equal(certificate, _redactor.Redact(certificate));
+    }
+
     [Fact]
     public void Redacts_every_secret_in_a_config_diff()
     {
