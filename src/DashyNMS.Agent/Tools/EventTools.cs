@@ -246,25 +246,18 @@ public sealed class EventTools(
 
         // Core's Graylog search is relative to now, so it can count "the last
         // N seconds" but not a window that ended earlier. Rather than return
-        // a count for the wrong span, say so (#30 adds absolute ranges).
+        // a count for the wrong span, say so and point to search_logs, which
+        // reads a past window oldest first to count it (#30).
         var now = time.GetUtcNow().UtcDateTime;
         if (window.Until < now - GraylogNowSlack)
         {
-            return (new { configured = true, skipped = "Graylog is only counted for windows that end now." }, "Graylog isn't counted for windows that end in the past.");
+            return (new { configured = true, skipped = "Graylog is only counted here for windows that end now. Use search_logs with this device, since and until for an earlier window." },
+                "Graylog isn't counted for windows that end in the past; search_logs can.");
         }
 
-        // With "match any address", every interface address counts too, as desktop
-        // and LibreNMS do: a switch often logs from a VLAN interface rather than
-        // the address LibreNMS polls it on. If they can't be read, the search
-        // still runs on the device's own names and address.
-        IReadOnlyList<DeviceIpAddress>? interfaceAddresses = null;
-        if (options.GraylogMatchAnyAddress)
-        {
-            var fetched = await Sources.TryAsync(() => client.Ports.ListIpAddressesAsync(device.DeviceId, cancellationToken), cancellationToken).ConfigureAwait(false);
-            interfaceAddresses = fetched.Value;
-        }
-
-        var addresses = GraylogQuery.DeviceAddresses(device, resolvedHostname: null, interfaceAddresses);
+        // A switch often logs from a VLAN interface rather than the address
+        // LibreNMS polls it on, hence "match any address" (see LogTools).
+        var addresses = await LogTools.AddressesAsync(client, device, options, cancellationToken).ConfigureAwait(false);
         var query = GraylogQuery.BuildSimpleQuery(search: null, options.GraylogQueryField, addresses);
         var rangeSeconds = (int)Math.Ceiling((now - window.Since).TotalSeconds);
 

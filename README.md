@@ -55,6 +55,9 @@ One call for the dashboard's numbers: devices up and down, where the outages are
 **What happened across the network?**
 The event log and alert log for every device over any window, newest first: "anything reboot today?". Filter by type, severity, device, group or location. *(`network_events`)*
 
+**What did the logs say?**
+With Graylog connected: its messages across the network or from one device, over any window up to 31 days, past or present: "any errors from the core switches overnight?". You get the exact count first and the messages over time, then the busiest sources, levels and applications and the newest lines. Narrow it by text, device, severity or stream. *(`search_logs`)*
+
 **What's alerting, and what alerted?**
 Every open alert, grouped by device and newest first, or every alert raised in a window of time, including ones that have since recovered: "what fired overnight?". Narrow it to a severity, a device, a device group or a location. *(`active_alerts`)*
 
@@ -100,7 +103,7 @@ You can also build it yourself from source; see the [developer guide](docs/DEVEL
 - A LibreNMS server you can reach, with its API turned on.
 - An API token for a **read-only** LibreNMS user. In LibreNMS, open the settings menu, then **API → API Tokens**, and create one for that user.
 - Docker, or the .NET 10 SDK to build from source.
-- Optionally, Unimus (1.7 or later) and Graylog (2.1 or later, tested up to 7.2), for `what_changed`.
+- Optionally, Unimus (1.7 or later) and Graylog (2.1 or later, tested up to 7.2), for `what_changed` and `search_logs`.
 
 LibreNMS only gives its network-wide sensor list to users with **global read** access. Without it, `device_sensors` still works, reading one device at a time, and `health_overview` works when it's narrowed to a device group or location of up to 25 devices.
 
@@ -146,7 +149,7 @@ All settings are environment variables.
 | `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on the config tools and config diffs in `what_changed`. Set both or neither. |
 | `MCP_CONFIG_TEXT` | No | `full` | How much config the tools return: `full` (redacted text), `summary` (when it changed and how many lines, no text), or `off` (nothing from Unimus) |
 | `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
-| `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
+| `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on `search_logs` and Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
 | `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 and newer, including 6.x and 7.x (tested on 7.2). `2.0` only for Graylog 2.0. |
 | `GRAYLOG_QUERY_FIELD` | No | `source` | The Graylog field matched against a device's addresses, as LibreNMS's `graylog.query_field` |
 | `GRAYLOG_MATCH_ANY_ADDRESS` | No | `false` | Also match a device's messages on every address on its interfaces, as LibreNMS's and DashyNMS desktop's "match any address". Turn it on when devices log from a VLAN or loopback address rather than the one LibreNMS polls. |
