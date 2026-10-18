@@ -46,6 +46,8 @@ The Dockerfile cross-compiles for the target architecture, so `docker buildx bui
 - a `vX.Y.Z` tag publishes `X.Y.Z`, `X.Y` and `latest`,
 - a pre-release tag such as `v1.2.0-rc.1` gets its own tag only, and doesn't move `latest`.
 
+To release, set `<Version>` in `Directory.Build.props` to the new version and merge that first: it's the version the server reports to clients. Then tag `main` with `vX.Y.Z`.
+
 ## Rules for tools
 
 - Every tool is read-only, and its MCP annotations say so. A test fails if one isn't.

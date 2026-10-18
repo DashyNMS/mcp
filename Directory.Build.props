@@ -7,7 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Product>DashyNMS MCP</Product>
     <Company>DashyNMS</Company>
-    <Version>0.1.0</Version>
+    <Version>1.1.0</Version>
     <NeutralLanguage>en-GB</NeutralLanguage>
     <!-- Where the desktop repo is checked out (a git submodule) - its Core
          library is compiled into this repo rather than copied. -->
