@@ -336,11 +336,72 @@ public sealed class GraphTools(
             : throw new ToolException($"Port graphs come in these types: {string.Join(", ", PortTypes.Keys)}.");
     }
 
+    /// <summary>
+    /// Smaller than this, a PNG may be LibreNMS's error image rather than a
+    /// graph - a real one is tens of kilobytes - so it's checked (#79).
+    /// </summary>
+    internal const int SmallImageBytes = 2048;
+
     private async Task<byte[]> FetchAsync(string url, CancellationToken cancellationToken)
     {
         using var document = await transport.SendAsync(HttpMethod.Get, url, null, cancellationToken).ConfigureAwait(false);
-        return Decode(document.RootElement);
+
+        // LibreNMS answers a graph this account may not see (26.10 checks per
+        // device and port) with HTTP 200 and an image reading "No Authorization",
+        // drawn in the server's own format - not a 403.
+        byte[] png;
+        try
+        {
+            png = Decode(document.RootElement);
+        }
+        catch (ToolException) when (GraphImages.IsDenied(ImageText(document.RootElement)))
+        {
+            throw Denied();
+        }
+
+        if (png.Length < SmallImageBytes && await IsDeniedAsync(url, cancellationToken).ConfigureAwait(false))
+        {
+            throw Denied();
+        }
+
+        return png;
     }
+
+    /// <summary>Asks again for the SVG, whose error image carries its text, to tell a denied graph from a small one.</summary>
+    private async Task<bool> IsDeniedAsync(string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var svg = await transport.SendAsync(HttpMethod.Get, url.Replace("graph_type=png", "graph_type=svg", StringComparison.Ordinal), null, cancellationToken).ConfigureAwait(false);
+            return GraphImages.IsDenied(ImageText(svg.RootElement));
+        }
+        catch (LibreNmsApiException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The image inside LibreNMS's base64 envelope, as text - for an SVG error image; null when there's none.</summary>
+    internal static string? ImageText(JsonElement envelope)
+    {
+        if (!envelope.TryGetProperty("image", out var image) || image.ValueKind != JsonValueKind.Object
+            || !image.TryGetProperty("image", out var data) || data.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(data.GetString()!));
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static ToolException Denied()
+        => new("LibreNMS: this account isn't allowed to see this graph. LibreNMS 26.10 checks graph permissions per device and port.");
 
     /// <summary>The PNG out of LibreNMS's <c>{"image":{"image":"base64…","content-type":"image/png"}}</c>.</summary>
     internal static byte[] Decode(JsonElement envelope)

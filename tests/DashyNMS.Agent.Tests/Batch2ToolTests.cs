@@ -50,7 +50,7 @@ public sealed class Batch2ToolTests
         var root = FakeLibreNms.Parse(await Health().HealthOverview(cancellationToken: CancellationToken.None));
         var readings = root.GetProperty("data").GetProperty("readings");
 
-        Assert.Equal("9 sensor readings checked: 3 critical, 0 warning.", root.GetProperty("summary").GetString());
+        Assert.Equal("9 sensor readings checked on devices visible to this account: 3 critical, 0 warning.", root.GetProperty("summary").GetString());
         Assert.Equal(3, readings.GetArrayLength());
         Assert.All(readings.EnumerateArray(), r => Assert.Equal(1, r.GetProperty("device").GetProperty("device_id").GetInt32()));
     }
@@ -60,7 +60,7 @@ public sealed class Batch2ToolTests
     {
         var root = FakeLibreNms.Parse(await Health().HealthOverview("temperature", only_problems: false, cancellationToken: CancellationToken.None));
 
-        Assert.Equal("3 temperature readings checked: 1 critical, 0 warning, 2 other.", root.GetProperty("summary").GetString());
+        Assert.Equal("3 temperature readings checked on devices visible to this account: 1 critical, 0 warning, 2 other.", root.GetProperty("summary").GetString());
         Assert.Equal(3, root.GetProperty("data").GetProperty("readings").GetArrayLength());
     }
 
@@ -106,7 +106,7 @@ public sealed class Batch2ToolTests
 
         Assert.Equal("error", everything.GetProperty("status").GetString());
         Assert.Contains("global read access", everything.GetProperty("message").GetString(), StringComparison.Ordinal);
-        Assert.Equal("3 sensor readings checked: 2 critical, 0 warning.", core.GetProperty("summary").GetString());
+        Assert.Equal("3 sensor readings checked on devices visible to this account: 2 critical, 0 warning.", core.GetProperty("summary").GetString());
     }
 
     [Fact]

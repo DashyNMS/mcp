@@ -61,7 +61,7 @@ public sealed class DeviceResolver(DeviceDirectory directory)
             }
         }
 
-        throw new ToolException("No device matches. Check the name or address, or search with find_device.");
+        throw new ToolException("No device visible to this account matches. Check the name or address, or search with find_device.");
     }
 
     private static bool Same(string? value, string text)

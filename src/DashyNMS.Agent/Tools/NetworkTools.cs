@@ -155,9 +155,9 @@ public sealed class NetworkTools(
             unavailable = unavailable.Count > 0 ? unavailable : null,
         };
 
-        var summary = $"{devices.Count} devices: {status.GetValueOrDefault("up")} up, {status.GetValueOrDefault("down")} down" +
+        var summary = $"{devices.Count} devices visible to this account: {status.GetValueOrDefault("up")} up, {status.GetValueOrDefault("down")} down" +
             (status.GetValueOrDefault("disabled") > 0 ? $", {status["disabled"]} disabled" : string.Empty) +
-            (openAlerts is null ? "." : $"; {openAlerts.Describe()} ({openAlerts.Critical} critical, {openAlerts.Warning} warning).");
+            (openAlerts is null ? "; open alerts couldn't be read." : $"; {openAlerts.Describe()} ({openAlerts.Critical} critical, {openAlerts.Warning} warning).");
 
         return ToolResult.Ok(summary, data);
     }
