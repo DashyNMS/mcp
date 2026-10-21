@@ -50,7 +50,7 @@ public sealed class DeviceToolsTests
         var root = FakeLibreNms.Parse(await Tools().FindDevice("nothing-here", cancellationToken: CancellationToken.None));
 
         Assert.Equal("ok", root.GetProperty("status").GetString());
-        Assert.Equal("No devices match.", root.GetProperty("summary").GetString());
+        Assert.Equal("No devices visible to this account match.", root.GetProperty("summary").GetString());
     }
 
     [Theory]

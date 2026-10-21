@@ -104,7 +104,7 @@ public sealed class AlertTools(
         var totals = OpenAlertTotals.From(matching);
         var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
         var summary = matching.Count == 0
-            ? "No open alerts" + (filtered ? " match." : ".")
+            ? "No open alerts visible to this account" + (filtered ? " match." : ".")
             : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
               PagingNote(page);
 

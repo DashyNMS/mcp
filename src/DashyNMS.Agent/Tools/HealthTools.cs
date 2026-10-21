@@ -91,6 +91,7 @@ public sealed class HealthTools(
         // The network-wide list when the token may read it; otherwise device
         // by device, which only makes sense for a few devices (see SensorSource).
         var sensors = await sensorSource.TryGetFleetAsync(cancellationToken).ConfigureAwait(false);
+        var deniedDevices = 0;
         if (sensors is null)
         {
             if (scope.IsEverything || inScope.Count > SensorSource.MaxDevicesOneByOne)
@@ -101,7 +102,9 @@ public sealed class HealthTools(
                     "or use device_sensors for one device.");
             }
 
-            sensors = await sensorSource.GetForDevicesAsync(inScope, cancellationToken).ConfigureAwait(false);
+            var read = await sensorSource.GetForDevicesAsync(inScope, cancellationToken).ConfigureAwait(false);
+            sensors = read.Sensors;
+            deniedDevices = read.DeniedDevices;
         }
 
         var all = sensors
@@ -122,8 +125,9 @@ public sealed class HealthTools(
         var critical = all.Count(x => x.Reading.State == "critical");
         var warning = all.Count(x => x.Reading.State == "warning");
         var what = type is null ? "sensor readings" : $"{type} readings";
-        var summary = $"{all.Count} {what} checked: {critical} critical, {warning} warning" +
+        var summary = $"{all.Count} {what} checked on devices visible to this account: {critical} critical, {warning} warning" +
             (onlyProblems ? "." : $", {all.Count - critical - warning} other.") +
+            (deniedDevices > 0 ? $" {DeviceTools.Count(deniedDevices, "device")} couldn't be read: this account isn't allowed to see their sensors, so they aren't counted." : string.Empty) +
             (info.NextOffset is not null || info.Offset > 0 ? " " + Paging.Describe(info, "reading", "readings") : string.Empty);
 
         var data = new

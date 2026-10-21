@@ -48,7 +48,7 @@ public sealed class Batch3ToolTests
         var root = FakeLibreNms.Parse(await Network().NetworkOverview(CancellationToken.None));
         var data = root.GetProperty("data");
 
-        Assert.Equal("2 devices: 1 up, 1 down; 3 open alerts (2 critical, 1 warning).", root.GetProperty("summary").GetString());
+        Assert.Equal("2 devices visible to this account: 1 up, 1 down; 3 open alerts (2 critical, 1 warning).", root.GetProperty("summary").GetString());
         Assert.Equal(1, data.GetProperty("alerts").GetProperty("acknowledged").GetInt32());
         Assert.Equal(2, data.GetProperty("alerts").GetProperty("devices_alerting").GetInt32());
         Assert.Equal(4, data.GetProperty("ports").GetProperty("total").GetInt32());

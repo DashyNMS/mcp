@@ -83,7 +83,7 @@ public sealed partial class DeviceTools(
             .ToList();
 
         var matches = Paging.Apply(ranked, offset, limit, out var page);
-        var summary = page.Total == 0 ? "No devices match." : Paging.Describe(page, "matching device", "matching devices");
+        var summary = page.Total == 0 ? "No devices visible to this account match." : Paging.Describe(page, "matching device", "matching devices");
         return ToolResult.Ok(summary, new { devices = matches, page });
     }
 
@@ -200,7 +200,9 @@ public sealed partial class DeviceTools(
             unavailable = unavailable.Count > 0 ? unavailable : null,
         };
 
-        var summary = $"Device is {status}, {Count(openAlerts.Count, "open alert")}, {Count(downPorts.Count, "port")} down while enabled" +
+        // An alert list that couldn't be read is unknown, never "0 open alerts" (#79).
+        var alertsText = alerts.Result.Error is null ? Count(openAlerts.Count, "open alert") : "open alerts unknown";
+        var summary = $"Device is {status}, {alertsText}, {Count(downPorts.Count, "port")} down while enabled" +
             (unavailable.Count > 0 ? $"; {Count(unavailable.Count, "part")} couldn't be fetched." : ".");
 
         return ToolResult.Ok(summary, data);

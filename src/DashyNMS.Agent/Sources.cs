@@ -9,7 +9,18 @@ public sealed record Fetched<T>(T? Value, string? Error)
 }
 
 /// <summary>Where a part of a result couldn't be fetched; the rest of the result still stands.</summary>
-public sealed record Unavailable(string Source, string Message);
+public sealed record Unavailable(string Source, string Message)
+{
+    /// <summary>
+    /// "denied" when LibreNMS refused this account (on 26.10 it checks reads per
+    /// device and resource), otherwise "failed" - so an answer never takes a
+    /// part it wasn't allowed to see, or couldn't load, as empty (#79).
+    /// </summary>
+    public string Reason => Message.Contains(DesktopNMS.Core.Api.LibreNmsApiException.PermissionDeniedMessage, StringComparison.Ordinal)
+        || Message.Contains("isn't allowed", StringComparison.Ordinal)
+        ? "denied"
+        : "failed";
+}
 
 /// <summary>Helpers for tools that combine several calls.</summary>
 public static class Sources

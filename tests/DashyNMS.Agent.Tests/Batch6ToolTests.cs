@@ -58,7 +58,7 @@ public sealed class Batch6ToolTests
         Assert.Equal("image/png", image.MimeType);
         Assert.Equal(0x89, image.DecodedData.Span[0]);
 
-        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/device_bits?", StringComparison.Ordinal));
+        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/device_bits?", StringComparison.Ordinal) && r.Contains("graph_type=png", StringComparison.Ordinal));
         Assert.Contains("from=-1day", request, StringComparison.Ordinal);
         Assert.EndsWith("&graph_type=png&output=base64&bg=FFFFFF&bbg=FFFFFF", request, StringComparison.Ordinal);
     }
@@ -71,7 +71,7 @@ public sealed class Batch6ToolTests
         var result = await Graphs(nms).Graph("1", type: "cpu", range: "week", legend: false);
 
         Assert.Equal("device_processor", Text(result).GetProperty("data").GetProperty("graph").GetProperty("type").GetString());
-        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/device_processor?", StringComparison.Ordinal));
+        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/device_processor?", StringComparison.Ordinal) && r.Contains("graph_type=png", StringComparison.Ordinal));
         Assert.Contains("from=-1week", request, StringComparison.Ordinal);
         Assert.Contains("&legend=no", request, StringComparison.Ordinal);
     }
@@ -112,7 +112,7 @@ public sealed class Batch6ToolTests
         Assert.IsType<ImageContentBlock>(result.Content[1]);
 
         var from = FakeLibreNms.Now.AddHours(-6).ToUnixTimeSeconds();
-        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/ports/1%2F1%2F7/port_errors?", StringComparison.Ordinal));
+        var request = Assert.Single(nms.Transport.Requests, r => r.StartsWith("devices/1/ports/1%2F1%2F7/port_errors?", StringComparison.Ordinal) && r.Contains("graph_type=png", StringComparison.Ordinal));
         Assert.Contains($"from={from}&", request, StringComparison.Ordinal);
         Assert.Contains($"&to={FakeLibreNms.Now.ToUnixTimeSeconds()}", request, StringComparison.Ordinal);
     }

@@ -72,7 +72,7 @@ public sealed class DeviceResolverTests
     {
         var ex = await Assert.ThrowsAsync<ToolException>(() => Resolve(query));
 
-        Assert.StartsWith("No device matches.", ex.Message, StringComparison.Ordinal);
+        Assert.StartsWith("No device visible to this account matches.", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]

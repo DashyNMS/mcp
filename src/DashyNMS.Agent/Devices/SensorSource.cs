@@ -74,12 +74,28 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
         return await ReadDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Several devices' sensors read one by one - only for a few devices; see <see cref="MaxDevicesOneByOne"/>.</summary>
-    public async Task<IReadOnlyList<Sensor>> GetForDevicesAsync(IReadOnlyCollection<int> deviceIds, CancellationToken cancellationToken)
+    /// <summary>
+    /// Several devices' sensors read one by one - only for a few devices; see
+    /// <see cref="MaxDevicesOneByOne"/>. A device this account may not read
+    /// (LibreNMS 26.10 checks per device, #79) is skipped and counted, rather
+    /// than failing the rest.
+    /// </summary>
+    public async Task<SensorRead> GetForDevicesAsync(IReadOnlyCollection<int> deviceIds, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(deviceIds);
-        var lists = await Task.WhenAll(deviceIds.Select(id => ReadDeviceAsync(id, cancellationToken))).ConfigureAwait(false);
-        return lists.SelectMany(l => l).ToList();
+        var lists = await Task.WhenAll(deviceIds.Select(async id =>
+        {
+            try
+            {
+                return (Sensors: await ReadDeviceAsync(id, cancellationToken).ConfigureAwait(false), Denied: false);
+            }
+            catch (LibreNmsApiException ex) when (ex.IsPermissionDenied)
+            {
+                return (Sensors: (IReadOnlyList<Sensor>)Array.Empty<Sensor>(), Denied: true);
+            }
+        })).ConfigureAwait(false);
+
+        return new SensorRead(lists.SelectMany(l => l.Sensors).ToList(), lists.Count(l => l.Denied));
     }
 
     private async Task<IReadOnlyList<Sensor>> ReadDeviceAsync(int deviceId, CancellationToken cancellationToken)
@@ -131,3 +147,6 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
         public int SensorId { get; set; }
     }
 }
+
+/// <summary>Sensors read device by device, and how many devices this account wasn't allowed to read.</summary>
+public sealed record SensorRead(IReadOnlyList<Sensor> Sensors, int DeniedDevices);
