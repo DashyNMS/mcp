@@ -126,9 +126,11 @@ public sealed class AlertTools(
     internal static string Describe(AlertTotals totals)
         => DeviceTools.Count(totals.AlertGroups, "open alert") + (totals.Faults > totals.AlertGroups ? $" ({totals.Faults} faults)" : string.Empty);
     /// <summary>
-    /// Alerts raised in a window, from the alert log: each "became active"
-    /// entry is one raise, matched to a later recovery of the same rule on the
-    /// same device, and to the open alerts to say whether it's still going.
+    /// Alerts raised in a window, from the alert log (#76): one per occurrence
+    /// of a rule on a device - from its first fault going into alert to its
+    /// last recovering, each recovery matched to its own fault - so eight cores
+    /// firing together are one raise, and one core recovering doesn't close
+    /// it. Matched to the open alerts to say whether it's still going.
     /// </summary>
     private async Task<JsonObject> RaisedAsync(string? severityText, string? deviceQuery, string? group, string? location, TimeWindow window, int offset, int limit, bool verbose, CancellationToken cancellationToken)
     {
@@ -150,35 +152,27 @@ public sealed class AlertTools(
 
         var ruleById = rules.Result.Value?.ToDictionary(r => r.Id) ?? [];
         var openKeys = open.Result.Value?.Select(a => (a.DeviceId, a.RuleId)).ToHashSet();
-        var entries = log.Result.Value!.Items
-            .Select(e => (Entry: e, At: Sources.Utc(e.TimeLogged, options)))
-            .Where(e => e.At is not null)
-            .Select(e => (e.Entry, At: e.At!.Value))
-            .ToList();
 
-        var raised = entries
-            .Where(e => e.Entry.State == AlertState.Active && window.Contains(e.At))
-            .Where(e => deviceId is null || e.Entry.DeviceId == deviceId)
-            .Where(e => scope.Includes(e.Entry.DeviceId, devices))
-            .Select(e =>
+        var raised = AlertOccurrences.From(log.Result.Value!.Items, options)
+            .Where(o => o.Started is { } started && window.Contains(started))
+            .Where(o => deviceId is null || o.DeviceId == deviceId)
+            .Where(o => scope.Includes(o.DeviceId, devices))
+            .Select(o =>
             {
-                var rule = ruleById.GetValueOrDefault(e.Entry.RuleId);
-                var recovered = entries
-                    .Where(r => r.Entry.DeviceId == e.Entry.DeviceId && r.Entry.RuleId == e.Entry.RuleId && r.Entry.State == AlertState.Recovered && r.At > e.At)
-                    .Select(r => (DateTime?)r.At)
-                    .Min();
+                var rule = ruleById.GetValueOrDefault(o.RuleId);
                 return new Raised(
-                    e.Entry.DeviceId,
-                    string.IsNullOrWhiteSpace(rule?.Name) ? $"Rule {e.Entry.RuleId}" : rule.Name,
+                    o.DeviceId,
+                    string.IsNullOrWhiteSpace(rule?.Name) ? $"Rule {o.RuleId}" : rule.Name,
                     rule?.Severity ?? AlertSeverity.Unknown,
-                    e.At,
-                    recovered,
-                    openKeys is null ? null : recovered is null && openKeys.Contains((e.Entry.DeviceId, e.Entry.RuleId)));
+                    o.Started!.Value,
+                    o.Ended,
+                    openKeys is null ? null : o.IsOpen && openKeys.Contains((o.DeviceId, o.RuleId)),
+                    o.FaultCount,
+                    o.RecoveryUnseen);
             })
             .Where(r => severity is null || r.Severity == severity)
             .OrderByDescending(r => r.RaisedAt)
             .ToList();
-
         var shown = Paging.Apply(raised, offset, limit, out var page);
         var groups = shown
             .GroupBy(r => r.DeviceId)
@@ -196,6 +190,8 @@ public sealed class AlertTools(
                     recovered_at = r.RecoveredAt,
                     lasted_minutes = r.RecoveredAt is { } end ? (long?)(end - r.RaisedAt).TotalMinutes : null,
                     still_open = r.StillOpen,
+                    fault_count = r.FaultCount > 1 ? (int?)r.FaultCount : null,
+                    recovery_time_unknown = r.RecoveryUnseen ? true : (bool?)null,
                 }).ToList(),
             })
             .ToList();
@@ -208,7 +204,7 @@ public sealed class AlertTools(
         var lead = EventTools.Describe(window, time.GetUtcNow().UtcDateTime);
         var summary = raised.Count == 0
             ? $"{lead}: no alerts raised" + (severity is not null || deviceId is not null || !scope.IsEverything ? " that match." : ".")
-            : $"{lead}: {DeviceTools.Count(raised.Count, "alert")} raised on {DeviceTools.Count(raised.Select(r => r.DeviceId).Distinct().Count(), "device")} " +
+            : $"{lead}: {DeviceTools.Count(raised.Count, "alert")} raised{FaultNote(raised)} on {DeviceTools.Count(raised.Select(r => r.DeviceId).Distinct().Count(), "device")} " +
               $"({critical} critical, {warning} warning); {stillOpen} still open.";
         summary += complete ? string.Empty : $" LibreNMS's alert log only reaches back to {covered:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.";
         summary += PagingNote(page);
@@ -229,7 +225,9 @@ public sealed class AlertTools(
         return ToolResult.Ok(summary, data);
     }
 
-    private sealed record Raised(int DeviceId, string Rule, AlertSeverity Severity, DateTime RaisedAt, DateTime? RecoveredAt, bool? StillOpen);
+    /// <param name="FaultCount">How many faults went into alert during it - 1 before LibreNMS 26.10.</param>
+    /// <param name="RecoveryUnseen">A legacy alert fired again with no recovery logged between: it ended, but when isn't known.</param>
+    private sealed record Raised(int DeviceId, string Rule, AlertSeverity Severity, DateTime RaisedAt, DateTime? RecoveredAt, bool? StillOpen, int FaultCount, bool RecoveryUnseen);
 
     private async Task<(AlertSeverity? Severity, int? DeviceId, Scope Scope, IReadOnlyDictionary<int, Device> Devices)> PrepareAsync(
         string? severityText, string? deviceQuery, string? group, string? location, int offset, int limit, CancellationToken cancellationToken)
@@ -242,6 +240,13 @@ public sealed class AlertTools(
         var scope = await scopes.ResolveAsync(group, location, cancellationToken).ConfigureAwait(false);
         var devices = (await directory.GetAllAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(d => d.DeviceId);
         return (severity, deviceId, scope, devices);
+    }
+
+    /// <summary>" (14 faults)" when the alerts raised held more faults than alerts.</summary>
+    private static string FaultNote(IReadOnlyCollection<Raised> raised)
+    {
+        var faults = raised.Sum(r => r.FaultCount);
+        return faults > raised.Count ? $" ({faults} faults)" : string.Empty;
     }
 
     private static string PagingNote(PageInfo page)
