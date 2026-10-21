@@ -223,7 +223,8 @@ public sealed class RuleTools(
             }
         }
 
-        var openByRule = open.Result.Value?.GroupBy(a => a.RuleId).ToDictionary(g => g.Key, g => g.Count());
+        // Open alerts per rule, counted as active_alerts counts them (#77): one per device it's firing on, however many faults.
+        var openByRule = open.Result.Value?.Where(a => a.State != AlertState.Recovered).GroupBy(a => a.RuleId).ToDictionary(g => g.Key, g => g.Select(a => a.DeviceId).Distinct().Count());
         // Raised = occurrences started in the last 7 days (#76), not fault events: eight cores together are one.
         var raisedByRule = raisedLog.Result.Value is { } raisedRead
             ? AlertOccurrences.From(raisedRead.Items, options)

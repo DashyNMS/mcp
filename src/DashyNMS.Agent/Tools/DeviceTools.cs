@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
+using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
 using ModelContextProtocol.Server;
@@ -162,11 +163,10 @@ public sealed partial class DeviceTools(
         }
 
         var device = Use(fresh.Result, "device") ?? listed;
-        var openAlerts = (Use(alerts.Result, "alerts") ?? [])
-            .Where(a => a.DeviceId == id)
-            .OrderByDescending(a => a.Timestamp)
-            .Select(a => AlertSummary.From(a, options))
-            .ToList();
+        // One per rule firing on the device, as active_alerts reports them (#77).
+        var deviceGroups = AlertGrouping.ByDeviceAndRule((Use(alerts.Result, "alerts") ?? []).Where(a => a.DeviceId == id));
+        var openAlerts = deviceGroups.Select(g => AlertGroupSummary.From(g, options)).ToList();
+        var alertTotals = OpenAlertTotals.From(deviceGroups);
 
         var portList = (Use(ports.Result, "ports") ?? []).Where(p => !p.Deleted && !p.Disabled && !p.Ignore).ToList();
         var downPorts = portList.Where(IsDownWhileEnabled).ToList();
@@ -184,6 +184,7 @@ public sealed partial class DeviceTools(
             uptime_seconds = device.Uptime > 0 ? device.Uptime : (long?)null,
             under_maintenance = Use(maintenance.Result, "maintenance"),
             open_alerts = openAlerts,
+            open_faults = alertTotals.Faults > alertTotals.AlertGroups ? alertTotals.Faults : (int?)null,
             cpu_max_percent = Max(Use(processors.Result, "processors")?.Select(p => p.UsagePercent)),
             memory_max_percent = Max(Use(memory.Result, "memory")?.Select(m => m.UsagePercent)),
             fullest_storage = Use(storage.Result, "storage")?

@@ -101,30 +101,16 @@ public sealed class AlertTools(
             })
             .ToList();
 
-        var totals = Totals(matching);
+        var totals = OpenAlertTotals.From(matching);
         var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
         var summary = matching.Count == 0
             ? "No open alerts" + (filtered ? " match." : ".")
-            : $"{Describe(totals)} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
+            : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
               PagingNote(page);
 
         return ToolResult.Ok(summary, new { totals, devices = groups, page });
     }
 
-    /// <summary>Groups and faults counted separately (#75, #77): a group is a rule firing on a device, however many faults it holds.</summary>
-    internal sealed record AlertTotals(int AlertGroups, int Faults, int Devices, int Critical, int Warning, int PartlyAcknowledged);
-
-    internal static AlertTotals Totals(IReadOnlyCollection<AlertGroup> groups) => new(
-        groups.Count,
-        groups.Sum(g => g.FaultCount),
-        groups.Select(g => g.DeviceId).Distinct().Count(),
-        groups.Count(g => g.Severity == AlertSeverity.Critical),
-        groups.Count(g => g.Severity == AlertSeverity.Warning),
-        groups.Count(g => g.IsPartlyAcknowledged));
-
-    /// <summary>"3 open alerts", or "3 open alerts (11 faults)" when a group holds more than one.</summary>
-    internal static string Describe(AlertTotals totals)
-        => DeviceTools.Count(totals.AlertGroups, "open alert") + (totals.Faults > totals.AlertGroups ? $" ({totals.Faults} faults)" : string.Empty);
     /// <summary>
     /// Alerts raised in a window, from the alert log (#76): one per occurrence
     /// of a rule on a device - from its first fault going into alert to its

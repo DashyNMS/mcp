@@ -115,7 +115,8 @@ public sealed class NetworkTools(
 
         var status = devices.GroupBy(DeviceSummary.StatusOf).ToDictionary(g => g.Key, g => g.Count());
         var down = devices.Where(d => DeviceSummary.StatusOf(d) == "down").ToList();
-        var openAlerts = alerts.Result.Value;
+        // Counted as active_alerts counts them (#77): alerts are rules firing on devices, faults separately.
+        var openAlerts = alerts.Result.Value is { } listed ? OpenAlertTotals.From(listed) : null;
         var portList = ports.Result.Value?.Where(p => !p.Deleted && !p.Disabled && !p.Ignore).ToList();
 
         var data = new
@@ -136,11 +137,13 @@ public sealed class NetworkTools(
                 .ToList(),
             alerts = openAlerts is null ? null : new
             {
-                open = openAlerts.Count,
-                critical = openAlerts.Count(a => a.Severity == AlertSeverity.Critical),
-                warning = openAlerts.Count(a => a.Severity == AlertSeverity.Warning),
-                acknowledged = openAlerts.Count(a => a.IsAcknowledged),
-                devices_alerting = openAlerts.Select(a => a.DeviceId).Distinct().Count(),
+                open = openAlerts.AlertGroups,
+                faults = openAlerts.Faults,
+                critical = openAlerts.Critical,
+                warning = openAlerts.Warning,
+                acknowledged = openAlerts.Acknowledged,
+                partly_acknowledged = openAlerts.PartlyAcknowledged,
+                devices_alerting = openAlerts.Devices,
             },
             ports = portList is null ? null : new
             {
@@ -154,7 +157,7 @@ public sealed class NetworkTools(
 
         var summary = $"{devices.Count} devices: {status.GetValueOrDefault("up")} up, {status.GetValueOrDefault("down")} down" +
             (status.GetValueOrDefault("disabled") > 0 ? $", {status["disabled"]} disabled" : string.Empty) +
-            (openAlerts is null ? "." : $"; {DeviceTools.Count(openAlerts.Count, "open alert")} ({data.alerts!.critical} critical, {data.alerts.warning} warning).");
+            (openAlerts is null ? "." : $"; {openAlerts.Describe()} ({openAlerts.Critical} critical, {openAlerts.Warning} warning).");
 
         return ToolResult.Ok(summary, data);
     }
@@ -301,12 +304,14 @@ public sealed class NetworkTools(
             }
         }
 
+        // What each row means for its alert (#77): one fault of several clearing isn't the alert recovering.
+        var alertKinds = AlertLogKinds.Describe(alerts?.Result.Value?.Items ?? []);
         foreach (var a in alerts?.Result.Value?.Items ?? [])
         {
             if (Sources.Utc(a.TimeLogged, options) is { } at && window.Contains(at) && Wanted(a.DeviceId) && type is null && minimum is null)
             {
                 var rule = ruleNames.TryGetValue(a.RuleId, out var name) && !string.IsNullOrWhiteSpace(name) ? name : $"Rule {a.RuleId}";
-                rows.Add(new NetworkEvent(at, "alertlog", a.DeviceId, devices.GetValueOrDefault(a.DeviceId)?.Hostname ?? a.Hostname, DeviceSummary.DisplayOf(devices.GetValueOrDefault(a.DeviceId)), a.State.ToString().ToLowerInvariant(), null, rule, null, null));
+                rows.Add(new NetworkEvent(at, "alertlog", a.DeviceId, devices.GetValueOrDefault(a.DeviceId)?.Hostname ?? a.Hostname, DeviceSummary.DisplayOf(devices.GetValueOrDefault(a.DeviceId)), alertKinds.GetValueOrDefault(a, a.State.ToString().ToLowerInvariant()), null, rule, null, null));
             }
         }
 
@@ -337,7 +342,7 @@ public sealed class NetworkTools(
         });
     }
 
-    /// <param name="Kind">The event log's type, or the alert's new state.</param>
+    /// <param name="Kind">The event log's type, or what an alert log row means for its alert: active, acknowledged, worse, better, changed or recovered - or, for one fault of several on LibreNMS 26.10, fault_added or fault_cleared (#77).</param>
     /// <param name="Text">The event log's own message - device text, so it's data, not ours.</param>
     private sealed record NetworkEvent(DateTime Time, string Source, int DeviceId, string? Hostname, string? Display, string? Kind, string? Severity, string? Rule, string? Text, string? User);
 

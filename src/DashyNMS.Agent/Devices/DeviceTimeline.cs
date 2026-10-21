@@ -5,7 +5,7 @@ namespace DashyNMS.Agent.Devices;
 
 /// <summary>One thing that happened to a device, from whichever LibreNMS log said so.</summary>
 /// <param name="Source">eventlog, alertlog or outage.</param>
-/// <param name="Kind">The event log's type, the alert's new state, or went_down / came_back.</param>
+/// <param name="Kind">The event log's type; for an alert log row, what it means for its alert (active, acknowledged, worse, better, changed, recovered, or fault_added / fault_cleared for one fault of several - #77); or went_down / came_back.</param>
 /// <param name="Text">The event log's own message - device text, so it's data, not ours.</param>
 public sealed record TimelineEntry(
     DateTime Time,
@@ -81,12 +81,14 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options)
             }
         }
 
+        // What each row means for its alert (#77): one fault of several clearing isn't the alert recovering.
+        var alertKinds = DashyNMS.Agent.Summaries.AlertLogKinds.Describe(alertLog.Result.Value?.Items ?? []);
         foreach (var a in alertLog.Result.Value?.Items ?? [])
         {
             if (Sources.Utc(a.TimeLogged, options) is { } at && window.Contains(at))
             {
                 var rule = ruleNames.TryGetValue(a.RuleId, out var name) && !string.IsNullOrWhiteSpace(name) ? name : $"Rule {a.RuleId}";
-                entries.Add(new TimelineEntry(at, "alertlog", a.State.ToString().ToLowerInvariant(), Rule: rule));
+                entries.Add(new TimelineEntry(at, "alertlog", alertKinds.GetValueOrDefault(a, a.State.ToString().ToLowerInvariant()), Rule: rule));
             }
         }
 
