@@ -13,7 +13,6 @@ namespace DashyNMS.Agent.Tools;
 [McpServerToolType]
 public sealed class RuleTools(
     ILibreNmsClient client,
-    ILibreNmsTransport transport,
     FleetCache fleet,
     DeviceDirectory directory,
     DeviceScope scopes,
@@ -35,9 +34,10 @@ public sealed class RuleTools(
         "Everything about one alert: why it fired (the ports, sensors or other things the rule matched, with the values that tripped it), the rule's " +
         "name, severity, condition, procedure link and notes, its state, acknowledgement note and how long it's been open, and how often the same rule " +
         "has fired on the same device in the last 30 days, with the most recent times - to tell a one-off from a flapping alert. " +
-        "Takes an alert ID, which active_alerts gives for open alerts.")]
+        "Takes an alert ID, which active_alerts gives for open alerts. On LibreNMS 26.10 and later that's a fault ID: the details are that fault's own " +
+        "(never another core's or port's), and group lists every fault the same rule has open on the device.")]
     public Task<string> AlertDetails(
-        [Description("The LibreNMS alert ID, from active_alerts.")] int alert_id,
+        [Description("The LibreNMS alert ID - on 26.10 and later, a fault ID - from active_alerts (alert_id, or a fault_id from its faults).")] int alert_id,
         CancellationToken cancellationToken = default)
         => runner.RunAsync("alert_details", ct => DetailsAsync(alert_id, ct), cancellationToken);
 
@@ -59,43 +59,30 @@ public sealed class RuleTools(
         => runner.RunAsync("alert_rules", ct => RulesAsync(name, severity, include_disabled, sort, offset, limit, verbose, ct), cancellationToken);
 
     /// <summary>
-    /// LibreNMS's alerts/{id} answers only for an active alert unless asked
-    /// for another state (checked live in #13's trial: an acknowledged alert
-    /// came back as "no alert"), so acknowledged, then recovered, are tried next.
+    /// One alert or fault by ID, in any state. LibreNMS's alerts/{id} (and
+    /// faults/{id}) filters by state like the list, answering only for an active
+    /// one unless asked (checked live in #13's trial), so every state is asked for.
     /// </summary>
     private async Task<Alert?> FindAlertAsync(int alertId, CancellationToken cancellationToken)
     {
-        if (await client.Alerts.GetAsync(alertId, cancellationToken).ConfigureAwait(false) is { } active)
-        {
-            return active;
-        }
-
-        var id = alertId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        foreach (var state in new[] { "2", "0" })
-        {
-            var found = await transport.GetCollectionAsync<Alert>($"alerts/{id}?state={state}", "alerts", cancellationToken).ConfigureAwait(false);
-            if (found.Count > 0)
-            {
-                return found[0];
-            }
-        }
-
-        return null;
+        var found = await client.Alerts
+            .ListAsync(new AlertQuery { Id = alertId, States = AlertQuery.All.States, OrderBy = null }, cancellationToken)
+            .ConfigureAwait(false);
+        return found.Count > 0 ? found[0] : null;
     }
-
     private async Task<JsonObject> DetailsAsync(int alertId, CancellationToken cancellationToken)
     {
         var alert = await FindAlertAsync(alertId, cancellationToken).ConfigureAwait(false)
             ?? throw new ToolException("No alert has that ID. It may have been cleared and removed; active_alerts lists the current ones.");
 
         var rulesTask = Sources.TryAsync(() => fleet.GetRulesAsync(cancellationToken), cancellationToken);
-        var latest = Sources.TryAsync(() => client.Logs.GetLatestForRuleAsync(alert.DeviceId, alert.RuleId, HistoryDepth, cancellationToken), cancellationToken);
         var history = Sources.TryAsync(() => client.Logs.ListAlertLogAsync(alert.DeviceId, HistoryDepth, cancellationToken), cancellationToken);
+        var siblings = Sources.TryAsync(() => client.Alerts.ListAsync(new AlertQuery { RuleId = alert.RuleId, States = AlertQuery.Open.States }, cancellationToken), cancellationToken);
         var devicesTask = directory.GetAllAsync(cancellationToken);
-        await Task.WhenAll(rulesTask, latest, history, devicesTask).ConfigureAwait(false);
+        await Task.WhenAll(rulesTask, history, siblings, devicesTask).ConfigureAwait(false);
 
         var unavailable = new List<Unavailable>();
-        foreach (var (source, error) in new[] { ("rule", rulesTask.Result.Error), ("faults", latest.Result.Error), ("history", history.Result.Error) })
+        foreach (var (source, error) in new[] { ("rule", rulesTask.Result.Error), ("history", history.Result.Error), ("group", siblings.Result.Error) })
         {
             if (error is not null)
             {
@@ -104,7 +91,18 @@ public sealed class RuleTools(
         }
 
         var rule = rulesTask.Result.Value?.FirstOrDefault(r => r.Id == alert.RuleId);
-        var detail = AlertFaultParser.Parse(latest.Result.Value, AlertRuleConditions.ExtractFields(rule));
+        // The fault's own details (26.10+), or its own log entry - never the
+        // newest entry for the rule, which can be another core's (#75).
+        var detail = AlertFaultDetails.Resolve(alert, history.Result.Value ?? [], AlertRuleConditions.ExtractFields(rule));
+
+        // Every fault the rule has open on this device, this one included.
+        var group = AlertGrouping.ByDeviceAndRule((siblings.Result.Value ?? [])
+                .Where(a => a.DeviceId == alert.DeviceId)
+                .Append(alert)
+                .Where(a => a.State != AlertState.Recovered)
+                .GroupBy(a => a.Identity)
+                .Select(g => g.First()))
+            .FirstOrDefault();
         var device = devicesTask.Result.FirstOrDefault(d => d.DeviceId == alert.DeviceId);
         var now = time.GetUtcNow().UtcDateTime;
         var summary = AlertSummary.From(alert, options);
@@ -128,12 +126,14 @@ public sealed class RuleTools(
             alert = new
             {
                 alert_id = alert.Id,
+                entity = AlertGrouping.EntityName(alert),
                 state = summary.State,
                 severity = summary.Severity,
                 since = summary.Since,
                 open_minutes = summary.Since is { } started ? (long?)Math.Max(0, (long)(now - started).TotalMinutes) : null,
                 note = summary.Note,
             },
+            group = group is null || group.IsSingle ? null : AlertGroupSummary.From(group, options),
             device = device is null ? null : DeviceBrief.From(device),
             rule = new
             {
@@ -171,7 +171,8 @@ public sealed class RuleTools(
             _ => $"it fired {firings.Count} times before in the last 30 days",
         };
         var matched = detail.Faults.Count == 0 ? string.Empty : $", matching {DeviceTools.Count(detail.Faults.Count, "item")}";
-        return ToolResult.Ok($"A {summary.Severity} {summary.State} alert{matched}; {times}.", data);
+        var ofGroup = group is { IsSingle: false } ? $"; one of {group.FaultCount} faults this rule has open on the device" : string.Empty;
+        return ToolResult.Ok($"A {summary.Severity} {summary.State} alert{matched}{ofGroup}; {times}.", data);
     }
 
     private async Task<JsonObject> RulesAsync(string? name, string? severityText, bool includeDisabled, string? sortText, int offset, int limit, bool verbose, CancellationToken cancellationToken)

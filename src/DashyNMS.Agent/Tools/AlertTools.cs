@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
+using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
 using ModelContextProtocol.Server;
@@ -24,8 +25,10 @@ public sealed class AlertTools(
 
     [McpServerTool(Name = "active_alerts", Title = "Active alerts", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description(
-        "Alerts in LibreNMS, grouped by device, newest first, with rule name, severity and age. With no time window: the alerts open now " +
-        "(firing or acknowledged), for \"what's alerting?\" or \"is anything critical?\". With a window (hours, or since/until): every alert raised in it, " +
+        "Alerts in LibreNMS, grouped by device, with rule name, severity and age. With no time window: the alerts open now (firing or " +
+        "acknowledged), worst first, for \"what's alerting?\" or \"is anything critical?\". On LibreNMS 26.10 and later one alert is a rule firing on a " +
+        "device, and may hold several faults - one per core, port or sensor it matched: fault_count says how many, faults lists them, and totals counts " +
+        "alerts and faults separately. alert_id is the first fault's ID, for alert_details; group_id names the device and rule. With a window (hours, or since/until): every alert raised in it, " +
         "including ones that have since recovered, each with still_open and recovered_at - for \"what fired overnight?\" or \"what alerted between " +
         "Friday and Monday?\". " + EventTools.WindowHelp + " Filter by severity, device, device group or location. " +
         "Paged: 50 by default, up to 100; use page.next_offset for more. Records are short unless verbose is true.")]
@@ -48,56 +51,80 @@ public sealed class AlertTools(
                 : RaisedAsync(severity, device, group, location, TimeWindow.Resolve(since, until, hours, EventTools.DefaultHours, time), offset, limit, verbose, ct),
             cancellationToken);
 
+    /// <summary>
+    /// The alerts open now, one per rule firing on a device (#75): on LibreNMS
+    /// 26.10 that's every fault it keeps for them - eight busy cores are one
+    /// group of eight faults, not eight alerts. Paged by group, in Core's
+    /// stable order (worst, then most recently changed), so pages don't shuffle.
+    /// </summary>
     private async Task<JsonObject> OpenAsync(string? severityText, string? deviceQuery, string? group, string? location, int offset, int limit, bool verbose, CancellationToken cancellationToken)
     {
         var (severity, deviceId, scope, devices) = await PrepareAsync(severityText, deviceQuery, group, location, offset, limit, cancellationToken).ConfigureAwait(false);
 
         var alerts = await client.Alerts.ListAsync(AlertQuery.Open, cancellationToken).ConfigureAwait(false);
-        var matching = alerts
-            .Where(a => severity is null || a.Severity == severity)
-            .Where(a => deviceId is null || a.DeviceId == deviceId)
-            .Where(a => scope.Includes(a.DeviceId, devices))
-            .OrderByDescending(a => a.Timestamp)
+        var matching = AlertGrouping.ByDeviceAndRule(alerts
+                .Where(a => deviceId is null || a.DeviceId == deviceId)
+                .Where(a => scope.Includes(a.DeviceId, devices)))
+            .Where(g => severity is null || g.Severity == severity)
             .ToList();
 
         var shown = Paging.Apply(matching, offset, limit, out var page);
         var now = time.GetUtcNow().UtcDateTime;
         var groups = shown
-            .GroupBy(a => a.DeviceId)
+            .GroupBy(g => g.DeviceId)
             .Select(g => new
             {
                 device_id = g.Key,
-                hostname = devices.TryGetValue(g.Key, out var d) ? d.Hostname : g.First().Hostname,
+                hostname = devices.TryGetValue(g.Key, out var d) ? d.Hostname : g.First().Primary.Hostname,
                 display = DeviceSummary.DisplayOf(d),
                 device_status = d is not null ? DeviceSummary.StatusOf(d) : null,
-                alerts = g.Select(a =>
+                alerts = g.Select(alertGroup =>
                 {
-                    var alert = AlertSummary.From(a, options);
+                    var alert = AlertGroupSummary.From(alertGroup, options);
                     return new
                     {
+                        alert.GroupId,
                         alert.AlertId,
                         alert.Rule,
                         alert.Severity,
                         alert.State,
+                        alert.FaultCount,
+                        acknowledged_count = alert.AcknowledgedCount > 0 && alert.FaultCount > 1 ? (int?)alert.AcknowledgedCount : null,
+                        alert.Entity,
                         since = verbose ? alert.Since : null,
                         age_minutes = alert.Since is { } started ? (long?)Math.Max(0, (long)(now - started).TotalMinutes) : null,
                         note = verbose ? alert.Note : null,
+                        alert.Faults,
+                        alert.FaultsOmitted,
                     };
                 }).ToList(),
             })
             .ToList();
 
-        var critical = matching.Count(a => a.Severity == AlertSeverity.Critical);
-        var warning = matching.Count(a => a.Severity == AlertSeverity.Warning);
+        var totals = Totals(matching);
         var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
         var summary = matching.Count == 0
             ? "No open alerts" + (filtered ? " match." : ".")
-            : $"{DeviceTools.Count(matching.Count, "open alert")} on {DeviceTools.Count(matching.Select(a => a.DeviceId).Distinct().Count(), "device")} ({critical} critical, {warning} warning)." +
+            : $"{Describe(totals)} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
               PagingNote(page);
 
-        return ToolResult.Ok(summary, new { devices = groups, page });
+        return ToolResult.Ok(summary, new { totals, devices = groups, page });
     }
 
+    /// <summary>Groups and faults counted separately (#75, #77): a group is a rule firing on a device, however many faults it holds.</summary>
+    internal sealed record AlertTotals(int AlertGroups, int Faults, int Devices, int Critical, int Warning, int PartlyAcknowledged);
+
+    internal static AlertTotals Totals(IReadOnlyCollection<AlertGroup> groups) => new(
+        groups.Count,
+        groups.Sum(g => g.FaultCount),
+        groups.Select(g => g.DeviceId).Distinct().Count(),
+        groups.Count(g => g.Severity == AlertSeverity.Critical),
+        groups.Count(g => g.Severity == AlertSeverity.Warning),
+        groups.Count(g => g.IsPartlyAcknowledged));
+
+    /// <summary>"3 open alerts", or "3 open alerts (11 faults)" when a group holds more than one.</summary>
+    internal static string Describe(AlertTotals totals)
+        => DeviceTools.Count(totals.AlertGroups, "open alert") + (totals.Faults > totals.AlertGroups ? $" ({totals.Faults} faults)" : string.Empty);
     /// <summary>
     /// Alerts raised in a window, from the alert log: each "became active"
     /// entry is one raise, matched to a later recovery of the same rule on the
