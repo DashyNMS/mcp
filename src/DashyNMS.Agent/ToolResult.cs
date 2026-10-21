@@ -87,6 +87,10 @@ public static class ToolResult
     }
 
     /// <summary>Redacts every string in <paramref name="result"/>, applies the cap and returns the JSON text.</summary>
+    /// <summary>Whether <paramref name="result"/> fits <paramref name="maxBytes"/> as it stands, before redaction - for a tool that would rather return less than be cut (#80).</summary>
+    public static bool Fits(JsonObject result, int maxBytes)
+        => Encoding.UTF8.GetByteCount(result.ToJsonString(Json)) <= maxBytes;
+
     public static string Render(JsonObject result, Redactor redactor, int maxBytes)
     {
         ArgumentNullException.ThrowIfNull(result);

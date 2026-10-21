@@ -30,7 +30,7 @@ public sealed class AlertGroupToolsTests
     [Fact]
     public async Task Eight_cores_are_one_alert_of_eight_faults()
     {
-        var root = FakeLibreNms.Parse(await Alerts().ActiveAlerts(cancellationToken: CancellationToken.None));
+        var root = FakeLibreNms.Parse(await Alerts().ActiveAlerts(verbose: true, cancellationToken: CancellationToken.None));
         var data = root.GetProperty("data");
 
         var totals = data.GetProperty("totals");
@@ -53,6 +53,17 @@ public sealed class AlertGroupToolsTests
     }
 
     [Fact]
+    public async Task Without_verbose_a_group_lists_its_first_five_faults()
+    {
+        var root = FakeLibreNms.Parse(await Alerts().ActiveAlerts(cancellationToken: CancellationToken.None));
+
+        var cpu = AlertsOn(root.GetProperty("data"), 1).Single();
+        Assert.Equal(AlertTools.BriefFaults, cpu.GetProperty("faults").GetArrayLength());
+        Assert.Equal(3, cpu.GetProperty("faults_omitted").GetInt32());
+        Assert.False(cpu.GetProperty("faults")[0].TryGetProperty("entity_type", out _));
+    }
+
+    [Fact]
     public async Task A_single_fault_reads_like_an_alert()
     {
         var root = FakeLibreNms.Parse(await Alerts().ActiveAlerts(device: "edge-sw3", cancellationToken: CancellationToken.None));
@@ -67,7 +78,7 @@ public sealed class AlertGroupToolsTests
     public async Task Pages_are_groups_in_a_stable_order()
     {
         var first = FakeLibreNms.Parse(await Alerts().ActiveAlerts(limit: 1, cancellationToken: CancellationToken.None)).GetProperty("data");
-        var second = FakeLibreNms.Parse(await Alerts().ActiveAlerts(limit: 1, offset: 1, cancellationToken: CancellationToken.None)).GetProperty("data");
+        var second = FakeLibreNms.Parse(await Alerts().ActiveAlerts(limit: 1, offset: 1, verbose: true, cancellationToken: CancellationToken.None)).GetProperty("data");
 
         Assert.Equal(2, first.GetProperty("page").GetProperty("total").GetInt32());
 

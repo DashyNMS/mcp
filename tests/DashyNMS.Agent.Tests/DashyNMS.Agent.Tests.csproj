@@ -26,4 +26,9 @@
     <ProjectReference Include="../../src/DashyNMS.Agent/DashyNMS.Agent.csproj" />
   </ItemGroup>
 
+  <!-- Core's LibreNMS fixtures (#80), read from the output folder. -->
+  <ItemGroup>
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

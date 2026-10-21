@@ -68,9 +68,39 @@ public sealed class AlertTools(
             .Where(g => severity is null || g.Severity == severity)
             .ToList();
 
-        var shown = Paging.Apply(matching, offset, limit, out var page);
         var now = time.GetUtcNow().UtcDateTime;
-        var groups = shown
+        var totals = OpenAlertTotals.From(matching);
+        var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
+
+        // A page must fit the result cap whole (#80): cut by the cap, the
+        // alerts left off would be skipped by next_offset. So a page that's too
+        // big is shortened, and next_offset follows what was really returned.
+        var take = limit;
+        while (true)
+        {
+            var shown = Paging.Apply(matching, offset, take, out var page);
+            var summary = matching.Count == 0
+                ? "No open alerts visible to this account" + (filtered ? " match." : ".")
+                : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
+                  PagingNote(page);
+            var result = ToolResult.Ok(summary, new { totals, devices = Shape(shown, devices, now, verbose), page });
+
+            if (take <= 1 || ToolResult.Fits(result, options.MaxResultBytes))
+            {
+                return result;
+            }
+
+            take = Math.Max(1, take * 3 / 4);
+        }
+    }
+
+    /// <summary>
+    /// A page of alert groups by device. Without verbose a group lists its
+    /// first few faults by name and state only; verbose gives up to
+    /// <see cref="AlertGroupSummary.MaxFaults"/> with their entity IDs and times.
+    /// </summary>
+    private object Shape(IReadOnlyList<AlertGroup> shown, IReadOnlyDictionary<int, Device> devices, DateTime now, bool verbose)
+        => shown
             .GroupBy(g => g.DeviceId)
             .Select(g => new
             {
@@ -81,6 +111,7 @@ public sealed class AlertTools(
                 alerts = g.Select(alertGroup =>
                 {
                     var alert = AlertGroupSummary.From(alertGroup, options);
+                    var listed = alert.Faults?.Take(verbose ? AlertGroupSummary.MaxFaults : BriefFaults).ToList();
                     return new
                     {
                         alert.GroupId,
@@ -94,23 +125,17 @@ public sealed class AlertTools(
                         since = verbose ? alert.Since : null,
                         age_minutes = alert.Since is { } started ? (long?)Math.Max(0, (long)(now - started).TotalMinutes) : null,
                         note = verbose ? alert.Note : null,
-                        alert.Faults,
-                        alert.FaultsOmitted,
+                        faults = listed?.Select(f => verbose
+                            ? (object)f
+                            : new { f.FaultId, f.Entity, f.State }).ToList(),
+                        faults_omitted = listed is null || alert.FaultCount <= listed.Count ? (int?)null : alert.FaultCount - listed.Count,
                     };
                 }).ToList(),
             })
             .ToList();
 
-        var totals = OpenAlertTotals.From(matching);
-        var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
-        var summary = matching.Count == 0
-            ? "No open alerts visible to this account" + (filtered ? " match." : ".")
-            : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
-              PagingNote(page);
-
-        return ToolResult.Ok(summary, new { totals, devices = groups, page });
-    }
-
+    /// <summary>Faults listed per group without verbose; alert_details or verbose lists more.</summary>
+    public const int BriefFaults = 5;
     /// <summary>
     /// Alerts raised in a window, from the alert log (#76): one per occurrence
     /// of a rule on a device - from its first fault going into alert to its
