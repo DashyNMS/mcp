@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
   security-events: write
+  packages: read
+
+env:
+  DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # The CodeQL action reads its own workflow run when it uploads results;
   # without this the upload fails with "Resource not accessible by integration".
   actions: read
@@ -22,8 +26,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0

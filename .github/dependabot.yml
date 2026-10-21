@@ -1,8 +1,18 @@
 # Everything here is pinned (actions by commit SHA, base images by digest,
-# packages by version, the desktop submodule by commit), so nothing moves
-# unless Dependabot proposes it. Minor and patch updates are grouped per
-# ecosystem to keep the PR count down; majors come one at a time.
+# packages by version), so nothing moves unless Dependabot proposes it. Minor
+# and patch updates are grouped per ecosystem to keep the PR count down;
+# majors come one at a time.
 version: 2
+
+# DashyNMS.Core comes from GitHub Packages, which needs a login. The token is
+# a Dependabot secret (Settings > Secrets and variables > Dependabot):
+# DASHYNMS_PACKAGES_TOKEN, a classic token with read:packages only.
+registries:
+  dashynms:
+    type: nuget-feed
+    url: https://nuget.pkg.github.com/DashyNMS/index.json
+    username: dependabot
+    password: ${{secrets.DASHYNMS_PACKAGES_TOKEN}}
 
 updates:
   - package-ecosystem: github-actions
@@ -32,6 +42,12 @@ updates:
     directories:
       - /src/*
       - /tests/*
+    registries:
+      - dashynms
+    ignore:
+      # Pinned by hand to a development build of DashyNMS/core between
+      # releases (see docs/DEVELOPMENT.md), not bumped on every merge there.
+      - dependency-name: "DashyNMS.Core"
     schedule:
       interval: weekly
       day: monday
@@ -42,10 +58,3 @@ updates:
       packages:
         update-types: [minor, patch]
 
-  # DashyNMS/desktop's Core, compiled into the server - a bump is how its
-  # fixes arrive here.
-  - package-ecosystem: gitsubmodule
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday

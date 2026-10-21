@@ -4,25 +4,31 @@
 
 | Path | What it is |
 | --- | --- |
-| `external/desktop` | [DashyNMS/desktop](https://github.com/DashyNMS/desktop) as a git submodule, tracking `master`. Never edit it here; fixes go to the desktop repo. |
-| `src/DesktopNMS.Core.Portable` | Desktop's Core library, compiled from the submodule for net10.0, the same way mobile does it |
 | `src/DashyNMS.Agent` | The tool layer: tools, redaction, result caps, device lookup. A plain class library, so it can later move to the desktop repo for the mobile app's chat tab. |
 | `src/DashyNMS.Mcp` | The host: settings, the startup check, and MCP over stdio |
 | `tests/DashyNMS.Agent.Tests` | Tools against recorded LibreNMS JSON through Core's real APIs, plus redaction and caps |
 | `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and an end-to-end stdio test against a stand-in LibreNMS |
 
+## Core
+
+The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages - the same Core the desktop and phone apps use. `Directory.Build.props` pins it (`DashyNMSCoreVersion`) to a development build of core's main (`2.0.0-ci.N`) between Core releases. Fixes to Core go to the core repository.
+
+GitHub Packages needs a login even for a public package: set `DASHYNMS_PACKAGES_TOKEN` to a token with `read:packages`. Locally, `gh auth token` works once `gh auth refresh -s read:packages` has added the scope; in Actions, `secrets.GITHUB_TOKEN` with `packages: read` (the package grants this repository read access).
+
+To build against a local checkout of DashyNMS/core instead - a Core change and a server change together - set `DASHYNMS_LOCAL_CORE` to that checkout's folder.
+
 ## Build and test
 
-You need the .NET 10 SDK.
+You need the .NET 10 SDK and `DASHYNMS_PACKAGES_TOKEN` (see Core above).
 
 ```bash
-git clone --recurse-submodules https://github.com/DashyNMS/mcp.git
+git clone https://github.com/DashyNMS/mcp.git
 cd mcp
 dotnet build DashyNMS.Mcp.slnx
 dotnet test DashyNMS.Mcp.slnx
 ```
 
-If you cloned without `--recurse-submodules`, run `git submodule update --init` first. Warnings are errors in this repo's own projects.
+Warnings are errors in this repo's own projects.
 
 To run the server outside Docker, publish it once and point your client at the published program:
 

@@ -16,8 +16,12 @@
     <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="../DesktopNMS.Core.Portable/DesktopNMS.Core.Portable.csproj" />
+  <!-- DesktopNMS.Core - see Directory.Build.props. -->
+  <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' == ''">
+    <PackageReference Include="DashyNMS.Core" Version="$(DashyNMSCoreVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' != ''">
+    <ProjectReference Include="$(DASHYNMS_LOCAL_CORE)/src/DesktopNMS.Core/DesktopNMS.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
