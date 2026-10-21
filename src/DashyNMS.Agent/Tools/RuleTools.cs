@@ -46,6 +46,9 @@ public sealed class RuleTools(
         "LibreNMS's alert rules: each one's name, severity, whether it's enabled, its condition, which devices, device groups and locations it applies to " +
         "(or all), its alert template, how many alerts it has open now and how many it raised in the last 7 days. For \"what are we alerting on?\", " +
         "\"why didn't X alert?\" or \"which rules are noisiest?\". Filter by part of the name or by severity; sort by name, open or raised. " +
+        "On LibreNMS 26.10 and later each rule also says whether it notifies per entity (notify_per_entity, max_entities - null max_entities " +
+        "inherits the server's default, 20 unless changed), which decides whether acknowledging one fault acknowledges the device's others, and " +
+        "flags conditions using device columns 26.10 removed (removed_columns; latency is now device_stats.ping_rtt_last). " +
         "Paged: 50 by default, up to 100. Read-only: rules can only be changed in LibreNMS.")]
     public Task<string> AlertRules(
         [Description("Only rules whose name contains this.")] string? name = null,
@@ -211,8 +214,12 @@ public sealed class RuleTools(
         var raisedLog = DeviceTimeline.ReadBackAsync(depth => client.Logs.ListAlertLogAsync(null, depth, cancellationToken), a => Sources.Utc(a.TimeLogged, options), recent, cancellationToken);
         var groups = Sources.TryAsync(() => scopes.ListGroupsAsync(cancellationToken), cancellationToken);
         var locations = Sources.TryAsync(() => fleet.GetLocationsAsync(cancellationToken), cancellationToken);
+        var system = Sources.TryAsync(() => client.System.GetAsync(cancellationToken), cancellationToken);
         var devicesTask = directory.GetAllAsync(cancellationToken);
-        await Task.WhenAll(rulesTask, templates, open, raisedLog, groups, locations, devicesTask).ConfigureAwait(false);
+        await Task.WhenAll(rulesTask, templates, open, raisedLog, groups, locations, system, devicesTask).ConfigureAwait(false);
+
+        // Which device columns this server has removed (LibreNMS 26.10, #78); unknown keeps them.
+        var serverVersion = LibreNmsVersion.Parse(system.Result.Value?.LocalVersion);
 
         var unavailable = new List<Unavailable>();
         foreach (var (source, error) in new[] { ("templates", templates.Result.Error), ("open alerts", open.Result.Error), ("alert log", raisedLog.Result.Error), ("device groups", groups.Result.Error), ("locations", locations.Result.Error) })
@@ -281,6 +288,16 @@ public sealed class RuleTools(
                         locations = r.Locations.Count > 0 ? r.Locations.Select(id => locationNames.GetValueOrDefault(id) ?? $"location {id}").ToList() : null,
                     },
                 template = templateByRule is null ? null : templateByRule.GetValueOrDefault(r.Id) ?? "default",
+
+                // LibreNMS 26.10's per-entity settings (#78): why acknowledging one fault
+                // may acknowledge every fault for the device and rule.
+                notify_per_entity = r.NotifyPerEntity,
+                max_entities = r.MaxEntities,
+                max_entities_inherited = r.NotifyPerEntity == true && r.MaxEntities is null ? true : (bool?)null,
+                acknowledging = PerEntityNote(r),
+
+                // Device columns 26.10 removed: the rule no longer matches as it used to.
+                removed_columns = RemovedColumns(r, serverVersion),
                 open_alerts = x.Open,
                 raised_last_7_days = x.Raised,
                 notes = verbose && !string.IsNullOrWhiteSpace(r.Notes) ? r.Notes : null,
@@ -289,12 +306,35 @@ public sealed class RuleTools(
         }).ToList();
 
         var page = Paging.Apply(shaped, offset, limit, out var info);
+        var needReview = sorted.Count(x => RemovedColumns(x.Rule, serverVersion) is not null);
         var summary = $"{DeviceTools.Count(rules.Count, "rule")}" + (includeDisabled ? string.Empty : " enabled") +
             (name is null && severity is null ? "." : " match.") +
+            (needReview == 0 ? string.Empty : $" {(needReview == 1 ? "1 rule uses" : $"{needReview} rules use")} device columns LibreNMS 26.10 removed, so won't match as before - see removed_columns.") +
             (raisedComplete || raisedByRule is null ? string.Empty : " The 7-day raised counts only cover as far back as LibreNMS's alert log reaches.") +
             (info.NextOffset is not null || info.Offset > 0 ? " " + Paging.Describe(info, "rule", "rules") : string.Empty);
 
         return ToolResult.Ok(summary, new { rules = page, page = info, unavailable = unavailable.Count > 0 ? unavailable : null });
+    }
+
+    /// <summary>
+    /// What acknowledging one of the rule's faults does on LibreNMS 26.10 -
+    /// null before 26.10, where an alert is one row anyway.
+    /// </summary>
+    private static string? PerEntityNote(AlertRule rule) => rule.NotifyPerEntity switch
+    {
+        null => null,
+        false => "Per-entity notification is off, so acknowledging any fault acknowledges every open fault for that device and rule.",
+        true when rule.MaxEntities is { } limit => $"Each fault is notified and acknowledged on its own while a device has no more than {limit} open; beyond that, acknowledging one acknowledges them all.",
+        true => "Each fault is notified and acknowledged on its own while a device has no more than the server's default limit open (20 unless changed in LibreNMS); beyond that, acknowledging one acknowledges them all.",
+    };
+
+    /// <summary>The removed device columns a rule's conditions or SQL use, with what to use instead - null when none.</summary>
+    private static IReadOnlyList<object>? RemovedColumns(AlertRule rule, Version? serverVersion)
+    {
+        var removed = AlertRuleCompatibility.FindRemovedColumns(rule, serverVersion ?? LibreNmsVersion.Faults);
+        return removed.Count == 0
+            ? null
+            : removed.Select(c => (object)new { column = c.Field, removed_in = c.RemovedIn.ToString(3), replacement = c.Replacement, advice = c.Advice }).ToList();
     }
 
     /// <summary>The condition as LibreNMS shows it: its own text when stored, otherwise built from the rule's builder JSON (Core's formatter).</summary>
