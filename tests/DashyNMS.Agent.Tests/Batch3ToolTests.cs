@@ -9,7 +9,7 @@ public sealed class Batch3ToolTests
 
     private NetworkTools Network() => new(_nms.Client, _nms.Fleet, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
-    private RuleTools Rules() => new(_nms.Client, _nms.Transport, _nms.Fleet, _nms.Directory, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
+    private RuleTools Rules() => new(_nms.Client, _nms.Fleet, _nms.Directory, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
     private static int[] DeviceIds(System.Text.Json.JsonElement list)
         => list.EnumerateArray().Select(x => x.GetProperty("device").GetProperty("device_id").GetInt32()).ToArray();
@@ -17,10 +17,11 @@ public sealed class Batch3ToolTests
     [Fact]
     public async Task Acknowledged_alert_is_found_although_alerts_by_id_only_gives_active_ones()
     {
-        // As LibreNMS answers: nothing for the plain lookup, the alert when asked for state 2.
+        // As LibreNMS answers: nothing for the plain lookup, which only gives active ones -
+        // the alert when asked for every state (0, 1 and 2), as alert_details does.
         _nms.Transport
             .On("alerts/12", """{"status":"ok","alerts":[],"count":0}""")
-            .On("alerts/12?state=2", """
+            .On("alerts/12?state=0%2C1%2C2", """
                 {"status":"ok","alerts":[{"id":12,"device_id":1,"rule_id":3,"state":2,"timestamp":"2026-10-17 09:40:00","hostname":"core-sw1.example.com","severity":"critical","name":"Port down","note":"Ack (ops) cable ordered"}]}
                 """);
 
