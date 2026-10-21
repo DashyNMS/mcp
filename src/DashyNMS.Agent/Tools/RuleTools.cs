@@ -107,19 +107,24 @@ public sealed class RuleTools(
         var now = time.GetUtcNow().UtcDateTime;
         var summary = AlertSummary.From(alert, options);
 
-        // Earlier firings of this rule on this device: only the times it went
-        // into alert count, and the newest is this alert itself (as Core's
-        // AlertHistory counts them for the apps).
-        var firings = (history.Result.Value ?? [])
-            .Where(e => e.RuleId == alert.RuleId && e.DeviceId == alert.DeviceId && e.State == AlertState.Active)
-            .Select(e => Sources.Utc(e.TimeLogged, options))
-            .Where(t => t is not null)
-            .Select(t => t!.Value)
+        // Earlier occurrences of this rule on this device (#76): eight cores
+        // going into alert together are one, and the newest is this alert's own
+        // (as Core's AlertHistory counts them for the apps).
+        var log = history.Result.Value ?? [];
+        var occurrences = AlertOccurrences.From(log, options)
+            .Where(o => o.DeviceId == alert.DeviceId && o.RuleId == alert.RuleId)
+            .ToList();
+        var earlier = occurrences.Take(Math.Max(0, occurrences.Count - 1)).ToList();
+        var firings = earlier
+            .Where(o => o.Started is { } started && now - started <= HistoryPeriod)
+            .Select(o => o.Started!.Value)
             .OrderByDescending(t => t)
-            .Skip(1)
-            .Where(t => now - t <= HistoryPeriod)
             .ToList();
 
+        // The log read may not reach back 30 days, or may start partway through one.
+        var oldest = log.Select(e => Sources.Utc(e.TimeLogged, options)).Where(t => t is not null).DefaultIfEmpty(null).Min();
+        var historyIncomplete = (log.Count >= HistoryDepth && oldest is { } first && now - first < HistoryPeriod)
+            || earlier.Any(o => o.Started is null && (o.Ended is null || now - o.Ended <= HistoryPeriod));
         var faults = ToolResult.Take(detail.Faults, MaxFaults, out var omittedFaults);
         var data = new
         {
@@ -159,15 +164,19 @@ public sealed class RuleTools(
             history = new
             {
                 fired_before_in_30_days = firings.Count,
+                at_least = historyIncomplete ? true : (bool?)null,
                 recent = firings.Take(RecentFirings).ToList(),
             },
             unavailable = unavailable.Count > 0 ? unavailable : null,
         };
 
-        var times = firings.Count switch
+        var times = (firings.Count, historyIncomplete) switch
         {
-            0 => "the first time this rule has fired on this device in 30 days",
-            1 => "it fired once before in the last 30 days",
+            (0, true) => "no earlier firing in the alert log LibreNMS returned, which doesn't cover the whole 30 days",
+            (0, _) => "the first time this rule has fired on this device in 30 days",
+            (1, true) => "it fired at least once before in the last 30 days",
+            (1, _) => "it fired once before in the last 30 days",
+            (_, true) => $"it fired at least {firings.Count} times before in the last 30 days",
             _ => $"it fired {firings.Count} times before in the last 30 days",
         };
         var matched = detail.Faults.Count == 0 ? string.Empty : $", matching {DeviceTools.Count(detail.Faults.Count, "item")}";
@@ -215,10 +224,13 @@ public sealed class RuleTools(
         }
 
         var openByRule = open.Result.Value?.GroupBy(a => a.RuleId).ToDictionary(g => g.Key, g => g.Count());
-        var raisedByRule = raisedLog.Result.Value?.Items
-            .Where(e => e.State == AlertState.Active && Sources.Utc(e.TimeLogged, options) is { } at && recent.Contains(at))
-            .GroupBy(e => e.RuleId)
-            .ToDictionary(g => g.Key, g => g.Count());
+        // Raised = occurrences started in the last 7 days (#76), not fault events: eight cores together are one.
+        var raisedByRule = raisedLog.Result.Value is { } raisedRead
+            ? AlertOccurrences.From(raisedRead.Items, options)
+                .Where(o => o.Started is { } at && recent.Contains(at))
+                .GroupBy(o => o.RuleId)
+                .ToDictionary(g => g.Key, g => g.Count())
+            : null;
         var raisedComplete = raisedLog.Result.Value is { } read && read.CoveredSince <= recent.Since;
         var templateByRule = templates.Result.Value?
             .SelectMany(t => t.AlertRules.Select(r => (Rule: r, Template: t.Name)))
