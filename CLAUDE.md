@@ -2,8 +2,8 @@
 
 Read-only MCP server that lets Claude (and other MCP clients) answer questions about LibreNMS, reusing DashyNMS desktop's Core library.
 
-- `external/desktop` is a git submodule of DashyNMS/desktop (tracking `master`). Run `git submodule update --init` if it's empty. Never edit files under it here - upstream fixes go to the desktop repo.
-- `src/DesktopNMS.Core.Portable` compiles the desktop Core sources for net10.0, the same way DashyNMS/mobile does. `src/DashyNMS.Agent` is the tool layer (a plain class library that later moves to the desktop repo so the mobile chat tab can share it). `src/DashyNMS.Mcp` is the host (a console app).
+- Core (the LibreNMS client and models) is the `DashyNMS.Core` package from DashyNMS/core on GitHub Packages, pinned in `Directory.Build.props`. Restoring needs `DASHYNMS_PACKAGES_TOKEN` (for example `gh auth token`); set `DASHYNMS_LOCAL_CORE` to build against a local core checkout. Core fixes go to the core repo.
+- `src/DashyNMS.Agent` is the tool layer (a plain class library that later moves to the desktop repo so the mobile chat tab can share it). `src/DashyNMS.Mcp` is the host (a console app).
 - Build and test: `dotnet build DashyNMS.Mcp.slnx` and `dotnet test DashyNMS.Mcp.slnx`. Warnings are errors in this repo's own projects.
 - Every tool is read-only. Don't register a write tool without an approval step, and run every string a tool returns through the redactor.
 - stdout carries the MCP protocol over stdio: log to stderr only.

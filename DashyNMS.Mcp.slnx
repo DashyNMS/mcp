@@ -2,7 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/DashyNMS.Agent/DashyNMS.Agent.csproj" />
     <Project Path="src/DashyNMS.Mcp/DashyNMS.Mcp.csproj" />
-    <Project Path="src/DesktopNMS.Core.Portable/DesktopNMS.Core.Portable.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DashyNMS.Agent.Tests/DashyNMS.Agent.Tests.csproj" />

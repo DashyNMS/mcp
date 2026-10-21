@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1
 # DashyNMS MCP server. Speaks MCP over stdio, so run it with -i:
 #   docker run -i --rm -e LIBRENMS_URL=... -e LIBRENMS_TOKEN=... dashynms-mcp
 #
-# Build from the repo root with the desktop submodule checked out:
-#   git submodule update --init && docker build -t dashynms-mcp .
+# Build from the repo root. Core comes from GitHub Packages, which needs a
+# token with read:packages, passed as a build secret so it never lands in a layer:
+#   DASHYNMS_PACKAGES_TOKEN=... docker build --secret id=packages,env=DASHYNMS_PACKAGES_TOKEN -t dashynms-mcp .
 
 # The SDK runs on the build machine's own architecture and cross-compiles for
 # the target (TARGETARCH, set by buildx), so an arm64 image builds as fast as
@@ -15,15 +17,12 @@ ARG TARGETARCH
 WORKDIR /src
 
 # Restore on its own layer, so a source change doesn't download packages again.
-COPY global.json Directory.Build.props ./
-COPY src/DesktopNMS.Core.Portable/DesktopNMS.Core.Portable.csproj src/DesktopNMS.Core.Portable/
+COPY global.json Directory.Build.props nuget.config ./
 COPY src/DashyNMS.Agent/DashyNMS.Agent.csproj src/DashyNMS.Agent/
 COPY src/DashyNMS.Mcp/DashyNMS.Mcp.csproj src/DashyNMS.Mcp/
-RUN dotnet restore src/DashyNMS.Mcp -a $TARGETARCH
+RUN --mount=type=secret,id=packages,env=DASHYNMS_PACKAGES_TOKEN \
+    dotnet restore src/DashyNMS.Mcp -a $TARGETARCH
 
-# Only Core's sources from the submodule: the server compiles them itself
-# (see DesktopNMS.Core.Portable), and nothing else from desktop is needed.
-COPY external/desktop/src/DesktopNMS.Core/ external/desktop/src/DesktopNMS.Core/
 COPY src/ src/
 
 # Not trimmed: the MCP SDK finds tools, and System.Text.Json writes results,
