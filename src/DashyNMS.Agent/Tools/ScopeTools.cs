@@ -30,6 +30,7 @@ public sealed class ScopeTools(DeviceDirectory directory, DeviceScope scopes, To
             .GroupBy(d => d.Location!.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => new
             {
+                location_id = g.Select(d => d.LocationId).Distinct().ToArray() is [int id] && id > 0 ? (int?)id : null,
                 name = g.Key,
                 devices = g.Count(),
                 down = g.Count(d => DeviceSummary.StatusOf(d) == "down"),
@@ -40,6 +41,7 @@ public sealed class ScopeTools(DeviceDirectory directory, DeviceScope scopes, To
         var groups = groupsTask.Result.Value?
             .Select(g => new
             {
+                group_id = g.Id,
                 name = g.Name,
                 description = string.IsNullOrWhiteSpace(g.Description) ? null : g.Description,
                 type = g.Type,
