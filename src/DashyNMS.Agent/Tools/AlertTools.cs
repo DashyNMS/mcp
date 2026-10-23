@@ -116,6 +116,8 @@ public sealed class AlertTools(
                     {
                         alert.GroupId,
                         alert.AlertId,
+                        alert.RuleId,
+                        source = alertGroup.Primary.Source == AlertSource.Fault ? "fault" : "alert",
                         alert.Rule,
                         alert.Severity,
                         alert.State,

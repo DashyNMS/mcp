@@ -134,6 +134,7 @@ public sealed class RuleTools(
             alert = new
             {
                 alert_id = alert.Id,
+                source = alert.Source == AlertSource.Fault ? "fault" : "alert",
                 entity = AlertGrouping.EntityName(alert),
                 state = summary.State,
                 severity = summary.Severity,

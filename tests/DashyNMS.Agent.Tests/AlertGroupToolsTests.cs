@@ -42,6 +42,8 @@ public sealed class AlertGroupToolsTests
         var cpu = AlertsOn(data, 1).Single();
         Assert.Equal("device:1/rule:5", cpu.GetProperty("group_id").GetString());
         Assert.Equal(9200, cpu.GetProperty("alert_id").GetInt32());
+        Assert.Equal("fault", cpu.GetProperty("source").GetString());
+        Assert.Equal(5, cpu.GetProperty("rule_id").GetInt32());
         Assert.Equal(8, cpu.GetProperty("fault_count").GetInt32());
         Assert.Equal(2, cpu.GetProperty("acknowledged_count").GetInt32());
         Assert.Equal("partly_acknowledged", cpu.GetProperty("state").GetString());
