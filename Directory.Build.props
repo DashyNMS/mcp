@@ -16,7 +16,7 @@
       the desktop app pins. Set DASHYNMS_LOCAL_CORE to a checkout of
       DashyNMS/core to build against that instead.
     -->
-    <DashyNMSCoreVersion>2.0.0-ci.13</DashyNMSCoreVersion>
+    <DashyNMSCoreVersion>2.0.0-ci.34</DashyNMSCoreVersion>
   </PropertyGroup>
 
 </Project>

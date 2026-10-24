@@ -7,6 +7,15 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(args);
+// The bundled reader shares installation data, never the account's secrets or its own download cache.
+var definitionsDirectory = Environment.GetEnvironmentVariable("DASHYNMS_SENSOR_DEFINITIONS_DIRECTORY");
+var definitionsSettings = Environment.GetEnvironmentVariable("DASHYNMS_SENSOR_DEFINITIONS_SETTINGS");
+if (!string.IsNullOrEmpty(definitionsDirectory) && !string.IsNullOrEmpty(definitionsSettings)
+    && Path.IsPathFullyQualified(definitionsDirectory) && Path.IsPathFullyQualified(definitionsSettings))
+{
+    builder.Services.AddSingleton(_ => new DesktopNMS.Core.Sensors.SensorDefinitionStore(
+        new(definitionsSettings, definitionsDirectory), readOnly: true));
+}
 
 // stdout carries the MCP protocol, so every log line goes to stderr.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
