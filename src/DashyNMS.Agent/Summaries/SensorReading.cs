@@ -14,7 +14,7 @@ public sealed record SensorReading(
     int SensorId,
     string Type,
     string? Description,
-    double Value,
+    double? Value,
     string? Unit,
     string State,
     double? LowCritical,
@@ -22,6 +22,9 @@ public sealed record SensorReading(
     double? HighWarning,
     double? HighCritical)
 {
+    public string? StateLabel { get; init; }
+    public string? StateDefinitionVersion { get; init; }
+    public string? StateDefinitionOutcome { get; init; }
     /// <summary>Desktop's defaults; the server has no settings of its own for these.</summary>
     private static readonly AppSettings Defaults = new();
 
@@ -54,13 +57,13 @@ public sealed record SensorReading(
 
         var hasLimits = SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null
             || bounds.LowCritical is not null || bounds.LowWarning is not null || bounds.HighWarning is not null || bounds.HighCritical is not null;
-        var severity = hasLimits ? evaluator.Evaluate(sensor.Current) : AlertSeverity.Unknown;
+        var severity = sensor.StateDefinition?.Severity ?? (sensor.HasReading && hasLimits ? evaluator.Evaluate(sensor.Current) : AlertSeverity.Unknown);
 
         return new SensorReading(
             sensor.SensorId,
             sensor.SensorClass ?? "unknown",
             sensor.Description,
-            Math.Round(sensor.Current, 2),
+            sensor.HasReading ? Math.Round(sensor.Current!.Value, 2) : null,
             sensor.SensorClass is { } c && Units.TryGetValue(c, out var unit) ? unit : null,
             severity switch
             {
@@ -72,7 +75,9 @@ public sealed record SensorReading(
             sensor.LimitLow,
             sensor.LimitLowWarn,
             sensor.LimitHighWarn,
-            sensor.LimitHigh);
+            sensor.LimitHigh)
+        { StateLabel = sensor.StateDefinition?.Label, StateDefinitionVersion = sensor.StateDefinition?.CatalogueVersion,
+          StateDefinitionOutcome = sensor.StateDefinition?.Outcome.ToString() };
     }
 
     /// <summary>Critical first, then warning, then the rest - the order a problem list wants.</summary>

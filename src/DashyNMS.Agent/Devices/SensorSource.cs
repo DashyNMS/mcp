@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Serialization;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
+using DesktopNMS.Core.Sensors;
 
 namespace DashyNMS.Agent.Devices;
 
@@ -27,7 +28,8 @@ namespace DashyNMS.Agent.Devices;
 /// same way; until it's there, it's built on the transport here.
 /// </para>
 /// </remarks>
-public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport, TimeProvider time)
+public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport, TimeProvider time,
+    SensorDefinitionStore? definitions = null, DeviceDirectory? devices = null)
 {
     public const int MaxConcurrency = 6;
 
@@ -54,7 +56,9 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
 
         try
         {
-            return await fleet.GetSensorsAsync(cancellationToken).ConfigureAwait(false);
+            var sensors = await fleet.GetSensorsAsync(cancellationToken).ConfigureAwait(false);
+            await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
+            return sensors;
         }
         catch (LibreNmsApiException ex) when (ex.IsPermissionDenied)
         {
@@ -71,7 +75,9 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
             return all.Where(s => s.DeviceId == deviceId).ToList();
         }
 
-        return await ReadDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false);
+        var sensors = await ReadDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false);
+        await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
+        return sensors;
     }
 
     /// <summary>
@@ -95,7 +101,17 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
             }
         })).ConfigureAwait(false);
 
-        return new SensorRead(lists.SelectMany(l => l.Sensors).ToList(), lists.Count(l => l.Denied));
+        var sensors = lists.SelectMany(l => l.Sensors).ToList();
+        await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
+        return new SensorRead(sensors, lists.Count(l => l.Denied));
+    }
+
+    private async Task ApplyDefinitionsAsync(IReadOnlyList<Sensor> sensors, CancellationToken token)
+    {
+        if (definitions is null || devices is null) return;
+        var known = (await devices.GetAllAsync(token).ConfigureAwait(false)).GroupBy(device => device.DeviceId)
+            .ToDictionary(group => group.Key, group => group.First());
+        await definitions.ApplyWithDevicesAsync(sensors, id => known.GetValueOrDefault(id), token).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<Sensor>> ReadDeviceAsync(int deviceId, CancellationToken cancellationToken)
