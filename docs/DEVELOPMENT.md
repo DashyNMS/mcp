@@ -229,8 +229,8 @@ requires a `push` on `refs/heads/main`, protection `true`, and `DashyNMS/mcp`.
 It checks those expected values, nuspec ID/version/repository/commit, the single
 package file set and SHA-256. Any mismatch must block publication. Normal CI
 verification permits PR merge refs and their synthetic merge commits; PR artefacts
-cannot pass publication mode. Main pushes exercise publication eligibility now,
-so an unprotected main fails that step. No publication path is provided.
+cannot pass publication mode. CI does not run publication mode, so a successful
+main run does not establish publication eligibility. No publication path is provided.
 The protection flag reflects Actions context, not an audit of protection rules or
 review quality. The future publisher must verify the source run succeeded and its
 workflow revision was reviewed. The unsigned sidecar
