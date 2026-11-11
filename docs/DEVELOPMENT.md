@@ -170,13 +170,10 @@ assembly. It does not traverse Core or other dependencies, inspect resolved NuGe
 assets/native libraries, detect dynamically loaded assemblies, or validate trimming
 and AOT. It is a direct-reference guard, not a complete dependency graph audit.
 
-Before publication, verify source and binary compatibility (including type forwards),
-MCP schema discovery and the complete resolved dependency graph. Search still uses
-Core ci.34; mobile uses ci.64. Reconcile and prove compatibility upstream rather than
-downgrading mobile. No new package has been packed or published. Establish immutable
-Search/Agent versions, provenance, feed mapping, mobile CI package read access and
-version policy before adding any shipping mobile reference. Audit and publish the
-shared synthetic fixture bundle separately; this step does not publish fixtures.
+Before publication, verify source and binary compatibility (including type forwards)
+and MCP schema discovery. Resolve the licence blocker described below and establish
+a reviewed release policy. Audit and publish the shared synthetic fixture bundle
+separately; this pipeline does not publish fixtures.
 
 Static mobile dispatch/schema and generated serialisation, freshness metadata,
 compact formatting/evidence, matched cross-adapter fixtures, mobile session races,
@@ -184,3 +181,103 @@ Release iOS trimming/AOT, simulator/device execution, Android Release runtime an
 size/token/performance measurements remain unverified follow-ups. MCP-free source
 references alone do not prove the transitive graph or mobile runtime compatibility.
 The other tools, mobile's existing lookups and Diagnostics remain deferred.
+
+### Search package preparation for mobile #596
+
+`search-package.yml` now defines a separate Search package pipeline. It builds and
+runs solution tests, packs **Search only**, inspects its metadata/licence/commit and
+restores, builds and executes a minimal package-only .NET 10 consumer in a fresh
+NuGet package directory. The exact Search ID maps to the local packed feed;
+`DashyNMS.*` dependencies still map to GitHub Packages. The smoke check rejects
+Agent/MCP packages and project dependencies, checks the resolved Core baseline,
+and records the complete resolved library list and package SHA-256 in
+`search-provenance.json`. This is an inventory and direct boundary check, not
+proof of mobile runtime compatibility or of the absence of dynamic loading.
+
+Package identity is `DashyNMS.Agent.Search`, independently versioned from the MCP
+host, initially `0.1.0-ci.<GitHub run ID>.<run attempt>`. These versions are unique
+per run/attempt, not immutable: feed administrators may delete packages, and this
+workflow does not enforce feed retention. `0.1.0-dev` is for local packs only.
+Search's Version and PackageVersion share the same value; the SDK derives assembly
+and informational versions from it. CI builds with that value and repository commit,
+tests without rebuilding, then packs without building or restoring. The smoke check
+compares packed, producer and clean-consumer DLL bytes and checks assembly metadata.
+
+Publication is disabled. This workflow has read-only permissions and no publication
+job, push command or write token. PR and main CI still produce pack/restore evidence.
+The repository PolyForm Internal Use licence blocks publication and mobile
+redistribution pending explicit rights/licence resolution by the owner. Core's MIT
+licence does not relicense Search. Including LICENSE is metadata, not permission.
+The LICENSE notice still says Core comes from an `external/desktop` submodule and
+is offered under the server licence. That notice is stale relative to today's
+`DashyNMS.Core` package dependency. The owner must reconcile the notice and rights
+before publication or redistribution. This preparation preserves LICENSE verbatim;
+it cannot resolve ownership or relicense Core. Search copyright metadata records
+`Copyright (c) 2026 Thomas Pickup`, matching the existing required notice.
+
+Any future publication requires a separately reviewed workflow change after licence
+resolution. Download the package and report from the verified run, then execute
+`scripts/verify-search-provenance.py --for-publication` with that source run's
+expected `SEARCH_VERSION` and `GITHUB_SHA` immediately before pushing the exact
+named package. Supply `EXPECTED_SOURCE_EVENT_NAME`, `EXPECTED_SOURCE_REF`,
+`EXPECTED_SOURCE_REF_PROTECTED`, `EXPECTED_SOURCE_RUN_ID`,
+`EXPECTED_SOURCE_RUN_ATTEMPT` and `EXPECTED_SOURCE_REPOSITORY` from independently
+trusted Actions run context, never by copying the downloaded report. These values
+refer to the producing run, not a later publishing run. The report records the
+source event, ref, protection flag, run ID/attempt and repository. Publication mode
+requires a `push` on `refs/heads/main`, protection `true`, and `DashyNMS/mcp`.
+It checks those expected values, nuspec ID/version/repository/commit, the single
+package file set and SHA-256. Any mismatch must block publication. Normal CI
+verification permits PR merge refs and their synthetic merge commits; PR artefacts
+cannot pass publication mode. CI does not run publication mode, so a successful
+main run does not establish publication eligibility. No publication path is provided.
+The protection flag reflects Actions context, not an audit of protection rules or
+review quality. The future publisher must verify the source run succeeded and its
+workflow revision was reviewed. The unsigned sidecar
+can detect mismatched bytes; it is not a signed attestation or protection against
+replacement of both report and package. Review feed permissions and retention then.
+
+The smoke consumer references the actual Core ILibreNmsClient type used by Search's
+factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
+It verifies the nuspec dependency group, file licence/readme declarations and content,
+and allows only the expected Search DLL under package asset directories. This checks
+the resolved .NET graph, not dynamic loading, dependency safety or mobile behaviour.
+Source embedding was removed. This project adds no explicit SourceLink package or
+symbol-package pipeline. The .NET SDK may supply SourceLink support implicitly;
+this check does not inspect PDB source mappings or prove source debugging works.
+Repository metadata alone does not establish that support.
+
+The Core dependency check accepts NuGet's equivalent bare minimum version and
+`[version, )` range encodings, while the clean restore must resolve the pinned
+baseline exactly. The archive check allows only known packaging metadata, licence,
+readme and the Search DLL; unexpected files and duplicate entries fail. Expected
+CLR assembly version comes from `SEARCH_VERSION`, rather than a fixed 0.1.0.
+A future stable Search release must first choose and verify a stable Core baseline.
+The current prerelease Core dependency is intentional for CI packages and may
+produce NU5104 when packing a stable Search version. Do not suppress that warning
+or declare a stable release ready while the dependency remains a prerelease.
+
+Before mobile consumption, grant the mobile repository Actions read access on the
+new Search package and confirm its existing `packages: read` token can restore the
+exact published version. MCP-token restore in this pipeline cannot prove mobile's
+access. GitHub package access is external configuration, not set by this change.
+Use mobile's existing `DashyNMS.*` feed mapping; never ship a local checkout reference.
+
+**Core reconciliation remains blocked.** Source inventory confirms MCP ci.34 and
+mobile ci.64; neither package metadata nor a larger version number proves API,
+binary or semantic compatibility. Both pins remain unchanged. CI must first test
+the candidate reconciled baseline across MCP and mobile, including alert semantics,
+then update the producer baseline and consumer pin together. This smoke consumer
+verifies ci.34 only. No mobile code or shipping dependency was added. Source/binary
+compatibility of Agent type forwards, schema parity, mobile generation races,
+fixtures, Release iOS trimming/AOT and Android runtime/performance remain follow-up
+work. Keep mobile #596 open. The unchanged PolyForm licence also requires a rights
+review before mobile redistribution; Core's MIT licence does not relicense Search.
+
+All builds, tests, pack/restore and runtime verification are CI-only for this task.
+None has been executed locally; workflow success and feed permissions remain
+unverified until CI runs.
+
+Before any future publication, rerun the complete package inspection and smoke
+verification on the downloaded artefact; the provenance script alone checks only
+identity and hash. Publication remains disabled.

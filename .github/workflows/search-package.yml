@@ -1,0 +1,45 @@
+name: Search package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Unique per run/attempt; this does not make feed storage immutable.
+  # Publication is blocked until explicit licence resolution and release review.
+  SEARCH_VERSION: 0.1.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Build and test solution
+        run: |
+          dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror -p:SearchBuildVersion="$SEARCH_VERSION" -p:RepositoryCommit="$GITHUB_SHA" -p:SourceRevisionId="$GITHUB_SHA" -p:ContinuousIntegrationBuild=true
+          dotnet test DashyNMS.Mcp.slnx -c Release --no-build
+      - name: Pack Search with source provenance
+        run: >-
+          dotnet pack src/DashyNMS.Agent.Search -c Release --no-build --no-restore -o artifacts
+          -p:SearchBuildVersion="$SEARCH_VERSION"
+          -p:RepositoryCommit="$GITHUB_SHA"
+          -p:SourceRevisionId="$GITHUB_SHA"
+          -p:ContinuousIntegrationBuild=true
+      - name: Inspect package and restore a clean Search-only consumer
+        run: python3 scripts/verify-search-package.py
+      - name: Recheck provenance hash (also required before any future publication)
+        run: python3 scripts/verify-search-provenance.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: search-package
+          path: artifacts/
+          if-no-files-found: error
