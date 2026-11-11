@@ -96,6 +96,12 @@ public sealed record DeviceSummary(
 /// </summary>
 public sealed record DeviceBrief(int DeviceId, string? Hostname, string? Display, string? Ip, string? Location, string Status)
 {
+    /// <summary>Projects an already redacted search row into the MCP short record.</summary>
+    public static DeviceBrief FromSummary(DeviceSummary device)
+        => new(device.DeviceId, device.Hostname, device.Display,
+            string.Equals(device.Ip, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Ip,
+            device.Location, device.Status);
+
     public static DeviceBrief From(Device device)
     {
         ArgumentNullException.ThrowIfNull(device);

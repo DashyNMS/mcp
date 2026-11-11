@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -12,7 +11,7 @@ namespace DashyNMS.Agent.Tools;
 
 /// <summary>Finding a device, and how it is doing right now.</summary>
 [McpServerToolType]
-public sealed partial class DeviceTools(
+public sealed class DeviceTools(
     ILibreNmsClient client,
     DeviceDirectory directory,
     DeviceResolver resolver,
@@ -21,7 +20,7 @@ public sealed partial class DeviceTools(
     AgentOptions options)
 {
     public const int DefaultMatches = 10;
-    public const int MaxMatches = 50;
+    public const int MaxMatches = DeviceSearch.MaxMatches;
     public const int MaxProblemPorts = 5;
     public const int MaxStorage = 3;
 
@@ -56,85 +55,12 @@ public sealed partial class DeviceTools(
 
     private async Task<JsonObject> FindAsync(string? query, string? status, string? group, string? location, int offset, int limit, bool verbose, CancellationToken cancellationToken)
     {
-        var text = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
-        var wanted = ParseStatus(status);
-        if (text is null && wanted is null && string.IsNullOrWhiteSpace(group) && string.IsNullOrWhiteSpace(location))
-        {
-            throw new ToolException("Give part of a name, an IP address or a MAC address to search for, or a status, group or location to list.");
-        }
-
-        Paging.Check(offset, limit, MaxMatches);
-        var scope = await scopes.ResolveAsync(group, location, cancellationToken).ConfigureAwait(false);
-        bool Wanted(Device d) => scope.Includes(d) && (wanted is null || DeviceSummary.StatusOf(d) == wanted);
-
-        if (text is not null && MacAddress().IsMatch(text))
-        {
-            return await FindByMacAsync(text, Wanted, offset, limit, verbose, cancellationToken).ConfigureAwait(false);
-        }
-
-        var devices = await directory.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var ranked = devices
-            .Where(Wanted)
-            .Select(d => (Device: d, Rank: text is null ? 0 : Rank(d, text)))
-            .Where(r => r.Rank >= 0)
-            .OrderBy(r => r.Rank)
-            .ThenBy(r => r.Device.Hostname, StringComparer.OrdinalIgnoreCase)
-            .Select(r => DeviceSummary.Shape(r.Device, options, verbose))
-            .ToList();
-
-        var matches = Paging.Apply(ranked, offset, limit, out var page);
-        var summary = page.Total == 0 ? "No devices visible to this account match." : Paging.Describe(page, "matching device", "matching devices");
-        return ToolResult.Ok(summary, new { devices = matches, page });
-    }
-
-    private async Task<JsonObject> FindByMacAsync(string mac, Func<Device, bool> wanted, int offset, int limit, bool verbose, CancellationToken cancellationToken)
-    {
-        var entries = await client.Arp.FindByMacAsync(mac, cancellationToken).ConfigureAwait(false);
-        var devices = (await directory.GetAllAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(d => d.DeviceId);
-
-        var seen = entries
-            .GroupBy(e => e.DeviceId)
-            .Where(g => devices.TryGetValue(g.Key, out var d) && wanted(d))
-            .Select(g => new
-            {
-                device = DeviceSummary.Shape(devices[g.Key], options, verbose),
-                seen_as = g.Select(e => new { ip = e.Ipv4Address, mac = e.MacAddress, port_id = e.PortId }).Distinct().ToList(),
-            })
-            .ToList();
-
-        var matches = Paging.Apply(seen, offset, limit, out var page);
-        var summary = page.Total == 0
-            ? "No device in LibreNMS has this MAC address in its ARP table."
-            : $"{page.Total} device{(page.Total == 1 ? " has" : "s have")} this MAC address in its ARP table." +
-              (page.NextOffset is not null || page.Offset > 0 ? " " + Paging.Describe(page, "device", "devices") : string.Empty);
-
-        return ToolResult.Ok(summary, new { arp_matches = matches, page });
-    }
-
-    private static string? ParseStatus(string? status) => status?.Trim().ToLowerInvariant() switch
-    {
-        null or "" or "any" or "all" => null,
-        "up" => "up",
-        "down" => "down",
-        "disabled" => "disabled",
-        _ => throw new ToolException("Status must be up, down or disabled."),
-    };
-
-    /// <summary>0 exact, 1 starts with, 2 contains, -1 no match - over the fields people call a device by.</summary>
-    private static int Rank(Device device, string text)
-    {
-        string?[] fields = [device.Hostname, device.SysName, device.Display, device.Ip];
-        if (fields.Any(f => string.Equals(f, text, StringComparison.OrdinalIgnoreCase)))
-        {
-            return 0;
-        }
-
-        if (fields.Any(f => f?.StartsWith(text, StringComparison.OrdinalIgnoreCase) == true))
-        {
-            return 1;
-        }
-
-        return fields.Any(f => f?.Contains(text, StringComparison.OrdinalIgnoreCase) == true) ? 2 : -1;
+        var result = await new DeviceSearch(client, directory, scopes, options, runner.Redactor)
+            .FindDevicesAsync(new(query, status, group, location, offset, limit), cancellationToken).ConfigureAwait(false);
+        object Shape(DeviceSummary d) => verbose ? d : DeviceBrief.FromSummary(d);
+        return result.IsMacSearch
+            ? ToolResult.Ok(result.Summary, new { arp_matches = result.Matches.Select(m => new { device = Shape(m.Device), seen_as = m.SeenAs }), page = result.Page })
+            : ToolResult.Ok(result.Summary, new { devices = result.Matches.Select(m => Shape(m.Device)), page = result.Page });
     }
 
     private async Task<JsonObject> HealthAsync(string query, CancellationToken cancellationToken)
@@ -220,6 +146,4 @@ public sealed partial class DeviceTools(
 
     internal static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
 
-    [GeneratedRegex(@"^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$|^(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$|^[0-9A-Fa-f]{12}$")]
-    private static partial Regex MacAddress();
 }

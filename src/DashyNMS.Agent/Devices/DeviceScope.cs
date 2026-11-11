@@ -52,6 +52,7 @@ public sealed class DeviceScope(ILibreNmsClient client, DeviceDirectory director
 
     public async Task<Scope> ResolveAsync(string? group, string? location, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var groupName = Blank(group);
         var locationName = Blank(location);
         if (groupName is null && locationName is null)
@@ -73,12 +74,14 @@ public sealed class DeviceScope(ILibreNmsClient client, DeviceDirectory director
             resolvedLocation = Pick(Locations(devices), l => l, locationName, "location");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new Scope(members, resolvedLocation);
     }
 
     /// <summary>The device groups LibreNMS has, cached for as long as the device list.</summary>
     public async Task<IReadOnlyList<DeviceGroup>> ListGroupsAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Fresh() is { } groups)
         {
             return groups;
@@ -87,12 +90,14 @@ public sealed class DeviceScope(ILibreNmsClient client, DeviceDirectory director
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
                 return fetched;
             }
 
             var list = await client.DeviceGroups.ListAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             _groups = list;
             _groupsFetchedAt = time.GetUtcNow();
             return list;

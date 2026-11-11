@@ -22,6 +22,7 @@ public sealed class DeviceDirectory(ILibreNmsClient client, TimeProvider time)
 
     public async Task<IReadOnlyList<Device>> GetAllAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Fresh() is { } devices)
         {
             return devices;
@@ -31,12 +32,14 @@ public sealed class DeviceDirectory(ILibreNmsClient client, TimeProvider time)
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
                 return fetched;
             }
 
             var list = await client.Devices.ListAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             _devices = list;
             _fetchedAt = time.GetUtcNow();
             return list;

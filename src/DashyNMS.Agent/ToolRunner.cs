@@ -17,6 +17,8 @@ namespace DashyNMS.Agent;
 /// </remarks>
 public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<ToolRunner> logger)
 {
+    internal Redactor Redactor => redactor;
+
     public async Task<string> RunAsync(string tool, Func<CancellationToken, Task<JsonObject>> body, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);

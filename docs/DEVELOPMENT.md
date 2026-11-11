@@ -86,3 +86,83 @@ feat(tools): list device groups and locations
 build(image): smaller container image
 docs: setting up Claude Desktop
 ```
+
+## Typed device search for host-owned clients
+
+`Devices.DeviceSearch.FindDevicesAsync(FindDevicesRequest, CancellationToken)`
+returns typed `DeviceMatch` rows, ARP observations and exact `PageInfo`. Both
+MCP's `find_device` and other hosts use this execution; JSON is an MCP
+presentation format, not the shared API. Ranking, status/scope filtering, MAC
+lookup and paging remain in the executor. Results contain redacted summaries;
+matching and sorting use original device fields. The MCP adapter retains brief
+and verbose records, summaries and its additional JSON byte cap.
+
+A host can call `DeviceSearch.Create(capturedClient, clock, options)` without
+calling `AddDashyNmsAgent`. The factory rejects null dependencies, creates fresh
+device/scope caches and registers or replaces no host services. Supply a client
+bound to one immutable connection generation. Cancel calls and discard the
+executor on switch/sign-out/settings change. Do not wrap a mutable session client
+and assume cache ownership alone prevents requests reaching a new connection.
+An internal constructor accepts existing caches for MCP's shared directory lifetime.
+
+Cancellation reaches resource APIs and the directory semaphore. Already-cancelled
+calls fail even with warm caches; cancelled late directory responses are not
+cached, and execution checks cancellation before returning results.
+
+Each cache fetch belongs to the caller holding its semaphore. If that owner is
+cancelled, a late successful response is discarded; a waiting uncancelled caller
+then fetches again with its own token. Cancelling a waiter does not cancel the
+owner. An uncooperative owner transport holds the semaphore until it completes.
+Hosts still need their own linked deadline/WaitAsync bound for uncooperative
+transports.
+The executor does not log, but propagated exceptions can contain sensitive data.
+Adapters own the exception policy: mobile must map them to fixed safe statuses and must not expose exception messages,
+ToolException details, server bodies or exception objects in logs/model output.
+MCP continues to apply ToolRunner's existing server error policy.
+
+This is the first extraction for mobile #596, not a completed mobile integration.
+The Agent assembly still references MCP; a separate dependency-free assembly,
+source-generated/static mobile dispatch, safe typed failure/freshness metadata,
+Core version reconciliation, immutable package/fixture publication and runtime
+trimming/AOT proofs remain follow-up requirements before shipping on mobile.
+Redaction recognises secret patterns; returned network strings remain untrusted
+and need the host's marker/control sanitisation and presentation budget.
+
+`DeviceSearchTests` uses synthetic transport responses for MCP/typed parity,
+filters and paging, and controlled APIs for ranking/redaction, generation cache
+isolation, pre-cancellation and late-response cancellation. Existing search tests
+continue to cover the MCP brief/verbose and MAC output contracts. These tests
+must run in CI; they were not executed locally for this extraction.
+
+### Extraction boundaries and privacy limits
+
+Paging selects raw matches before summary construction and redaction, including
+ARP groups. The typed API caps rows, but has no string-length or total-byte cap.
+MCP applies its existing JSON byte cap afterwards. Page totals describe the
+matched snapshot before that presentation cap. They are not a freshness guarantee.
+Device and group lists can be cached for 60 seconds; group membership and ARP
+observations are fetched separately, so a result is not an atomic server snapshot.
+The result has no connection generation, fetched-at, stale, partial-source or
+safe failure metadata.
+
+Redaction removes recognised secret patterns. It does not anonymise hostnames,
+IP/MAC addresses, locations, device IDs or topology. Matching still uses raw text.
+A secret-bearing query can therefore reveal existence through counts, ordering
+or an empty/non-empty page even when returned text is redacted. Do not expose
+this executor as a privacy boundary or to callers with less authority than the
+captured LibreNMS account. Group ambiguity exceptions can contain raw candidate
+names in Details. Treat all exception objects and their details as sensitive.
+
+The factory accepts an optional Redactor and otherwise creates the default.
+MCP reuses ToolRunner's supplied redactor. The internal constructor supports
+existing MCP caches; public callers use the isolated factory. Neither path can
+verify that the captured client represents one immutable connection. Hosts must
+discard the whole instance when the connection changes. Cancellation is
+cooperative; checks cannot make a concurrent connection switch atomic.
+
+A safe typed exception/result contract is deferred. Replacing propagated failures
+with a catch-all here would hide caller cancellation and diagnostic distinctions,
+and would change MCP's established error mapping. Mobile must supply its own
+fixed error codes/messages without forwarding ToolException Details or transport
+exception messages. MCP's current ToolRunner still logs exception objects and can
+return redacted server details; its policy is not a safe mobile logging contract.
