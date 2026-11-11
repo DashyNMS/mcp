@@ -7,7 +7,7 @@ public sealed class AgentOptions
 
     /// <summary>
     /// The most JSON (UTF-8 bytes) one tool call returns. Bigger results lose
-    /// list entries, then text, and say so - see <see cref="ToolResult"/>.
+    /// list entries, then text, and say so - the MCP adapter reports omissions.
     /// </summary>
     public int MaxResultBytes { get; init; } = DefaultMaxResultBytes;
 
