@@ -116,7 +116,8 @@ public sealed partial class DeviceSearch
 
         var matches = Paging.Apply(seen, offset, limit, out var page)
             .Select(g => new DeviceMatch(Safe(devices[g.Key]),
-                g.Select(e => new ArpSighting(Clean(e.Ipv4Address), Clean(e.MacAddress), e.PortId)).Distinct().ToList()))
+                g.Select(e => (e.Ipv4Address, e.MacAddress, e.PortId)).Distinct()
+                    .Select(e => new ArpSighting(Clean(e.Ipv4Address), Clean(e.MacAddress), e.PortId)).ToList()))
             .ToList();
         var summary = page.Total == 0
             ? "No device in LibreNMS has this MAC address in its ARP table."
