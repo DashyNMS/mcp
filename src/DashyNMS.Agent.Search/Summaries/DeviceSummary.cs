@@ -29,7 +29,9 @@ public sealed record DeviceSummary(
             device.Hardware,
             LocationName(device.Location),
             StatusOf(device),
-            Sources.Utc(device.LastPolled, options));
+            device.LastPolled is { } polled
+                ? DesktopNMS.Core.ServerTime.ToLocal(polled, options.ServerTimestampsAreUtc).ToUniversalTime()
+                : null);
     }
 
     /// <summary>Full when asked for, otherwise the few fields that tell devices apart (#35).</summary>

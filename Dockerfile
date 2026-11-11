@@ -18,6 +18,7 @@ WORKDIR /src
 
 # Restore on its own layer, so a source change doesn't download packages again.
 COPY global.json Directory.Build.props nuget.config ./
+COPY src/DashyNMS.Agent.Search/DashyNMS.Agent.Search.csproj src/DashyNMS.Agent.Search/
 COPY src/DashyNMS.Agent/DashyNMS.Agent.csproj src/DashyNMS.Agent/
 COPY src/DashyNMS.Mcp/DashyNMS.Mcp.csproj src/DashyNMS.Mcp/
 RUN --mount=type=secret,id=packages,env=DASHYNMS_PACKAGES_TOKEN \

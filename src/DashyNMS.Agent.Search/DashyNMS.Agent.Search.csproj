@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>DashyNMS.Agent</RootNamespace>
+    <Description>Typed read-only device search over host-owned LibreNMS clients, without MCP.</Description>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' == ''">
+    <PackageReference Include="DashyNMS.Core" Version="$(DashyNMSCoreVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' != ''">
+    <ProjectReference Include="$(DASHYNMS_LOCAL_CORE)/src/DesktopNMS.Core/DesktopNMS.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DashyNMS.Agent" />
+    <InternalsVisibleTo Include="DashyNMS.Agent.Tests" />
+    <InternalsVisibleTo Include="DashyNMS.Agent.Search.Tests" />
+  </ItemGroup>
+</Project>
