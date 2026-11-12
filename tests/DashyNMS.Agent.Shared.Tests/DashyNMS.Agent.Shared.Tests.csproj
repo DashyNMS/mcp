@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <RootNamespace>DashyNMS.Agent.Search.Tests</RootNamespace>
+    <RootNamespace>DashyNMS.Agent.Shared.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -20,18 +20,18 @@
     <Using Include="NSubstitute" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(SearchPackageVersion)' == ''">
-    <ProjectReference Include="../../src/DashyNMS.Agent.Search/DashyNMS.Agent.Search.csproj" />
+  <ItemGroup Condition="'$(SharedPackageVersion)' == ''">
+    <ProjectReference Include="../../src/DashyNMS.Agent.Shared/DashyNMS.Agent.Shared.csproj" />
   </ItemGroup>
 
   <!--
-    CI's Core compatibility job sets SearchPackageVersion to test the exact
-    packed Search binary, compiled against MCP's Core pin, while a consumer
+    CI's Core compatibility job sets SharedPackageVersion to test the exact
+    packed Shared binary, compiled against MCP's Core pin, while a consumer
     pins a different Core (DashyNMSCoreVersion). That is the combination a
     host such as mobile restores, so source builds alone would not prove it.
   -->
-  <ItemGroup Condition="'$(SearchPackageVersion)' != ''">
-    <PackageReference Include="DashyNMS.Agent.Search" Version="[$(SearchPackageVersion)]" />
+  <ItemGroup Condition="'$(SharedPackageVersion)' != ''">
+    <PackageReference Include="DashyNMS.Agent.Shared" Version="[$(SharedPackageVersion)]" />
     <PackageReference Include="DashyNMS.Core" Version="[$(DashyNMSCoreVersion)]" />
   </ItemGroup>
 

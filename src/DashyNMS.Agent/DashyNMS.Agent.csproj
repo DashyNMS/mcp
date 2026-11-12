@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../DashyNMS.Agent.Search/DashyNMS.Agent.Search.csproj" />
+    <ProjectReference Include="../DashyNMS.Agent.Shared/DashyNMS.Agent.Shared.csproj" />
     <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
   </ItemGroup>
 

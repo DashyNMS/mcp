@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
-version = os.environ['SEARCH_VERSION']
+version = os.environ['SHARED_VERSION']
 commit = os.environ['GITHUB_SHA']
 if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != commit:
     raise SystemExit('Checkout HEAD does not match expected source GITHUB_SHA')
@@ -20,22 +20,22 @@ if subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain', '--
 match = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?', version)
 assert match, version
 assembly_version = ', '.join((*match.groups(), '0'))
-package = root / 'artifacts' / f'DashyNMS.Agent.Search.{version}.nupkg'
+package = root / 'artifacts' / f'DashyNMS.Agent.Shared.{version}.nupkg'
 ns = {'n': 'http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd'}
 with zipfile.ZipFile(package) as archive:
-    metadata = ET.fromstring(archive.read('DashyNMS.Agent.Search.nuspec')).find('n:metadata', ns)
-    assert metadata.findtext('n:id', namespaces=ns) == 'DashyNMS.Agent.Search'
+    metadata = ET.fromstring(archive.read('DashyNMS.Agent.Shared.nuspec')).find('n:metadata', ns)
+    assert metadata.findtext('n:id', namespaces=ns) == 'DashyNMS.Agent.Shared'
     assert metadata.findtext('n:version', namespaces=ns) == version
     repository = metadata.find('n:repository', ns)
     assert repository.attrib['commit'] == commit
     assert repository.attrib['url'] == 'https://github.com/DashyNMS/mcp'
-    # Search ships its own copy so packing never depends on files outside the
+    # The Shared package ships its own copy so packing never depends on files outside the
     # project; it must stay identical to the repository licence.
-    assert archive.read('LICENSE') == (root / 'src/DashyNMS.Agent.Search/LICENSE').read_bytes() == (root / 'LICENSE').read_bytes()
-    # Search bundles no dependency DLLs: consumers restore Core under its own
+    assert archive.read('LICENSE') == (root / 'src/DashyNMS.Agent.Shared/LICENSE').read_bytes() == (root / 'LICENSE').read_bytes()
+    # The Shared package bundles no dependency DLLs: consumers restore Core under its own
     # terms, so NOTICES.md says the project licence does not cover it.
     assert archive.read('NOTICES.md') == (root / 'NOTICES.md').read_bytes()
-    assert archive.read('README.md') == (root / 'src/DashyNMS.Agent.Search/README.md').read_bytes()
+    assert archive.read('README.md') == (root / 'src/DashyNMS.Agent.Shared/README.md').read_bytes()
     licence = metadata.find('n:license', ns)
     assert licence.attrib['type'] == 'expression' and licence.text == 'MIT'
     assert metadata.findtext('n:readme', namespaces=ns) == 'README.md'
@@ -45,8 +45,8 @@ with zipfile.ZipFile(package) as archive:
     # Fail closed for every ZIP file, including new NuGet asset directories.
     names = archive.namelist()
     assert len(names) == len(set(names)), 'Duplicate ZIP entries'
-    fixed = {'DashyNMS.Agent.Search.nuspec', 'LICENSE', 'NOTICES.md', 'README.md',
-             '[Content_Types].xml', '_rels/.rels', 'lib/net10.0/DashyNMS.Agent.Search.dll'}
+    fixed = {'DashyNMS.Agent.Shared.nuspec', 'LICENSE', 'NOTICES.md', 'README.md',
+             '[Content_Types].xml', '_rels/.rels', 'lib/net10.0/DashyNMS.Agent.Shared.dll'}
     assert all(name in fixed or re.fullmatch(r'package/services/metadata/core-properties/[A-Za-z0-9]+\.psmdcp', name)
                for name in names), names
     groups = metadata.findall('n:dependencies/n:group', ns)
@@ -61,18 +61,18 @@ with zipfile.ZipFile(package) as archive:
     assert dependency.tag == '{' + ns['n'] + '}dependency'
     assert dependency.attrib['id'] == 'DashyNMS.Core'
     assert dependency.attrib['version'].replace(' ', '') in (core, f'[{core},)')
-    assert 'lib/net10.0/DashyNMS.Agent.Search.dll' in archive.namelist()
+    assert 'lib/net10.0/DashyNMS.Agent.Shared.dll' in archive.namelist()
 
 with tempfile.TemporaryDirectory() as directory:
     smoke = Path(directory)
     config = ET.parse(root / 'nuget.config')
-    config.find('packageSources').append(ET.Element('add', key='search-smoke', value=str(package.parent)))
-    mapping = ET.SubElement(config.find('packageSourceMapping'), 'packageSource', key='search-smoke')
-    ET.SubElement(mapping, 'package', pattern='DashyNMS.Agent.Search')
+    config.find('packageSources').append(ET.Element('add', key='shared-smoke', value=str(package.parent)))
+    mapping = ET.SubElement(config.find('packageSourceMapping'), 'packageSource', key='shared-smoke')
+    ET.SubElement(mapping, 'package', pattern='DashyNMS.Agent.Shared')
     config.write(smoke / 'nuget.config')
     (smoke / 'Smoke.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
-<ItemGroup><PackageReference Include="DashyNMS.Agent.Search" Version="[{version}]" /></ItemGroup>
+<ItemGroup><PackageReference Include="DashyNMS.Agent.Shared" Version="[{version}]" /></ItemGroup>
 </Project>''')
     (smoke / 'Program.cs').write_text('''using System;
 using System.Reflection;
@@ -83,10 +83,10 @@ var core = typeof(ILibreNmsClient);
 if (search.GetMethod("Create")!.GetParameters()[0].ParameterType != core)
     throw new Exception("Search factory does not use the restored Core type");
 if (search.Assembly.GetName().Version != new Version(''' + assembly_version + '''))
-    throw new Exception("Unexpected Search assembly version");
+    throw new Exception("Unexpected Shared assembly version");
 var informational = search.Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
 if (!informational.StartsWith("''' + version + '''+", StringComparison.Ordinal) || !informational.EndsWith("''' + commit + '''", StringComparison.Ordinal))
-    throw new Exception("Search version/commit mismatch");
+    throw new Exception("Shared version/commit mismatch");
 Console.WriteLine(core.Assembly.FullName);
 ''')
     env = dict(os.environ, NUGET_PACKAGES=str(smoke / 'packages'))
@@ -98,7 +98,7 @@ Console.WriteLine(core.Assembly.FullName);
     libraries = sorted(assets['libraries'])
     assert all(item['type'] == 'package' for item in assets['libraries'].values())
     assert not any(name.split('/')[0].lower().startswith('modelcontextprotocol') or name.split('/')[0].lower() == 'dashynms.agent' for name in libraries)
-    assert f'DashyNMS.Agent.Search/{version}' in libraries
+    assert f'DashyNMS.Agent.Shared/{version}' in libraries
     assert f'DashyNMS.Core/{core}' in libraries
     # Traverse the entire resolved dependency closure, including transitive packages.
     for target in assets['targets'].values():
@@ -109,8 +109,8 @@ Console.WriteLine(core.Assembly.FullName);
         assert not any(name.startswith('modelcontextprotocol') or name in ('dashynms.agent', 'dashynms.mcp') for name in resolved), resolved
     # Compare the restored DLL with the producer DLL that solution tests used.
     with zipfile.ZipFile(package) as archive:
-        assert archive.read('lib/net10.0/DashyNMS.Agent.Search.dll') == (root / 'src/DashyNMS.Agent.Search/bin/Release/net10.0/DashyNMS.Agent.Search.dll').read_bytes()
-        assert archive.read('lib/net10.0/DashyNMS.Agent.Search.dll') == (smoke / 'packages/dashynms.agent.search' / version / 'lib/net10.0/DashyNMS.Agent.Search.dll').read_bytes()
+        assert archive.read('lib/net10.0/DashyNMS.Agent.Shared.dll') == (root / 'src/DashyNMS.Agent.Shared/bin/Release/net10.0/DashyNMS.Agent.Shared.dll').read_bytes()
+        assert archive.read('lib/net10.0/DashyNMS.Agent.Shared.dll') == (smoke / 'packages/dashynms.agent.shared' / version / 'lib/net10.0/DashyNMS.Agent.Shared.dll').read_bytes()
     subprocess.run(['dotnet', 'build', str(smoke / 'Smoke.csproj'), '-c', 'Release', '--no-restore', '-warnaserror'], check=True, env=env)
     subprocess.run(['dotnet', str(smoke / 'bin/Release/net10.0/Smoke.dll')], check=True, env=env)
 
@@ -119,4 +119,4 @@ report = {'package': package.name, 'version': version, 'repositoryCommit': commi
               'event': 'EVENT_NAME', 'ref': 'REF', 'refProtected': 'REF_PROTECTED',
               'runId': 'RUN_ID', 'runAttempt': 'RUN_ATTEMPT', 'repository': 'REPOSITORY'}.items()},
           'sha256': hashlib.sha256(package.read_bytes()).hexdigest(), 'resolvedLibraries': libraries}
-(root / 'artifacts/search-provenance.json').write_text(json.dumps(report, indent=2) + '\n')
+(root / 'artifacts/shared-provenance.json').write_text(json.dumps(report, indent=2) + '\n')

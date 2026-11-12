@@ -2,12 +2,12 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
-    <PackageId>DashyNMS.Agent.Search</PackageId>
+    <PackageId>DashyNMS.Agent.Shared</PackageId>
     <Authors>Thomas Pickup</Authors>
     <Copyright>Copyright (c) 2026 Thomas Pickup</Copyright>
-    <SearchBuildVersion Condition="'$(SearchBuildVersion)' == ''">0.1.0-dev</SearchBuildVersion>
-    <Version>$(SearchBuildVersion)</Version>
-    <PackageVersion>$(SearchBuildVersion)</PackageVersion>
+    <SharedBuildVersion Condition="'$(SharedBuildVersion)' == ''">2.0.0-dev</SharedBuildVersion>
+    <Version>$(SharedBuildVersion)</Version>
+    <PackageVersion>$(SharedBuildVersion)</PackageVersion>
     <PackageProjectUrl>https://github.com/DashyNMS/mcp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DashyNMS/mcp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -15,7 +15,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RootNamespace>DashyNMS.Agent</RootNamespace>
-    <Description>Typed read-only device search over host-owned LibreNMS clients, without MCP.</Description>
+    <Description>Typed read-only LibreNMS operations shared by DashyNMS hosts over host-owned clients, without MCP.</Description>
   </PropertyGroup>
   <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' == ''">
     <PackageReference Include="DashyNMS.Core" Version="$(DashyNMSCoreVersion)" />
@@ -24,7 +24,7 @@
     <ProjectReference Include="$(DASHYNMS_LOCAL_CORE)/src/DesktopNMS.Core/DesktopNMS.Core.csproj" />
   </ItemGroup>
   <Target Name="RejectLocalCorePackage" BeforeTargets="Pack" Condition="'$(DASHYNMS_LOCAL_CORE)' != ''">
-    <Error Text="Search packages must use the pinned DashyNMS.Core package, not a local checkout." />
+    <Error Text="Shared packages must use the pinned DashyNMS.Core package, not a local checkout." />
   </Target>
   <ItemGroup>
     <None Include="../../NOTICES.md" Pack="true" PackagePath="/" />
@@ -34,6 +34,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DashyNMS.Agent" />
     <InternalsVisibleTo Include="DashyNMS.Agent.Tests" />
-    <InternalsVisibleTo Include="DashyNMS.Agent.Search.Tests" />
+    <InternalsVisibleTo Include="DashyNMS.Agent.Shared.Tests" />
   </ItemGroup>
 </Project>

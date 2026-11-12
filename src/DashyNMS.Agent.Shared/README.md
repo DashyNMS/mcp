@@ -1,6 +1,9 @@
-# DashyNMS.Agent.Search
+# DashyNMS.Agent.Shared
 
-Typed, read-only LibreNMS device search over a host-owned `DashyNMS.Core` client.
+Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
+by the DashyNMS MCP server and the DashyNMS apps. It holds device search today; other
+shared operations join it rather than shipping as separate packages. It replaces
+`DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
 adapter). The direct dependency is Core; Core's own dependencies remain transitive.
 Namespaces retain the `DashyNMS.Agent` prefix for source compatibility.
@@ -24,10 +27,10 @@ limits, sanitisation, deadlines and evidence ownership checks.
 
 ## Consumption status
 
-Each verified push to `main` in DashyNMS/mcp publishes `0.1.0-ci.<run-id>.<attempt>`
+Each verified push to `main` in DashyNMS/mcp publishes `2.0.0-ci.<run-id>.<attempt>`
 to GitHub Packages (`https://nuget.pkg.github.com/DashyNMS/index.json`), with a GitHub
 build provenance attestation and the repository commit in the nuspec. Pull requests
-verify packages without publishing. `0.1.0-dev` identifies local packs and must not
+verify packages without publishing. `2.0.0-dev` identifies local packs and must not
 be used as a shipping pin.
 
 The feed refuses a second push of a version and the workflow never overwrites one,
@@ -37,21 +40,21 @@ lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHu
 feed and restore with a token that has `packages: read`.
 
 The package is built against Core `2.0.0-ci.64` (MCP's pin, and mobile's) and
-declares it as a minimum. Before publication, CI runs the Search tests on the exact
+declares it as a minimum. Before publication, CI runs the Shared tests on the exact
 packed binary with that Core. That is plain .NET
 evidence: a consumer must still verify its own restore, Release trimming/AOT and
 runtime behaviour in its CI.
 
 ## Licence
 
-This Search library and its package README are MIT licensed, copyright (c) 2026
+This Shared library and its package README are MIT licensed, copyright (c) 2026
 Thomas Pickup. Include the bundled LICENSE when redistributing it with mobile.
 The project-owned MCP host, Agent adapter and other repository files are also MIT
 licensed. Dependencies retain their own licences. See
 [notices](https://github.com/DashyNMS/mcp/blob/main/NOTICES.md) for provenance and
 third-party rights limitations.
 
-A stable Search release also needs a verified stable Core dependency. The current
+A stable Shared release also needs a verified stable Core dependency. The current
 prerelease Core baseline is for CI packages and can trigger NuGet warning NU5104
 if used by a stable package.
 
