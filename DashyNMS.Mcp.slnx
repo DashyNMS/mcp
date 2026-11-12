@@ -1,11 +1,11 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/DashyNMS.Agent.Search/DashyNMS.Agent.Search.csproj" />
+    <Project Path="src/DashyNMS.Agent.Shared/DashyNMS.Agent.Shared.csproj" />
     <Project Path="src/DashyNMS.Agent/DashyNMS.Agent.csproj" />
     <Project Path="src/DashyNMS.Mcp/DashyNMS.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/DashyNMS.Agent.Search.Tests/DashyNMS.Agent.Search.Tests.csproj" />
+    <Project Path="tests/DashyNMS.Agent.Shared.Tests/DashyNMS.Agent.Shared.Tests.csproj" />
     <Project Path="tests/DashyNMS.Agent.Tests/DashyNMS.Agent.Tests.csproj" />
     <Project Path="tests/DashyNMS.Mcp.Tests/DashyNMS.Mcp.Tests.csproj" />
   </Folder>

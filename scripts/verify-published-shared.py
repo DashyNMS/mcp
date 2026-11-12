@@ -17,8 +17,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-version = os.environ['SEARCH_VERSION']
-expected = os.environ['EXPECTED_SEARCH_SHA256']
+version = os.environ['SHARED_VERSION']
+expected = os.environ['EXPECTED_SHARED_SHA256']
 token = os.environ['GITHUB_TOKEN']
 feed = 'https://nuget.pkg.github.com/DashyNMS/index.json'
 basic = 'Basic ' + base64.b64encode(f'DashyNMS:{token}'.encode()).decode()
@@ -26,8 +26,8 @@ basic = 'Basic ' + base64.b64encode(f'DashyNMS:{token}'.encode()).decode()
 # service index chooses the download URL, so a misconfigured or tampered index
 # must not be able to point the credential anywhere else.
 CREDENTIAL_HOSTS = {'nuget.pkg.github.com', 'api.github.com'}
-PACKAGE_PAGE = 'https://github.com/orgs/DashyNMS/packages/nuget/package/DashyNMS.Agent.Search'
-LINKED_PAGE = 'https://github.com/DashyNMS/mcp/pkgs/nuget/DashyNMS.Agent.Search'
+PACKAGE_PAGE = 'https://github.com/orgs/DashyNMS/packages/nuget/package/DashyNMS.Agent.Shared'
+LINKED_PAGE = 'https://github.com/DashyNMS/mcp/pkgs/nuget/DashyNMS.Agent.Shared'
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -51,7 +51,7 @@ def get(url, authorisation):
     token there would leak it and can make the storage reject the request.
     """
     require_https(url, CREDENTIAL_HOSTS)
-    request = urllib.request.Request(url, headers={'Authorization': authorisation, 'User-Agent': 'dashynms-search-publish'})
+    request = urllib.request.Request(url, headers={'Authorization': authorisation, 'User-Agent': 'dashynms-shared-publish'})
     try:
         with _opener.open(request, timeout=60) as response:
             return response.read()
@@ -63,7 +63,7 @@ def get(url, authorisation):
     # plain-HTTP hop would let anyone on the path see or swap them first.
     if urllib.parse.urlsplit(location).scheme != 'https':
         raise SystemExit(f'Download redirected to non-HTTPS {location}')
-    plain = urllib.request.Request(location, headers={'User-Agent': 'dashynms-search-publish'})
+    plain = urllib.request.Request(location, headers={'User-Agent': 'dashynms-shared-publish'})
     with _opener.open(plain, timeout=120) as response:
         return response.read()
 
@@ -72,7 +72,7 @@ resources = json.loads(get(feed, basic))['resources']
 base = next(r['@id'] for r in resources if r['@type'].startswith('PackageBaseAddress/3.0.0'))
 require_https(base, CREDENTIAL_HOSTS)
 lower = version.lower()
-url = f"{base.rstrip('/')}/dashynms.agent.search/{lower}/dashynms.agent.search.{lower}.nupkg"
+url = f"{base.rstrip('/')}/dashynms.agent.shared/{lower}/dashynms.agent.shared.{lower}.nupkg"
 for attempt in range(10):
     try:
         published = get(url, basic)
@@ -88,7 +88,7 @@ if actual != expected:
 
 def anonymous_status(url):
     """Status and redirect target of an unauthenticated, unfollowed request."""
-    request = urllib.request.Request(url, headers={'User-Agent': 'dashynms-search-publish'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'dashynms-shared-publish'})
     try:
         with _opener.open(request, timeout=60) as response:
             return response.status, None
@@ -120,7 +120,7 @@ def anonymous_access():
 # only, so the Actions token may be refused. A refusal falls through to the
 # anonymous check; it never counts as success on its own.
 try:
-    package = json.loads(get('https://api.github.com/orgs/DashyNMS/packages/nuget/DashyNMS.Agent.Search',
+    package = json.loads(get('https://api.github.com/orgs/DashyNMS/packages/nuget/DashyNMS.Agent.Shared',
                              f'Bearer {token}'))
 except urllib.error.HTTPError as error:
     if error.code not in (401, 403):
@@ -143,7 +143,7 @@ else:
             break
         time.sleep(20)
     if problem is not None:
-        raise SystemExit(f'Cannot confirm DashyNMS.Agent.Search is public and linked to DashyNMS/mcp: {problem}. '
+        raise SystemExit(f'Cannot confirm DashyNMS.Agent.Shared is public and linked to DashyNMS/mcp: {problem}. '
                          'GitHub has no API to change visibility: an organisation owner must set it public '
                          'in the package settings, then re-run all jobs.')
     access = 'public and linked to DashyNMS/mcp (anonymous package page)'
@@ -151,5 +151,5 @@ else:
 summary = os.environ.get('GITHUB_STEP_SUMMARY')
 if summary:
     with open(summary, 'a', encoding='utf-8') as out:
-        out.write(f'Published DashyNMS.Agent.Search `{version}`; the feed serves sha256 `{actual}`; {access}.\n')
+        out.write(f'Published DashyNMS.Agent.Shared `{version}`; the feed serves sha256 `{actual}`; {access}.\n')
 print(f'Published {version} sha256 {actual}; {access}')

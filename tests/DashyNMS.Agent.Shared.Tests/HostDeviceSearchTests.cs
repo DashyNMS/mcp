@@ -5,7 +5,7 @@ using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
 using Microsoft.Extensions.Time.Testing;
 
-namespace DashyNMS.Agent.Search.Tests;
+namespace DashyNMS.Agent.Shared.Tests;
 
 public sealed class HostDeviceSearchTests
 {
@@ -285,6 +285,6 @@ public sealed class HostDeviceSearchTests
         var names = typeof(DeviceSearch).Assembly.GetReferencedAssemblies().Select(a => a.Name).ToArray();
         Assert.DoesNotContain(names, n => n!.StartsWith("ModelContextProtocol", StringComparison.Ordinal));
         Assert.DoesNotContain("DashyNMS.Agent", names);
-        Assert.Equal("DashyNMS.Agent.Search", typeof(DeviceSearch).Assembly.GetName().Name);
+        Assert.Equal("DashyNMS.Agent.Shared", typeof(DeviceSearch).Assembly.GetName().Name);
     }
 }

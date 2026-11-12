@@ -26,9 +26,9 @@ chiseled base layers are not covered by that inventory and keep their
 publishers' terms. Images published before this change carry the earlier
 PolyForm Internal Use labels and no bundled notices.
 
-## Search package
+## Shared package
 
-DashyNMS.Agent.Search bundles LICENSE and this file. It contains no dependency
+DashyNMS.Agent.Shared bundles LICENSE and this file. It contains no dependency
 binaries: consumers restore DashyNMS.Core and its dependencies under their own
 terms.
 

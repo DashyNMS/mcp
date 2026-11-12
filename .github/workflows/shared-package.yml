@@ -1,4 +1,4 @@
-name: Search package
+name: Shared package
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
   DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # Unique per run/attempt. GitHub Packages refuses a second push of a version,
   # and the publish job never skips duplicates, so a version names one set of bytes.
-  SEARCH_VERSION: 0.1.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
+  SHARED_VERSION: 2.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
 
 jobs:
   verify:
@@ -29,27 +29,27 @@ jobs:
           global-json-file: global.json
       - name: Build and test solution
         run: |
-          dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror -p:SearchBuildVersion="$SEARCH_VERSION" -p:RepositoryCommit="$GITHUB_SHA" -p:SourceRevisionId="$GITHUB_SHA" -p:ContinuousIntegrationBuild=true
+          dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror -p:SharedBuildVersion="$SHARED_VERSION" -p:RepositoryCommit="$GITHUB_SHA" -p:SourceRevisionId="$GITHUB_SHA" -p:ContinuousIntegrationBuild=true
           dotnet test DashyNMS.Mcp.slnx -c Release --no-build
-      - name: Pack Search with source provenance
+      - name: Pack the Shared package with source provenance
         run: >-
-          dotnet pack src/DashyNMS.Agent.Search -c Release --no-build --no-restore -o artifacts
-          -p:SearchBuildVersion="$SEARCH_VERSION"
+          dotnet pack src/DashyNMS.Agent.Shared -c Release --no-build --no-restore -o artifacts
+          -p:SharedBuildVersion="$SHARED_VERSION"
           -p:RepositoryCommit="$GITHUB_SHA"
           -p:SourceRevisionId="$GITHUB_SHA"
           -p:ContinuousIntegrationBuild=true
-      - name: Inspect package and restore a clean Search-only consumer
-        run: python3 scripts/verify-search-package.py
+      - name: Inspect package and restore a clean Shared-only consumer
+        run: python3 scripts/verify-shared-package.py
       - name: Recheck provenance hash
-        run: python3 scripts/verify-search-provenance.py
+        run: python3 scripts/verify-shared-provenance.py
       # Later jobs compare downloads with this job output rather than trusting
       # the report that travels inside the same artefact.
       - name: Record the verified package hash
         id: hash
-        run: echo "sha256=$(sha256sum "artifacts/DashyNMS.Agent.Search.$SEARCH_VERSION.nupkg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha256=$(sha256sum "artifacts/DashyNMS.Agent.Shared.$SHARED_VERSION.nupkg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: search-package
+          name: shared-package
           path: artifacts/
           if-no-files-found: error
 
@@ -63,7 +63,7 @@ jobs:
         include:
           # MCP's own pin (Directory.Build.props) and mobile's, in DashyNMS/mobile's
           # DashyNMS.Mobile.Shared.csproj, are the same build. When either moves,
-          # give it its own entry here, and update mobile's before it pins a new Search.
+          # give it its own entry here, and update mobile's before it pins a new Shared package.
           - consumer: mcp and mobile
             core: 2.0.0-ci.64
     steps:
@@ -75,14 +75,14 @@ jobs:
           global-json-file: global.json
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: search-package
+          name: shared-package
           path: artifacts
-      - name: Build Search from source against this Core
-        run: dotnet build src/DashyNMS.Agent.Search -c Release -warnaserror -p:DashyNMSCoreVersion=${{ matrix.core }}
-      - name: Test the packed Search binary with this Core
+      - name: Build the Shared package from source against this Core
+        run: dotnet build src/DashyNMS.Agent.Shared -c Release -warnaserror -p:DashyNMSCoreVersion=${{ matrix.core }}
+      - name: Test the packed Shared binary with this Core
         env:
-          EXPECTED_SEARCH_SHA256: ${{ needs.verify.outputs.sha256 }}
-        run: python3 scripts/verify-search-core-compatibility.py ${{ matrix.core }}
+          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
+        run: python3 scripts/verify-shared-core-compatibility.py ${{ matrix.core }}
 
   # Every verified push to protected main publishes its package, as Core's
   # development builds do. Pull requests never reach this job.
@@ -104,7 +104,7 @@ jobs:
           global-json-file: global.json
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: search-package
+          name: shared-package
           path: artifacts
       # Expected source values come from this run's own context: the package
       # was produced earlier in the same run, never taken from another one.
@@ -116,29 +116,29 @@ jobs:
           EXPECTED_SOURCE_RUN_ID: ${{ github.run_id }}
           EXPECTED_SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_SOURCE_REPOSITORY: ${{ github.repository }}
-          EXPECTED_SEARCH_SHA256: ${{ needs.verify.outputs.sha256 }}
+          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
         run: |
-          python3 scripts/verify-search-provenance.py --for-publication
-          echo "$EXPECTED_SEARCH_SHA256  artifacts/DashyNMS.Agent.Search.$SEARCH_VERSION.nupkg" | sha256sum --check --strict
+          python3 scripts/verify-shared-provenance.py --for-publication
+          echo "$EXPECTED_SHARED_SHA256  artifacts/DashyNMS.Agent.Shared.$SHARED_VERSION.nupkg" | sha256sum --check --strict
       - name: Attest build provenance
         id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: artifacts/DashyNMS.Agent.Search.${{ env.SEARCH_VERSION }}.nupkg
+          subject-path: artifacts/DashyNMS.Agent.Shared.${{ env.SHARED_VERSION }}.nupkg
       # No --skip-duplicate: an existing version must fail rather than be
       # reported as published with bytes this run did not produce.
       - name: Publish to GitHub Packages
         env:
           PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
-          dotnet nuget push "artifacts/DashyNMS.Agent.Search.$SEARCH_VERSION.nupkg"
+          dotnet nuget push "artifacts/DashyNMS.Agent.Shared.$SHARED_VERSION.nupkg"
           --source https://nuget.pkg.github.com/DashyNMS/index.json
           --api-key "$PUSH_TOKEN"
       - name: Confirm the feed serves the verified bytes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_SEARCH_SHA256: ${{ needs.verify.outputs.sha256 }}
-        run: python3 scripts/verify-published-search.py
+          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
+        run: python3 scripts/verify-published-shared.py
       - name: Summary
         env:
           ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}

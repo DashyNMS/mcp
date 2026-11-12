@@ -89,14 +89,14 @@ docs: setting up Claude Desktop
 
 ## Typed device search for host-owned clients
 
-`src/DashyNMS.Agent.Search` contains typed device search and its dependency closure:
+`src/DashyNMS.Agent.Shared` contains typed host operations (device search first) and their dependency closure:
 request/result records, directory/scope caches, device summaries, paging, redaction,
 options and argument exceptions. It references Core, with no MCP or Agent adapter
 reference. Existing namespaces remain unchanged; Agent forwards moved public types.
 Options remain together to preserve existing signatures; this does not expose any
-configuration, log, health or other tool through Search. MCP discovery, JSON shaping,
+configuration, log, health or other tool through the Shared package. MCP discovery, JSON shaping,
 byte caps and ToolRunner remain in Agent. The solution and Docker restore include
-Search. No Core pin or mobile code changes are part of this step for mobile #596.
+the Shared package. No Core pin or mobile code changes are part of this step for mobile #596.
 
 MCP continues calling `DeviceSearch.FindDevicesAsync`, using its shared directory,
 scope, options and redactor. It retains brief/verbose output, MAC observations,
@@ -104,7 +104,7 @@ ranking, filters, paging, cancellation and ToolRunner error handling. This lower
 API propagates sensitive exceptions and is intended for adapters with a reviewed
 error policy. It is not the safe host boundary.
 
-Other hosts should reference **Search only** and use:
+Other hosts should reference **the Shared package only** and use:
 
 ```csharp
 using var search = HostDeviceSearch.Create(capturedClient, hostClock,
@@ -156,7 +156,7 @@ No builds/tests were run locally for this step, as requested. CI must run the wh
 solution. `DeviceSearchTests` retains synthetic transport parity and independent
 MCP field expectations, ranking/paging, scope/MAC, redaction, cache isolation,
 semaphore cancellation and late-response coverage. `HostDeviceSearchTests` in the
-Search-only test project covers safe server/transport failures, invalid versus
+Shared-only test project covers safe server/transport failures, invalid versus
 empty results, retirement of uncooperative requests, caller cancellation and the
 absence of direct MCP/adapter assembly references. It also covers API timeout and
 admin-only flags, transport argument failures, cancellation/completion races, late
@@ -165,12 +165,12 @@ its fault-only continuation; it does not force GC or assert process-wide unobser
 exception events. These are test additions, not passing
 results. The existing CI solution commands pick up the new project.
 
-The assembly-reference test inspects only `GetReferencedAssemblies()` on the Search
+The assembly-reference test inspects only `GetReferencedAssemblies()` on the Shared
 assembly. It does not traverse Core or other dependencies, inspect resolved NuGet
 assets/native libraries, detect dynamically loaded assemblies, or validate trimming
 and AOT. It is a direct-reference guard, not a complete dependency graph audit.
 
-Only Search is published (see below). Agent's type forwards and MCP schema discovery
+Only the Shared package is published (see below). Agent's type forwards and MCP schema discovery
 are not covered by that pipeline and need their own verification before any Agent
 package is published. Audit and publish the shared synthetic fixture bundle
 separately; this pipeline does not publish fixtures.
@@ -182,28 +182,35 @@ size/token/performance measurements remain unverified follow-ups. MCP-free sourc
 references alone do not prove the transitive graph or mobile runtime compatibility.
 The other tools, mobile's existing lookups and Diagnostics remain deferred.
 
-### Search package for mobile #596
+### Shared package for mobile
 
-`search-package.yml` now defines a separate Search package pipeline. It builds and
-runs solution tests, packs **Search only**, inspects its metadata/licence/commit and
+`shared-package.yml` now defines a separate Shared package pipeline. It builds and
+runs solution tests, packs **the Shared package only**, inspects its metadata/licence/commit and
 restores, builds and executes a minimal package-only .NET 10 consumer in a fresh
-NuGet package directory. The exact Search ID maps to the local packed feed;
+NuGet package directory. The exact Shared ID maps to the local packed feed;
 `DashyNMS.*` dependencies still map to GitHub Packages. The smoke check rejects
 Agent/MCP packages and project dependencies, checks the resolved Core baseline,
 and records the complete resolved library list and package SHA-256 in
-`search-provenance.json`. This is an inventory and direct boundary check, not
+`shared-provenance.json`. This is an inventory and direct boundary check, not
 proof of mobile runtime compatibility or of the absence of dynamic loading.
 
-Package identity is `DashyNMS.Agent.Search`, independently versioned from the MCP
-host, initially `0.1.0-ci.<GitHub run ID>.<run attempt>`. `0.1.0-dev` is for local
-packs only. Search's Version and PackageVersion share the same value; the SDK derives
+The package was published as `DashyNMS.Agent.Search` (`0.1.0-ci.*`) until it was
+renamed so every shared host operation, not only device search, ships in one
+package that hosts pin and verify once. Those versions stay on the feed for pins
+that still name them; nothing new is published under the old ID. The new ID
+starts at 2.0.0, in line with Core 2.0. Its first publish fails the visibility
+check until an organisation owner makes it public (see Publication).
+
+Package identity is `DashyNMS.Agent.Shared`, independently versioned from the MCP
+host, `2.0.0-ci.<GitHub run ID>.<run attempt>`. `2.0.0-dev` is for local
+packs only. The Shared package's Version and PackageVersion share the same value; the SDK derives
 assembly and informational versions from it. CI builds with that value and repository
 commit, tests without rebuilding, then packs without building or restoring. The smoke
 check compares packed, producer and clean-consumer DLL bytes and checks assembly
 metadata. The verify job then publishes the package's SHA-256 as a job output; later
 jobs compare their downloads with that output, not with the report inside the artefact.
 
-Search is MIT licensed, copyright (c) 2026 Thomas Pickup, like the rest of the
+The Shared package is MIT licensed, copyright (c) 2026 Thomas Pickup, like the rest of the
 repository. The package declares the `MIT` expression and bundles its own
 `LICENSE` (identical to the repository's) and `NOTICES.md`; the check fails if
 either drifts. Core and its dependencies are restored by the consumer under their
@@ -212,19 +219,19 @@ the image build does (see `docs/dependency-licences`).
 
 #### Core compatibility
 
-Search is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
+The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) are both
 `2.0.0-ci.64`, so there is one entry. For each it:
 
-- builds Search from source against that Core with warnings as errors (source
+- builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
-- restores the **downloaded package** into the Search-only test project in a fresh
+- restores the **downloaded package** into the Shared-only test project in a fresh
   package directory beside an exact pin of that Core, checks the resolved graph has
   one Core at that version and no Agent/MCP packages, compares the restored DLL with
-  the verified package, and runs `DashyNMS.Agent.Search.Tests` on that combination
-  (`scripts/verify-search-core-compatibility.py`). This is the binary a host runs.
+  the verified package, and runs `DashyNMS.Agent.Shared.Tests` on that combination
+  (`scripts/verify-shared-core-compatibility.py`). This is the binary a host runs.
 
 When mobile moves Core, update its matrix entry first; a failing entry blocks
 publication. Moving MCP's own pin can change alert and tool behaviour well beyond
@@ -234,7 +241,7 @@ reviewed that way: MCP calls none of the changed alert actions or graph legends,
 new transport members default or pass through, and Core's compatibility flags still
 read an omitted value as false. The ranking tests in
 `DeviceSearchTests` live in the Agent test project and run against MCP's pin only;
-the Search-only tests cover the host boundary, failures and cancellation. This is
+the Shared-only tests cover the host boundary, failures and cancellation. This is
 plain .NET evidence, not mobile trimming/AOT, Android runtime or device behaviour.
 
 #### Publication
@@ -244,7 +251,7 @@ the `publish` job; pull requests never reach it. It holds the only write token
 (`packages: write`, plus `id-token`/`attestations: write` for the attestation) and:
 
 1. downloads the package from the same run and runs
-   `scripts/verify-search-provenance.py --for-publication`, with the expected source
+   `scripts/verify-shared-provenance.py --for-publication`, with the expected source
    values taken from the run's own Actions context, then checks the SHA-256 against
    the verify job's output;
 2. creates a GitHub build provenance attestation for the exact `.nupkg`
@@ -253,7 +260,7 @@ the `publish` job; pull requests never reach it. It holds the only write token
    `--skip-duplicate`, so an existing version fails the job rather than being
    reported as published;
 4. downloads it back through the feed and fails unless the bytes match, then checks
-   the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-search.py`).
+   the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-shared.py`).
    The token is only ever sent over HTTPS to `nuget.pkg.github.com` and
    `api.github.com`, whatever download URL the feed's service index advertises;
    storage redirects are followed without it.
@@ -276,7 +283,7 @@ What this does and does not guarantee:
   `DashyNMS.Core`, and mobile's `GITHUB_TOKEN` with `packages: read` can restore it.
   New GitHub packages can start private, and GitHub has no API to change a
   package's visibility, so the workflow cannot fix it. If the first publish job
-  fails on visibility, an organisation owner sets `DashyNMS.Agent.Search` to public
+  fails on visibility, an organisation owner sets `DashyNMS.Agent.Shared` to public
   in its package settings (this cannot be undone), then re-runs all jobs or merges
   again, which publishes a new version that passes. Do not pin a version whose
   publish job failed, including the private first one, which becomes visible when
@@ -285,14 +292,14 @@ What this does and does not guarantee:
   classic personal access tokens only, so the Actions token may be refused package
   metadata. Then the job checks anonymously instead: a private package's page is a
   404 to a signed-out visitor, and a public linked package's page redirects to
-  `github.com/DashyNMS/mcp/pkgs/nuget/DashyNMS.Agent.Search`, as Core's does to
+  `github.com/DashyNMS/mcp/pkgs/nuget/DashyNMS.Agent.Shared`, as Core's does to
   `DashyNMS/core`. That relies on GitHub's web routes rather than a documented API;
   any other answer fails the job. A mobile restore is still the final check.
 
-The smoke consumer references the actual Core ILibreNmsClient type used by Search's
+The smoke consumer references the actual Core ILibreNmsClient type used by the Shared package's
 factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
 It verifies the nuspec dependency group, MIT licence expression, readme declaration and content,
-and allows only the expected Search DLL under package asset directories. This checks
+and allows only the expected Shared DLL under package asset directories. This checks
 the resolved .NET graph, not dynamic loading, dependency safety or mobile behaviour.
 Source embedding was removed. This project adds no explicit SourceLink package or
 symbol-package pipeline. The .NET SDK may supply SourceLink support implicitly;
@@ -302,11 +309,11 @@ Repository metadata alone does not establish that support.
 The Core dependency check accepts NuGet's equivalent bare minimum version and
 `[version, )` range encodings, while the clean restore must resolve the pinned
 baseline exactly. The archive check allows only known packaging metadata, licence, notices,
-readme and the Search DLL; unexpected files and duplicate entries fail. Expected
-CLR assembly version comes from `SEARCH_VERSION`, rather than a fixed 0.1.0.
-A future stable Search release must first choose and verify a stable Core baseline.
+readme and the Shared DLL; unexpected files and duplicate entries fail. Expected
+CLR assembly version comes from `SHARED_VERSION`, rather than a fixed version.
+A future stable Shared release must first choose and verify a stable Core baseline.
 The current prerelease Core dependency is intentional for CI packages and may
-produce NU5104 when packing a stable Search version. Do not suppress that warning
+produce NU5104 when packing a stable Shared version. Do not suppress that warning
 or declare a stable release ready while the dependency remains a prerelease.
 
 Before mobile pins a version, confirm in mobile CI that its existing `packages: read`
@@ -317,7 +324,7 @@ reference.
 Still outstanding for mobile #596: source/binary compatibility of Agent type
 forwards, schema parity, mobile generation races, the shared fixture bundle,
 Release iOS trimming/AOT and Android runtime/performance. Keep mobile #596 open.
-Mobile redistribution must include Search's LICENSE and the licence texts of Core
+Mobile redistribution must include the Shared package's LICENSE and the licence texts of Core
 and its dependencies.
 
 All builds, tests, pack/restore, compatibility and publication run in CI only.
