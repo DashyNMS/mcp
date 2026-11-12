@@ -9,9 +9,62 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import struct
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+
+
+def nuget_content_hash(data):
+    """Return NuGet's package content hash, the value project.assets.json records.
+
+    NuGet hashes the whole archive for unsigned packages, but for signed ones
+    (every nuget.org package carries a repository signature) it hashes the archive
+    as if the .signature.p7s entry had never been added, so the hash survives
+    re-signing. Comparing the raw file hash therefore fails for signed packages.
+    This mirrors NuGet's SignedPackageArchiveUtility.GetPackageContentHash for the
+    layout NuGet signing produces (signature stored last, contiguous entries) and
+    raises on anything else rather than guessing, so the check always fails closed.
+    """
+    eocd = data.rfind(b'PK\x05\x06')
+    if eocd < 0:
+        raise ValueError('no end of central directory record')
+    _, disk, cd_disk, entries_on_disk, entries, cd_size, cd_offset, comment_length = struct.unpack_from('<IHHHHIIH', data, eocd)
+    if disk or cd_disk or entries_on_disk != entries or eocd + 22 + comment_length != len(data) or cd_offset + cd_size != eocd or 0xFFFFFFFF in (cd_size, cd_offset):
+        raise ValueError('unsupported archive layout (multi-disk, zip64 or trailing data)')
+    records = []
+    position = cd_offset
+    for _ in range(entries):
+        fields = struct.unpack_from('<IHHHHHHIIIHHHHHII', data, position)
+        if fields[0] != 0x02014B50:
+            raise ValueError('corrupt central directory')
+        name_length, extra_length, comment = fields[10], fields[11], fields[12]
+        size = 46 + name_length + extra_length + comment
+        records.append({'position': position, 'size': size, 'compressed': fields[8], 'flags': fields[3],
+                        'method': fields[4], 'offset': fields[16], 'name': data[position + 46:position + 46 + name_length]})
+        position += size
+    if position != eocd:
+        raise ValueError('central directory size mismatch')
+    signatures = [record for record in records if record['name'] == b'.signature.p7s']
+    if not signatures:
+        return base64.b64encode(hashlib.sha512(data).digest()).decode()
+    signature = signatures[0]
+    if len(signatures) != 1 or signature is not records[-1] or signature['offset'] != max(record['offset'] for record in records):
+        raise ValueError('package signature must be the single, last archive entry')
+    local = struct.unpack_from('<IHHHHHIIIHH', data, signature['offset'])
+    if local[0] != 0x04034B50 or signature['flags'] & 0x08 or signature['method'] != 0:
+        raise ValueError('package signature entry is not stored as NuGet signing writes it')
+    signature_entry_size = 30 + local[9] + local[10] + signature['compressed']
+    if signature['offset'] + signature_entry_size != cd_offset:
+        raise ValueError('package signature entry does not end at the central directory')
+    digest = hashlib.sha512()
+    digest.update(data[:signature['offset']])
+    digest.update(data[cd_offset:signature['position']])
+    digest.update(data[eocd:eocd + 8])
+    digest.update(struct.pack('<HHII', entries - 1, entries - 1, cd_size - signature['size'], cd_offset - signature_entry_size))
+    digest.update(data[eocd + 20:])
+    return base64.b64encode(digest.digest()).decode()
+
 
 assets = json.loads(Path(sys.argv[1]).read_text())
 output = Path(sys.argv[2])
@@ -34,8 +87,18 @@ for identity, library in sorted(assets['libraries'].items()):
         raise ValueError(f'{identity}: expected one restored package archive')
     archive_path = archives[0]
     archive_bytes = archive_path.read_bytes()
-    if base64.b64encode(hashlib.sha512(archive_bytes).digest()).decode() != library['sha512'].removeprefix('sha512-'):
-        raise ValueError(f'{identity}: restored archive does not match assets SHA-512')
+    # The assets file records NuGet's content hash, not a raw file hash; see
+    # nuget_content_hash. NuGet's own metadata must agree, and the raw bytes must
+    # still match the full-file hash NuGet wrote when it extracted the package.
+    content_hash = nuget_content_hash(archive_bytes)
+    if content_hash != library['sha512']:
+        raise ValueError(f'{identity}: restored archive does not match assets content hash')
+    metadata_file = folder / '.nupkg.metadata'
+    if metadata_file.is_file() and json.loads(metadata_file.read_text()).get('contentHash') != content_hash:
+        raise ValueError(f'{identity}: NuGet metadata content hash disagrees with the archive')
+    raw_hash_files = list(folder.glob('*.nupkg.sha512'))
+    if len(raw_hash_files) == 1 and raw_hash_files[0].read_text().strip() != base64.b64encode(hashlib.sha512(archive_bytes).digest()).decode():
+        raise ValueError(f'{identity}: restored archive changed after NuGet extracted it')
     destination = output / package_path
     destination.mkdir(parents=True, exist_ok=True)
     files = {}
