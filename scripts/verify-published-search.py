@@ -71,9 +71,6 @@ def get(url, authorisation):
 resources = json.loads(get(feed, basic))['resources']
 base = next(r['@id'] for r in resources if r['@type'].startswith('PackageBaseAddress/3.0.0'))
 require_https(base, CREDENTIAL_HOSTS)
-# The token goes to this address, so never accept a cleartext one.
-if not base.startswith('https://'):
-    raise SystemExit(f'Package base address must use HTTPS: {base}')
 lower = version.lower()
 url = f"{base.rstrip('/')}/dashynms.agent.search/{lower}/dashynms.agent.search.{lower}.nupkg"
 for attempt in range(10):
@@ -87,7 +84,6 @@ for attempt in range(10):
 actual = hashlib.sha256(published).hexdigest()
 if actual != expected:
     raise SystemExit(f'Feed serves {actual}, not the verified {expected}')
-
 
 
 def anonymous_status(url):
