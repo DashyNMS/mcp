@@ -34,7 +34,7 @@ for identity, library in sorted(assets['libraries'].items()):
         raise ValueError(f'{identity}: expected one restored package archive')
     archive_path = archives[0]
     archive_bytes = archive_path.read_bytes()
-    if base64.b64encode(hashlib.sha512(archive_bytes).digest()).decode() != library['sha512']:
+    if base64.b64encode(hashlib.sha512(archive_bytes).digest()).decode() != library['sha512'].removeprefix('sha512-'):
         raise ValueError(f'{identity}: restored archive does not match assets SHA-512')
     destination = output / package_path
     destination.mkdir(parents=True, exist_ok=True)
