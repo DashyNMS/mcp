@@ -10,3 +10,4 @@ publish/
 TestResults/
 .env
 *.env
+__pycache__/
