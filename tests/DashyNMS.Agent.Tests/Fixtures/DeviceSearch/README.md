@@ -39,8 +39,9 @@ answers it with a 404, which Core reads as no members.
   gives;
 - an empty group;
 - an ambiguous and a missing group name, an ambiguous location and an invalid
-  status. Each fails as `InvalidRequest` after reading only the listed requests.
-  An invalid status reads nothing.
+  status. `HostDeviceSearch` fails each as `InvalidRequest`; the MCP tool's
+  reply is checked only for an error with no data. Both read only the listed
+  requests, and an invalid status reads nothing.
 
 `transport.json` holds failed device lists served over HTTP: 401, 403, 404,
 500, 502 and 503 with LibreNMS error envelopes or an HTML page, a 200 that is a
@@ -49,6 +50,9 @@ that is never answered (`hang`, at the 5-second minimum timeout) and an address
 with nothing listening. `requests` counts what reaches the server, including
 Core's retries: 502 and 503 are tried four times, and nothing reaches the
 unreachable address. Bodies carry secret-shaped text that no adapter may repeat.
+Each case's `code` is the `DeviceSearchFailure` the host search must give. The
+MCP tool words failures its own way and reports no category, so its reply is
+checked only for an error with no data and no secret-shaped text.
 
 `SharedSearchFixtureTests` runs every case and status word through both the MCP
 `find_device` tool and `HostDeviceSearch` over a fake transport, and every
