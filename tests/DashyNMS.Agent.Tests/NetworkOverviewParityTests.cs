@@ -1,4 +1,7 @@
 using System.Net;
+using DashyNMS.Agent;
+using DesktopNMS.Core.Api;
+using Microsoft.Extensions.DependencyInjection;
 using DashyNMS.Agent.Overview;
 using DashyNMS.Agent.Tools;
 
@@ -11,13 +14,17 @@ public sealed class NetworkOverviewParityTests
     [InlineData(true)]
     public async Task Shared_and_MCP_overviews_use_the_same_transport_rows_and_partial_failures(bool refusedPorts)
     {
-        var nms = new FakeLibreNms();
-        foreach (var (route, file) in new[] { ("devices", "devices"), ("faults", "faults"), ("ports", "ports"), ("system", "system") })
-            nms.Transport.On(route, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "NetworkOverview", file + ".json")));
-        if (refusedPorts) nms.Transport.Fails("ports", HttpStatusCode.Forbidden);
-        using var host = HostNetworkOverview.Create(nms.Client, nms.Time, true);
+        var routes = new Dictionary<string, Answer>();
+        foreach (var name in new[] { "devices", "faults", "ports", "system" })
+            routes[name] = new(200, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "NetworkOverview", name + ".json")));
+        if (refusedPorts) routes["ports"] = new(403, "password=synthetic-secret");
+        using var server = new FixtureServer(path => routes.GetValueOrDefault(path.Split('?')[0]));
+        using var provider = new ServiceCollection().AddLogging().AddDashyNmsAgent().BuildServiceProvider();
+        var client = provider.GetRequiredService<ILibreNmsClient>();
+        client.Connect(new LibreNmsConnection(server.Root, FixtureServer.Token));
+        using var host = HostNetworkOverview.Create(client, TimeProvider.System, true);
         var typed = (await host.ReadAsync()).Result!;
-        var tool = new NetworkTools(nms.Client, nms.Fleet, nms.Directory, nms.Resolver, nms.Scope, nms.Runner, nms.Options, nms.Time);
+        var tool = ActivatorUtilities.CreateInstance<NetworkTools>(provider);
         var data = FakeLibreNms.Parse(await tool.NetworkOverview()).GetProperty("data");
         Assert.Equal(4, typed.Devices.Total);
         Assert.Equal(3, typed.Devices.Up);
