@@ -1,5 +1,6 @@
 using System.Net;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
 using Microsoft.Extensions.Time.Testing;
@@ -126,6 +127,42 @@ public sealed class HostDeviceSearchTests
         Assert.Equal(DeviceSearchFailure.InvalidRequest, result.Error!.Code);
         Assert.Equal("The device search or scope is invalid or ambiguous.", result.Error.Message);
         await client.Devices.DidNotReceive().ListAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The typed state keeps what the shared status word can't: an omitted flag stays
+    /// Unknown rather than down, and ignored is its own state. The word is unchanged.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false, DeviceState.Up, "up")]
+    [InlineData(false, false, false, DeviceState.Down, "down")]
+    [InlineData(false, true, false, DeviceState.Disabled, "disabled")]
+    [InlineData(true, false, true, DeviceState.Ignored, "up")]
+    [InlineData(false, false, true, DeviceState.Ignored, "down")]
+    [InlineData(null, false, false, DeviceState.Unknown, "down")]
+    [InlineData(true, null, false, DeviceState.Unknown, "up")]
+    [InlineData(true, false, null, DeviceState.Unknown, "up")]
+    [InlineData(null, null, null, DeviceState.Unknown, "down")]
+    public async Task Host_results_carry_the_reported_state_beside_the_shared_status(bool? status, bool? disabled, bool? ignore, DeviceState state, string word)
+    {
+        var client = Substitute.For<ILibreNmsClient>();
+        client.Devices.ListAsync(Arg.Any<CancellationToken>()).Returns(new Device[]
+        {
+            new() { DeviceId = 1, Hostname = "sw-a.example.net", ReportedStatus = status, ReportedDisabled = disabled, ReportedIgnore = ignore },
+        });
+        using var search = HostDeviceSearch.Create(client, new FakeTimeProvider(), true);
+        var device = Assert.Single((await search.FindDevicesAsync(new("sw"))).Result!.Matches).Device;
+        Assert.Equal(state, device.State);
+        Assert.Equal(word, device.Status);
+        // The typed state stays out of JSON, so serialised summaries are unchanged.
+        Assert.DoesNotContain("State", System.Text.Json.JsonSerializer.Serialize(device), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_summary_built_without_a_device_says_unknown()
+    {
+        var summary = new DeviceSummary(1, "sw-a.example.net", null, null, null, null, null, null, "up", null);
+        Assert.Equal(DeviceState.Unknown, summary.State);
     }
 
     [Fact]

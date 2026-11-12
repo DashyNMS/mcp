@@ -1,0 +1,13 @@
+{
+  "package": "dashynms.core/2.0.0-ci.64",
+  "packageSha256": "67fb194325fc8788289632ed6dab0f5587c868e5396223aa9bd70da9c14b89fc",
+  "upstreamRepository": "https://github.com/DashyNMS/core",
+  "upstreamRevision": "4dce2a7ceded871b0f0e7e6800223ecf830691cb",
+  "files": {
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/DashyNMS/core/4dce2a7ceded871b0f0e7e6800223ecf830691cb/LICENSE",
+      "sha256": "2d7673da6e85ba8780a6c07092d0a81a62352e3a034c784a21e432ec27891e0c",
+      "role": "licence"
+    }
+  }
+}

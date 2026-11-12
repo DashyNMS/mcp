@@ -11,6 +11,13 @@ switching connection or signing out; the host must also discard stale results.
 The factory does not own or dispose the client. See the repository developer guide
 for the full boundary, cancellation and error contract.
 
+Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
+(`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
+flags, so an omitted flag reads as down and an ignored device as up or down. `State`
+is Core's `ReportedState`: `Unknown` when LibreNMS left a flag out, and `Ignored`
+on its own. Show `State`. Maintenance needs a per-device call and is never set. `State`
+is left out of JSON.
+
 Results are redacted but remain untrusted network data. Redaction does not hide
 network identity or topology. Hosts must apply their own authorisation, presentation
 limits, sanitisation, deadlines and evidence ownership checks.
@@ -29,9 +36,9 @@ check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuG
 lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
 feed and restore with a token that has `packages: read`.
 
-The package is built against Core `2.0.0-ci.34` (MCP's pin) and declares it as a
-minimum. Before publication, CI runs the Search tests on the exact packed binary
-with Core `2.0.0-ci.34` and with `2.0.0-ci.64` (mobile's pin). That is plain .NET
+The package is built against Core `2.0.0-ci.64` (MCP's pin, and mobile's) and
+declares it as a minimum. Before publication, CI runs the Search tests on the exact
+packed binary with that Core. That is plain .NET
 evidence: a consumer must still verify its own restore, Release trimming/AOT and
 runtime behaviour in its CI.
 
