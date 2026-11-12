@@ -42,7 +42,7 @@ public sealed class HostOpenAlertsTests
     {
         var cores = Enumerable.Range(0, 8).Select(i => Fault(9200 + i, 1, 5, i is 3 or 5 ? 2 : 1, entity: (300 + i).ToString(System.Globalization.CultureInfo.InvariantCulture)));
         var down = Fault(9300, 2, 4, 1, "critical", ruleName: "Device down");
-        using var alerts = HostOpenAlerts.Create(Client([.. cores, down], new() { DeviceId = 1, Hostname = "core-sw1" }, new() { DeviceId = 2, Hostname = "edge-sw3" }), new FakeTimeProvider(), true);
+        using var alerts = HostOpenAlerts.Create(Client([.. cores, down], new Device { DeviceId = 1, Hostname = "core-sw1" }, new Device { DeviceId = 2, Hostname = "edge-sw3" }), new FakeTimeProvider(), true);
 
         var result = (await alerts.ListAsync(new())).Result!;
 
@@ -67,7 +67,7 @@ public sealed class HostOpenAlertsTests
     public async Task A_recovered_fault_beside_open_siblings_neither_counts_nor_keeps_a_group_open()
     {
         IReadOnlyList<Alert> rows = [Fault(1, 1, 5, 1, entity: "1"), Fault(2, 1, 5, 0, entity: "2"), Fault(3, 1, 5, 2, entity: "3"), Fault(4, 2, 6, 0)];
-        using var alerts = HostOpenAlerts.Create(Client(rows, new() { DeviceId = 1 }, new() { DeviceId = 2 }), new FakeTimeProvider(), true);
+        using var alerts = HostOpenAlerts.Create(Client(rows, new Device { DeviceId = 1 }, new Device { DeviceId = 2 }), new FakeTimeProvider(), true);
 
         var result = (await alerts.ListAsync(new())).Result!;
 
@@ -80,8 +80,8 @@ public sealed class HostOpenAlertsTests
     [Fact]
     public async Task A_fault_and_a_legacy_alert_with_the_same_number_keep_separate_identities()
     {
-        using var legacy = HostOpenAlerts.Create(Client([Fault(12, 1, 5, 1, source: AlertSource.Alert)], new() { DeviceId = 1 }), new FakeTimeProvider(), true);
-        using var faults = HostOpenAlerts.Create(Client([Fault(12, 1, 5, 1)], new() { DeviceId = 1 }), new FakeTimeProvider(), true);
+        using var legacy = HostOpenAlerts.Create(Client([Fault(12, 1, 5, 1, source: AlertSource.Alert)], new Device { DeviceId = 1 }), new FakeTimeProvider(), true);
+        using var faults = HostOpenAlerts.Create(Client([Fault(12, 1, 5, 1)], new Device { DeviceId = 1 }), new FakeTimeProvider(), true);
 
         var alert = (await legacy.ListAsync(new())).Result!.Groups.Single();
         var fault = (await faults.ListAsync(new())).Result!.Groups.Single();
@@ -96,7 +96,7 @@ public sealed class HostOpenAlertsTests
     public async Task Device_and_severity_filters_narrow_groups_and_totals_and_paging_is_by_group()
     {
         IReadOnlyList<Alert> rows = [Fault(1, 1, 5, 1, "critical"), Fault(2, 1, 6, 1), Fault(3, 2, 5, 1, "critical"), Fault(4, 3, 5, 1, "critical")];
-        using var alerts = HostOpenAlerts.Create(Client(rows, new() { DeviceId = 1 }, new() { DeviceId = 2 }, new() { DeviceId = 3 }), new FakeTimeProvider(), true);
+        using var alerts = HostOpenAlerts.Create(Client(rows, new Device { DeviceId = 1 }, new Device { DeviceId = 2 }, new Device { DeviceId = 3 }), new FakeTimeProvider(), true);
 
         var device = (await alerts.ListAsync(new(DeviceId: 1))).Result!;
         Assert.True(device.Filtered);
@@ -116,7 +116,7 @@ public sealed class HostOpenAlertsTests
     public async Task More_faults_than_listed_are_counted_as_omitted()
     {
         var many = Enumerable.Range(0, OpenAlerts.MaxFaults + 3).Select(i => Fault(100 + i, 1, 5, 1, entity: i.ToString(System.Globalization.CultureInfo.InvariantCulture))).ToList();
-        using var alerts = HostOpenAlerts.Create(Client(many, new() { DeviceId = 1 }), new FakeTimeProvider(), true);
+        using var alerts = HostOpenAlerts.Create(Client(many, new Device { DeviceId = 1 }), new FakeTimeProvider(), true);
 
         var group = (await alerts.ListAsync(new())).Result!.Groups.Single();
 
@@ -129,7 +129,7 @@ public sealed class HostOpenAlertsTests
     public async Task Network_text_is_redacted()
     {
         using var alerts = HostOpenAlerts.Create(
-            Client([Fault(1, 1, 5, 1, note: Sensitive, ruleName: Sensitive)], new() { DeviceId = 1, Hostname = Sensitive, Display = "Display " + Sensitive }),
+            Client([Fault(1, 1, 5, 1, note: Sensitive, ruleName: Sensitive)], new Device { DeviceId = 1, Hostname = Sensitive, Display = "Display " + Sensitive }),
             new FakeTimeProvider(), true);
 
         var group = (await alerts.ListAsync(new())).Result!.Groups.Single();
