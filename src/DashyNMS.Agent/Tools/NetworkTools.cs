@@ -97,69 +97,29 @@ public sealed class NetworkTools(
 
     private async Task<JsonObject> OverviewAsync(CancellationToken cancellationToken)
     {
-        var devicesTask = directory.GetAllAsync(cancellationToken);
-        var alerts = Sources.TryAsync(() => client.Alerts.ListAsync(AlertQuery.Open, cancellationToken), cancellationToken);
-        var ports = Sources.TryAsync(() => fleet.GetPortsAsync(cancellationToken), cancellationToken);
-        var system = Sources.TryAsync(() => client.System.GetAsync(cancellationToken), cancellationToken);
-        await Task.WhenAll(devicesTask, alerts, ports, system).ConfigureAwait(false);
-
-        var devices = devicesTask.Result;
-        var unavailable = new List<Unavailable>();
-        foreach (var (source, error) in new[] { ("alerts", alerts.Result.Error), ("ports", ports.Result.Error), ("system", system.Result.Error) })
+        var result = await new DashyNMS.Agent.Overview.NetworkOverview(client, directory, fleet.GetPortsAsync,
+            options, new DashyNMS.Agent.Redaction.Redactor(), time).ReadAsync(cancellationToken).ConfigureAwait(false);
+        var d = result.Devices;
+        var a = result.Alerts;
+        var p = result.Ports;
+        var summary = $"{d.Total} devices visible to this account: {d.Up} up, {d.Down} down" +
+            (d.Disabled > 0 ? $", {d.Disabled} disabled" : string.Empty) +
+            (a is null ? "; open alerts couldn't be read." : $"; {a.Describe()} ({a.Critical} critical, {a.Warning} warning).");
+        return ToolResult.Ok(summary, new
         {
-            if (error is not null)
-            {
-                unavailable.Add(new Unavailable(source, error));
-            }
-        }
-
-        var status = devices.GroupBy(DeviceSummary.StatusOf).ToDictionary(g => g.Key, g => g.Count());
-        var down = devices.Where(d => DeviceSummary.StatusOf(d) == "down").ToList();
-        // Counted as active_alerts counts them (#77): alerts are rules firing on devices, faults separately.
-        var openAlerts = alerts.Result.Value is { } listed ? OpenAlertTotals.From(listed) : null;
-        var portList = ports.Result.Value?.Where(p => !p.Deleted && !p.Disabled && !p.Ignore).ToList();
-
-        var data = new
-        {
-            devices = new
-            {
-                total = devices.Count,
-                up = status.GetValueOrDefault("up"),
-                down = status.GetValueOrDefault("down"),
-                disabled = status.GetValueOrDefault("disabled"),
-                ignored = devices.Count(d => d.Ignore),
-            },
-            most_down_by_location = down
-                .GroupBy(d => DeviceSummary.LocationName(d.Location) ?? "(no location)", StringComparer.OrdinalIgnoreCase)
-                .Select(g => new { location = g.Key, down = g.Count() })
-                .OrderByDescending(g => g.down)
-                .Take(MaxDownLocations)
-                .ToList(),
-            alerts = openAlerts is null ? null : new
-            {
-                open = openAlerts.AlertGroups,
-                faults = openAlerts.Faults,
-                critical = openAlerts.Critical,
-                warning = openAlerts.Warning,
-                acknowledged = openAlerts.Acknowledged,
-                partly_acknowledged = openAlerts.PartlyAcknowledged,
-                devices_alerting = openAlerts.Devices,
-            },
-            ports = portList is null ? null : new
-            {
-                total = portList.Count,
-                down_while_enabled = portList.Count(DeviceTools.IsDownWhileEnabled),
-                counting_errors = portList.Count(p => DeviceTools.ErrorRate(p) > 0),
-            },
-            librenms_version = system.Result.Value?.LocalVersion,
-            unavailable = unavailable.Count > 0 ? unavailable : null,
-        };
-
-        var summary = $"{devices.Count} devices visible to this account: {status.GetValueOrDefault("up")} up, {status.GetValueOrDefault("down")} down" +
-            (status.GetValueOrDefault("disabled") > 0 ? $", {status["disabled"]} disabled" : string.Empty) +
-            (openAlerts is null ? "; open alerts couldn't be read." : $"; {openAlerts.Describe()} ({openAlerts.Critical} critical, {openAlerts.Warning} warning).");
-
-        return ToolResult.Ok(summary, data);
+            devices = new { total = d.Total, up = d.Up, down = d.Down, disabled = d.Disabled, ignored = d.Ignored },
+            most_down_by_location = result.DownLocations.Select(l => new { location = l.Location, down = l.Down }),
+            alerts = a is null ? null : new { open = a.AlertGroups, faults = a.Faults, critical = a.Critical, warning = a.Warning,
+                acknowledged = a.Acknowledged, partly_acknowledged = a.PartlyAcknowledged, devices_alerting = a.Devices },
+            ports = p is null ? null : new { total = p.Total, down_while_enabled = p.DownWhileEnabled, counting_errors = p.CountingErrors },
+            librenms_version = result.LibreNmsVersion,
+            unavailable = result.Unavailable.Count == 0 ? null : result.Unavailable.Select(u => new { source = u.Source, error = "This source is unavailable." }),
+            down_devices = result.DownDevices,
+            alert_groups = result.AlertGroups,
+            down_devices_omitted = result.DownDevicesOmitted,
+            alert_groups_omitted = result.AlertGroupsOmitted,
+            down_locations_omitted = result.DownLocationsOmitted,
+        });
     }
 
     private async Task<JsonObject> TopPortsAsync(bool errors, string? byText, int limit, string? group, string? location, CancellationToken cancellationToken)

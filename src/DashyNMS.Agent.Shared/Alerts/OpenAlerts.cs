@@ -177,7 +177,7 @@ public sealed class OpenAlerts
         return new(shown, OpenAlertTotals.From(groups), page, filtered) { Matching = matching };
     }
 
-    private OpenAlertGroup Shape(AlertGroup group, IReadOnlyDictionary<int, Device> devices)
+    internal OpenAlertGroup Shape(AlertGroup group, IReadOnlyDictionary<int, Device> devices)
     {
         devices.TryGetValue(group.DeviceId, out var device);
         var faults = group.Faults.Take(MaxFaults).Select(f => new OpenAlertFault(

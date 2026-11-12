@@ -352,3 +352,12 @@ Mobile redistribution must include the Shared package's LICENSE and the licence 
 and its dependencies.
 
 All builds, tests, pack/restore, compatibility and publication run in CI only.
+
+### Shared network overview
+
+`NetworkOverview` in Agent.Shared owns overview counts, optional-source failures and
+bounded detail selection for MCP and mobile (DashyNMS/mobile#600). MCP retains its
+JSON field names; in-process hosts consume `HostNetworkOverview` typed results.
+Devices remain required. Alerts, ports and system failures retain other sources
+and expose only fixed categories. Alert row shaping is shared with `OpenAlerts`.
+The NetworkOverview synthetic fixtures cover a complete and a refused-ports case.
