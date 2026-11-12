@@ -185,6 +185,11 @@ for identity, library in sorted(assets['libraries'].items()):
                     licence_files.add(target)
             (destination / 'supplement-provenance.json').write_bytes((supplement / 'provenance.json').read_bytes())
             has_text |= supplement_licence
+        # A URL or a short instruction to visit one is not the licence itself.
+        licence_files = {path for path in licence_files if not re.fullmatch(
+            r'(?is)\s*(?:see|refer to|available at)?\s*(?:the )?(?:licen[cs]e\s*(?:at|:))?\s*https?://\S+\s*[.]?\s*',
+            path.read_text(encoding='utf-8-sig'))}
+        has_text = bool(licence_files)
         if not has_text:
             missing.append(f'{identity}: no actual licence text (a notice or SPDX expression alone is insufficient)')
         if expression == 'MIT' and has_text:
