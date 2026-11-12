@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.configuration.json/10.0.13",
+  "packageSha256": "a8dadfeb0c4f0548dcf510a072ce8df5a30dfa32ab08d561f4f25afafebcfecb",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

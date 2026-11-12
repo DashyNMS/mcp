@@ -176,5 +176,5 @@ Unimus and Graylog aren't tested at startup. If one can't be reached, the tools 
 ---
 
 <sub>DashyNMS isn't affiliated with LibreNMS, Graylog, Unimus or Anthropic. LibreNMS, Graylog, Unimus and Claude are trademarks of their respective owners.<br>
-Project-owned code and assets are MIT licensed; see [LICENSE](LICENSE) and [notices](NOTICES.md).<br>
+Project-owned code and assets are MIT licensed; see [LICENSE](LICENSE) and [notices](NOTICES.md). The container image carries both, plus its dependencies' licences in `/app/third-party`.<br>
 Found a security problem? See [SECURITY.md](SECURITY.md). Technical notes are in the [developer guide](docs/DEVELOPMENT.md).</sub>

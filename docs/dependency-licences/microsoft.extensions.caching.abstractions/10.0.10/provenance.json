@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.caching.abstractions/10.0.10",
+  "packageSha256": "c663193051052383d0219cdba4381235e0ff03a1c8ce93db323ad1eceb4636b4",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

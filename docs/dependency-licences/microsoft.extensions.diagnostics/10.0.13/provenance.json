@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.diagnostics/10.0.13",
+  "packageSha256": "42cd2d969f6cd230180fa41e8f6d1f256679ab82e2572455c24431cb4b869696",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

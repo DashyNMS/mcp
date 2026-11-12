@@ -12,6 +12,10 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 version = os.environ['SEARCH_VERSION']
 commit = os.environ['GITHUB_SHA']
+if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != commit:
+    raise SystemExit('Checkout HEAD does not match expected source GITHUB_SHA')
+if subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain', '--untracked-files=no'], text=True).strip():
+    raise SystemExit('Tracked checkout changes prevent source provenance verification')
 # Derive the expected CLR version from the requested package version.
 match = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?', version)
 assert match, version
@@ -25,16 +29,23 @@ with zipfile.ZipFile(package) as archive:
     repository = metadata.find('n:repository', ns)
     assert repository.attrib['commit'] == commit
     assert repository.attrib['url'] == 'https://github.com/DashyNMS/mcp'
-    assert archive.read('LICENSE') == (root / 'LICENSE').read_bytes()
+    # Search ships its own copy so packing never depends on files outside the
+    # project; it must stay identical to the repository licence.
+    assert archive.read('LICENSE') == (root / 'src/DashyNMS.Agent.Search/LICENSE').read_bytes() == (root / 'LICENSE').read_bytes()
+    # Search bundles no dependency DLLs: consumers restore Core under its own
+    # terms, so NOTICES.md says the project licence does not cover it.
+    assert archive.read('NOTICES.md') == (root / 'NOTICES.md').read_bytes()
     assert archive.read('README.md') == (root / 'src/DashyNMS.Agent.Search/README.md').read_bytes()
     licence = metadata.find('n:license', ns)
-    assert licence.attrib['type'] == 'file' and licence.text == 'LICENSE'
+    assert licence.attrib['type'] == 'expression' and licence.text == 'MIT'
     assert metadata.findtext('n:readme', namespaces=ns) == 'README.md'
+    assert metadata.findtext('n:authors', namespaces=ns) == 'Thomas Pickup'
+    assert archive.read('LICENSE').startswith(b'MIT License\n\nCopyright (c) 2026 Thomas Pickup\n')
     assert metadata.findtext('n:copyright', namespaces=ns) == 'Copyright (c) 2026 Thomas Pickup'
     # Fail closed for every ZIP file, including new NuGet asset directories.
     names = archive.namelist()
     assert len(names) == len(set(names)), 'Duplicate ZIP entries'
-    fixed = {'DashyNMS.Agent.Search.nuspec', 'LICENSE', 'README.md',
+    fixed = {'DashyNMS.Agent.Search.nuspec', 'LICENSE', 'NOTICES.md', 'README.md',
              '[Content_Types].xml', '_rels/.rels', 'lib/net10.0/DashyNMS.Agent.Search.dll'}
     assert all(name in fixed or re.fullmatch(r'package/services/metadata/core-properties/[A-Za-z0-9]+\.psmdcp', name)
                for name in names), names
@@ -81,6 +92,9 @@ Console.WriteLine(core.Assembly.FullName);
     env = dict(os.environ, NUGET_PACKAGES=str(smoke / 'packages'))
     subprocess.run(['dotnet', 'restore', str(smoke / 'Smoke.csproj'), '--configfile', str(smoke / 'nuget.config'), '--no-cache'], check=True, env=env)
     assets = json.loads((smoke / 'obj/project.assets.json').read_text())
+    subprocess.run(['python3', str(root / 'scripts/collect-dependency-notices.py'),
+                    str(smoke / 'obj/project.assets.json'), str(smoke / 'legal-evidence'),
+                    str(root / 'docs/dependency-licences')], check=True)
     libraries = sorted(assets['libraries'])
     assert all(item['type'] == 'package' for item in assets['libraries'].values())
     assert not any(name.split('/')[0].lower().startswith('modelcontextprotocol') or name.split('/')[0].lower() == 'dashynms.agent' for name in libraries)

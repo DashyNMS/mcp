@@ -15,6 +15,8 @@
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
 ARG TARGETARCH
 WORKDIR /src
+# Build-stage legal evidence collector; cached independently of source.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
 
 # Restore on its own layer, so a source change doesn't download packages again.
 COPY global.json Directory.Build.props nuget.config ./
@@ -25,6 +27,11 @@ RUN --mount=type=secret,id=packages,env=DASHYNMS_PACKAGES_TOKEN \
     dotnet restore src/DashyNMS.Mcp -a $TARGETARCH
 
 COPY src/ src/
+COPY scripts/collect-dependency-notices.py scripts/
+COPY docs/dependency-licences/ docs/dependency-licences/
+# Collect legal files from the exact restored packages, including transitives.
+# Python is a build-stage tool only; it is not copied into the runtime image.
+RUN python3 scripts/collect-dependency-notices.py src/DashyNMS.Mcp/obj/project.assets.json /third-party docs/dependency-licences
 
 # Not trimmed: the MCP SDK finds tools, and System.Text.Json writes results,
 # by reflection. Invariant globalisation because the chiseled image has no
@@ -38,6 +45,10 @@ RUN dotnet publish src/DashyNMS.Mcp -c Release --no-restore -a $TARGETARCH --sel
 # manager, and a non-root user by default.
 FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled@sha256:3eb54ac708855f74b032de48e02437d15fb083b2aa593d49fdd512bb17f3e944
 WORKDIR /app
+LABEL org.opencontainers.image.licenses="MIT" \
+      net.dashynms.license.scope="MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md."
 COPY --from=build /app .
+COPY LICENSE NOTICES.md ./
+COPY --from=build /third-party ./third-party
 
 ENTRYPOINT ["dotnet", "dashynms-mcp.dll"]

@@ -171,8 +171,7 @@ assets/native libraries, detect dynamically loaded assemblies, or validate trimm
 and AOT. It is a direct-reference guard, not a complete dependency graph audit.
 
 Before publication, verify source and binary compatibility (including type forwards)
-and MCP schema discovery. Resolve the licence blocker described below and establish
-a reviewed release policy. Audit and publish the shared synthetic fixture bundle
+and MCP schema discovery, and establish a reviewed release policy. Audit and publish the shared synthetic fixture bundle
 separately; this pipeline does not publish fixtures.
 
 Static mobile dispatch/schema and generated serialisation, freshness metadata,
@@ -205,18 +204,14 @@ compares packed, producer and clean-consumer DLL bytes and checks assembly metad
 
 Publication is disabled. This workflow has read-only permissions and no publication
 job, push command or write token. PR and main CI still produce pack/restore evidence.
-The repository PolyForm Internal Use licence blocks publication and mobile
-redistribution pending explicit rights/licence resolution by the owner. Core's MIT
-licence does not relicense Search. Including LICENSE is metadata, not permission.
-The LICENSE notice still says Core comes from an `external/desktop` submodule and
-is offered under the server licence. That notice is stale relative to today's
-`DashyNMS.Core` package dependency. The owner must reconcile the notice and rights
-before publication or redistribution. This preparation preserves LICENSE verbatim;
-it cannot resolve ownership or relicense Core. Search copyright metadata records
-`Copyright (c) 2026 Thomas Pickup`, matching the existing required notice.
+Search is MIT licensed, copyright (c) 2026 Thomas Pickup, like the rest of the
+repository. The package declares the `MIT` expression and bundles its own
+`LICENSE` (identical to the repository's) and `NOTICES.md`; the check fails if
+either drifts. Core and its dependencies are restored by the consumer under their
+own terms, and the smoke consumer collects their licence evidence the same way
+the image build does (see `docs/dependency-licences`).
 
-Any future publication requires a separately reviewed workflow change after licence
-resolution. Download the package and report from the verified run, then execute
+Any future publication requires a separately reviewed workflow change. Download the package and report from the verified run, then execute
 `scripts/verify-search-provenance.py --for-publication` with that source run's
 expected `SEARCH_VERSION` and `GITHUB_SHA` immediately before pushing the exact
 named package. Supply `EXPECTED_SOURCE_EVENT_NAME`, `EXPECTED_SOURCE_REF`,
@@ -239,7 +234,7 @@ replacement of both report and package. Review feed permissions and retention th
 
 The smoke consumer references the actual Core ILibreNmsClient type used by Search's
 factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
-It verifies the nuspec dependency group, file licence/readme declarations and content,
+It verifies the nuspec dependency group, MIT licence expression, readme declaration and content,
 and allows only the expected Search DLL under package asset directories. This checks
 the resolved .NET graph, not dynamic loading, dependency safety or mobile behaviour.
 Source embedding was removed. This project adds no explicit SourceLink package or
@@ -249,7 +244,7 @@ Repository metadata alone does not establish that support.
 
 The Core dependency check accepts NuGet's equivalent bare minimum version and
 `[version, )` range encodings, while the clean restore must resolve the pinned
-baseline exactly. The archive check allows only known packaging metadata, licence,
+baseline exactly. The archive check allows only known packaging metadata, licence, notices,
 readme and the Search DLL; unexpected files and duplicate entries fail. Expected
 CLR assembly version comes from `SEARCH_VERSION`, rather than a fixed 0.1.0.
 A future stable Search release must first choose and verify a stable Core baseline.
@@ -271,8 +266,8 @@ then update the producer baseline and consumer pin together. This smoke consumer
 verifies ci.34 only. No mobile code or shipping dependency was added. Source/binary
 compatibility of Agent type forwards, schema parity, mobile generation races,
 fixtures, Release iOS trimming/AOT and Android runtime/performance remain follow-up
-work. Keep mobile #596 open. The unchanged PolyForm licence also requires a rights
-review before mobile redistribution; Core's MIT licence does not relicense Search.
+work. Keep mobile #596 open. Mobile redistribution must include Search's LICENSE
+and the licence texts of Core and its dependencies.
 
 All builds, tests, pack/restore and runtime verification are CI-only for this task.
 None has been executed locally; workflow success and feed permissions remain

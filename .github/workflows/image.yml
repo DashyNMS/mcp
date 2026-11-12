@@ -38,17 +38,16 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
             type=ref,event=pr
-          # PolyForm Internal Use isn't on the SPDX list, hence LicenseRef-;
-          # GitHub can't detect it either, so it's set here rather than
-          # left as NOASSERTION.
           labels: |
             org.opencontainers.image.title=DashyNMS MCP
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
-            org.opencontainers.image.licenses=LicenseRef-PolyForm-Internal-Use-1.0.0
+            org.opencontainers.image.licenses=MIT
+            net.dashynms.license.scope=MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md.
           annotations: |
             org.opencontainers.image.title=DashyNMS MCP
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
-            org.opencontainers.image.licenses=LicenseRef-PolyForm-Internal-Use-1.0.0
+            org.opencontainers.image.licenses=MIT
+            net.dashynms.license.scope=MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md.
 
       # Build the runner's own architecture first and check it starts, so a
       # broken image never gets as far as the registry.
@@ -76,6 +75,22 @@ jobs:
           test "$code" -eq 2
           grep -q "LIBRENMS_URL is not set" <<<"$output"
           test "$(docker image inspect dashynms-mcp:smoke --format '{{.Config.User}}')" != ""
+
+      # The image must carry the project licence, the notices and the dependency
+      # licence evidence collected at build time. Chiseled has no shell, so copy
+      # the files out rather than running anything inside it.
+      - name: Check bundled licence and notices
+        run: |
+          id=$(docker create dashynms-mcp:smoke)
+          out=$(mktemp -d)
+          docker cp "$id:/app/LICENSE" "$out/LICENSE"
+          docker cp "$id:/app/NOTICES.md" "$out/NOTICES.md"
+          docker cp "$id:/app/third-party" "$out/third-party"
+          docker rm "$id"
+          cmp LICENSE "$out/LICENSE"
+          cmp NOTICES.md "$out/NOTICES.md"
+          test -s "$out/third-party/inventory.json"
+          test "$(docker image inspect dashynms-mcp:smoke --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')" = MIT
 
       - name: Sign in to GHCR
         if: github.event_name != 'pull_request'

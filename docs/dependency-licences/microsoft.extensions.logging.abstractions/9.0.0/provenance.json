@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.logging.abstractions/9.0.0",
+  "packageSha256": "8814ecf6dc2359715e111b78084ae42087282595358eb775456088f15e63eca5",
+  "upstreamRepository": "https://github.com/dotnet/runtime",
+  "upstreamRevision": "9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/runtime/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}
