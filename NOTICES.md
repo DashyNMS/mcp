@@ -16,12 +16,8 @@ publishers' licences. Include their applicable notices when redistributing them.
 
 ## Container distribution
 
-The final image includes /app/LICENSE and /app/NOTICES.md. The OCI MIT licence
-label describes DashyNMS project-owned material. The net.dashynms.license.scope
-label records that dependencies and Microsoft/Canonical base layers retain
-their own terms. NuGet dependency texts and their package provenance are retained separately in
-/app/third-party. Base-layer notices retain their original locations and terms.
-The project MIT licence does not replace these licences.
+Existing container images and their dependency licences are unchanged by this
+licence update. Container metadata and bundled notices require a follow-up.
 
 ## Logo provenance
 
