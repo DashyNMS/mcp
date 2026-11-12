@@ -17,18 +17,23 @@ limits, sanitisation, deadlines and evidence ownership checks.
 
 ## Consumption status
 
-Publication is disabled; a reviewed workflow change is required to enable it. CI artefacts use `0.1.0-ci.<run-id>.<attempt>` and embed the repository commit.
-`0.1.0-dev` identifies local packs and must not be used as a shipping pin.
-Pull requests verify packages without publishing.
-Run/attempt versions are unique, not immutable feed storage. Pin an exact verified
-version; configure package-source mapping and grant the consumer repository read
-access before using its `GITHUB_TOKEN` with `packages: read`.
+Each verified push to `main` in DashyNMS/mcp publishes `0.1.0-ci.<run-id>.<attempt>`
+to GitHub Packages (`https://nuget.pkg.github.com/DashyNMS/index.json`), with a GitHub
+build provenance attestation and the repository commit in the nuspec. Pull requests
+verify packages without publishing. `0.1.0-dev` identifies local packs and must not
+be used as a shipping pin.
 
-Core remains at `2.0.0-ci.34`; mobile currently uses `2.0.0-ci.64`. NuGet's
-minimum dependency range permits unification, but that is not compatibility proof.
-Do not add a shipping mobile reference until the Core baseline has been reconciled
-and mobile CI has verified restore, behaviour and Release trimming/AOT/runtime.
-The package smoke check is plain .NET only.
+The feed refuses a second push of a version and the workflow never overwrites one,
+but an organisation administrator can still delete a version. Pin an exact version,
+check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuGet
+lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
+feed and restore with a token that has `packages: read`.
+
+The package is built against Core `2.0.0-ci.34` (MCP's pin) and declares it as a
+minimum. Before publication, CI runs the Search tests on the exact packed binary
+with Core `2.0.0-ci.34` and with `2.0.0-ci.64` (mobile's pin). That is plain .NET
+evidence: a consumer must still verify its own restore, Release trimming/AOT and
+runtime behaviour in its CI.
 
 ## Licence
 

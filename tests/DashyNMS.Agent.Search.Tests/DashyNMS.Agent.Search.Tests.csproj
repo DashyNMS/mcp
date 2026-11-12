@@ -20,8 +20,19 @@
     <Using Include="NSubstitute" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(SearchPackageVersion)' == ''">
     <ProjectReference Include="../../src/DashyNMS.Agent.Search/DashyNMS.Agent.Search.csproj" />
+  </ItemGroup>
+
+  <!--
+    CI's Core compatibility job sets SearchPackageVersion to test the exact
+    packed Search binary, compiled against MCP's Core pin, while a consumer
+    pins a different Core (DashyNMSCoreVersion). That is the combination a
+    host such as mobile restores, so source builds alone would not prove it.
+  -->
+  <ItemGroup Condition="'$(SearchPackageVersion)' != ''">
+    <PackageReference Include="DashyNMS.Agent.Search" Version="[$(SearchPackageVersion)]" />
+    <PackageReference Include="DashyNMS.Core" Version="[$(DashyNMSCoreVersion)]" />
   </ItemGroup>
 
 </Project>

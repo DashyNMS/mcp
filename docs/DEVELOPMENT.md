@@ -170,8 +170,9 @@ assembly. It does not traverse Core or other dependencies, inspect resolved NuGe
 assets/native libraries, detect dynamically loaded assemblies, or validate trimming
 and AOT. It is a direct-reference guard, not a complete dependency graph audit.
 
-Before publication, verify source and binary compatibility (including type forwards)
-and MCP schema discovery, and establish a reviewed release policy. Audit and publish the shared synthetic fixture bundle
+Only Search is published (see below). Agent's type forwards and MCP schema discovery
+are not covered by that pipeline and need their own verification before any Agent
+package is published. Audit and publish the shared synthetic fixture bundle
 separately; this pipeline does not publish fixtures.
 
 Static mobile dispatch/schema and generated serialisation, freshness metadata,
@@ -181,7 +182,7 @@ size/token/performance measurements remain unverified follow-ups. MCP-free sourc
 references alone do not prove the transitive graph or mobile runtime compatibility.
 The other tools, mobile's existing lookups and Diagnostics remain deferred.
 
-### Search package preparation for mobile #596
+### Search package for mobile #596
 
 `search-package.yml` now defines a separate Search package pipeline. It builds and
 runs solution tests, packs **Search only**, inspects its metadata/licence/commit and
@@ -194,16 +195,14 @@ and records the complete resolved library list and package SHA-256 in
 proof of mobile runtime compatibility or of the absence of dynamic loading.
 
 Package identity is `DashyNMS.Agent.Search`, independently versioned from the MCP
-host, initially `0.1.0-ci.<GitHub run ID>.<run attempt>`. These versions are unique
-per run/attempt, not immutable: feed administrators may delete packages, and this
-workflow does not enforce feed retention. `0.1.0-dev` is for local packs only.
-Search's Version and PackageVersion share the same value; the SDK derives assembly
-and informational versions from it. CI builds with that value and repository commit,
-tests without rebuilding, then packs without building or restoring. The smoke check
-compares packed, producer and clean-consumer DLL bytes and checks assembly metadata.
+host, initially `0.1.0-ci.<GitHub run ID>.<run attempt>`. `0.1.0-dev` is for local
+packs only. Search's Version and PackageVersion share the same value; the SDK derives
+assembly and informational versions from it. CI builds with that value and repository
+commit, tests without rebuilding, then packs without building or restoring. The smoke
+check compares packed, producer and clean-consumer DLL bytes and checks assembly
+metadata. The verify job then publishes the package's SHA-256 as a job output; later
+jobs compare their downloads with that output, not with the report inside the artefact.
 
-Publication is disabled. This workflow has read-only permissions and no publication
-job, push command or write token. PR and main CI still produce pack/restore evidence.
 Search is MIT licensed, copyright (c) 2026 Thomas Pickup, like the rest of the
 repository. The package declares the `MIT` expression and bundles its own
 `LICENSE` (identical to the repository's) and `NOTICES.md`; the check fails if
@@ -211,26 +210,66 @@ either drifts. Core and its dependencies are restored by the consumer under thei
 own terms, and the smoke consumer collects their licence evidence the same way
 the image build does (see `docs/dependency-licences`).
 
-Any future publication requires a separately reviewed workflow change. Download the package and report from the verified run, then execute
-`scripts/verify-search-provenance.py --for-publication` with that source run's
-expected `SEARCH_VERSION` and `GITHUB_SHA` immediately before pushing the exact
-named package. Supply `EXPECTED_SOURCE_EVENT_NAME`, `EXPECTED_SOURCE_REF`,
-`EXPECTED_SOURCE_REF_PROTECTED`, `EXPECTED_SOURCE_RUN_ID`,
-`EXPECTED_SOURCE_RUN_ATTEMPT` and `EXPECTED_SOURCE_REPOSITORY` from independently
-trusted Actions run context, never by copying the downloaded report. These values
-refer to the producing run, not a later publishing run. The report records the
-source event, ref, protection flag, run ID/attempt and repository. Publication mode
-requires a `push` on `refs/heads/main`, protection `true`, and `DashyNMS/mcp`.
-It checks those expected values, nuspec ID/version/repository/commit, the single
-package file set and SHA-256. Any mismatch must block publication. Normal CI
-verification permits PR merge refs and their synthetic merge commits; PR artefacts
-cannot pass publication mode. CI does not run publication mode, so a successful
-main run does not establish publication eligibility. No publication path is provided.
-The protection flag reflects Actions context, not an audit of protection rules or
-review quality. The future publisher must verify the source run succeeded and its
-workflow revision was reviewed. The unsigned sidecar
-can detect mismatched bytes; it is not a signed attestation or protection against
-replacement of both report and package. Review feed permissions and retention then.
+#### Core compatibility
+
+Search is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
+declares that as a minimum, so a host that pins a newer Core gets that one instead.
+The `core-compatibility` job checks each Core a consumer actually pins: MCP's own
+(`2.0.0-ci.34`) and mobile's (`2.0.0-ci.64`, the version in mobile's
+`DashyNMS.Mobile.Shared.csproj`). For each it:
+
+- builds Search from source against that Core with warnings as errors (source
+  compatibility, for a future producer pin), and
+- restores the **downloaded package** into the Search-only test project in a fresh
+  package directory beside an exact pin of that Core, checks the resolved graph has
+  one Core at that version and no Agent/MCP packages, compares the restored DLL with
+  the verified package, and runs `DashyNMS.Agent.Search.Tests` on that combination
+  (`scripts/verify-search-core-compatibility.py`). This is the binary a host runs.
+
+When mobile moves Core, update its matrix entry first; a failing entry blocks
+publication. MCP's own pin is unchanged: moving MCP to a newer Core changes alert
+and tool behaviour well beyond search and needs its own review. The ranking tests in
+`DeviceSearchTests` live in the Agent test project and run against MCP's pin only;
+the Search-only tests cover the host boundary, failures and cancellation. This is
+plain .NET evidence, not mobile trimming/AOT, Android runtime or device behaviour.
+
+#### Publication
+
+Every push to protected `main` whose `verify` and `core-compatibility` jobs pass runs
+the `publish` job; pull requests never reach it. It holds the only write token
+(`packages: write`, plus `id-token`/`attestations: write` for the attestation) and:
+
+1. downloads the package from the same run and runs
+   `scripts/verify-search-provenance.py --for-publication`, with the expected source
+   values taken from the run's own Actions context, then checks the SHA-256 against
+   the verify job's output;
+2. creates a GitHub build provenance attestation for the exact `.nupkg`
+   (`gh attestation verify <file> --repo DashyNMS/mcp` checks it);
+3. pushes it to `https://nuget.pkg.github.com/DashyNMS` **without**
+   `--skip-duplicate`, so an existing version fails the job rather than being
+   reported as published;
+4. downloads it back through the feed and fails unless the bytes match, then checks
+   the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-search.py`).
+
+A run's version includes its attempt number, and the verify job's attempt fixes it.
+Re-running only the failed publish job therefore fails provenance verification on
+purpose; re-run all jobs instead, which produces a new version.
+
+What this does and does not guarantee:
+
+- GitHub Packages rejects a second push of an existing version, and this workflow
+  never deletes or overwrites one. That is feed behaviour, not storage immutability:
+  an organisation package administrator can still delete a version. Consumers should
+  pin the exact version and verify its hash or attestation; a NuGet lock file
+  (`RestorePackagesWithLockFile`) records the content hash and fails on change.
+- The attestation binds the package digest to this workflow, commit and run. It does
+  not prove review quality; the protection flag reflects Actions context, not an
+  audit of the branch rules.
+- The package is linked to this public repository, so it should be public, like
+  `DashyNMS.Core`, and mobile's `GITHUB_TOKEN` with `packages: read` can restore it.
+  Whether the Actions token may read package metadata is undocumented for NuGet; if
+  it is refused the job records the visibility as unverified instead of failing.
+  The first publication and a mobile restore are the real checks.
 
 The smoke consumer references the actual Core ILibreNmsClient type used by Search's
 factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
@@ -252,27 +291,15 @@ The current prerelease Core dependency is intentional for CI packages and may
 produce NU5104 when packing a stable Search version. Do not suppress that warning
 or declare a stable release ready while the dependency remains a prerelease.
 
-Before mobile consumption, grant the mobile repository Actions read access on the
-new Search package and confirm its existing `packages: read` token can restore the
-exact published version. MCP-token restore in this pipeline cannot prove mobile's
-access. GitHub package access is external configuration, not set by this change.
-Use mobile's existing `DashyNMS.*` feed mapping; never ship a local checkout reference.
+Before mobile pins a version, confirm in mobile CI that its existing `packages: read`
+token restores that exact published version through mobile's `DashyNMS.*` feed
+mapping. MCP's own restore cannot prove mobile's access. Never ship a local checkout
+reference.
 
-**Core reconciliation remains blocked.** Source inventory confirms MCP ci.34 and
-mobile ci.64; neither package metadata nor a larger version number proves API,
-binary or semantic compatibility. Both pins remain unchanged. CI must first test
-the candidate reconciled baseline across MCP and mobile, including alert semantics,
-then update the producer baseline and consumer pin together. This smoke consumer
-verifies ci.34 only. No mobile code or shipping dependency was added. Source/binary
-compatibility of Agent type forwards, schema parity, mobile generation races,
-fixtures, Release iOS trimming/AOT and Android runtime/performance remain follow-up
-work. Keep mobile #596 open. Mobile redistribution must include Search's LICENSE
-and the licence texts of Core and its dependencies.
+Still outstanding for mobile #596: source/binary compatibility of Agent type
+forwards, schema parity, mobile generation races, the shared fixture bundle,
+Release iOS trimming/AOT and Android runtime/performance. Keep mobile #596 open.
+Mobile redistribution must include Search's LICENSE and the licence texts of Core
+and its dependencies.
 
-All builds, tests, pack/restore and runtime verification are CI-only for this task.
-None has been executed locally; workflow success and feed permissions remain
-unverified until CI runs.
-
-Before any future publication, rerun the complete package inspection and smoke
-verification on the downloaded artefact; the provenance script alone checks only
-identity and hash. Publication remains disabled.
+All builds, tests, pack/restore, compatibility and publication run in CI only.
