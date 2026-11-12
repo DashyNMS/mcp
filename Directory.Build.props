@@ -7,6 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Product>DashyNMS MCP</Product>
     <Company>DashyNMS</Company>
+    <Authors>Thomas Pickup</Authors>
+    <Copyright>Copyright (c) 2026 Thomas Pickup</Copyright>
+    <PackageLicenseExpression Condition="'$(MSBuildProjectName)' != 'DashyNMS.Agent.Search'">MIT</PackageLicenseExpression>
     <Version>1.1.0</Version>
     <NeutralLanguage>en-GB</NeutralLanguage>
     <!--

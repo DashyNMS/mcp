@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.filesystemglobbing/10.0.13",
+  "packageSha256": "7e05d4b38ec017c4fef5e5963259cca7a5ac02c078102c3df0c8133d7df4ba97",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

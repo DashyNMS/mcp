@@ -16,8 +16,21 @@ publishers' licences. Include their applicable notices when redistributing them.
 
 ## Container distribution
 
-Existing container images and their dependency licences are unchanged by this
-licence update. Container metadata and bundled notices require a follow-up.
+Images built from this revision onwards are labelled MIT for project-owned
+material only. Each image carries this file and LICENSE in /app, and
+/app/third-party holds the licence and notice files for every restored NuGet
+package, copied verbatim, with an inventory of package and file hashes. Where a
+package embeds no licence text, the text comes from the exact upstream commit its
+nuspec records; see docs/dependency-licences. The .NET runtime and Canonical
+chiseled base layers are not covered by that inventory and keep their
+publishers' terms. Images published before this change carry the earlier
+PolyForm Internal Use labels and no bundled notices.
+
+## Search package
+
+DashyNMS.Agent.Search bundles LICENSE and this file. It contains no dependency
+binaries: consumers restore DashyNMS.Core and its dependencies under their own
+terms.
 
 ## Logo provenance
 

@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.dependencyinjection.abstractions/9.0.0",
+  "packageSha256": "0a7715c24299e42b081b63b4f8e33da97b985e1de9e941b2b9e4c748b0d52fe7",
+  "upstreamRepository": "https://github.com/dotnet/runtime",
+  "upstreamRevision": "9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/runtime/9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}
