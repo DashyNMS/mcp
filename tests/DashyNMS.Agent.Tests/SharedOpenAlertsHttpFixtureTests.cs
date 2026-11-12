@@ -144,6 +144,23 @@ public sealed class SharedOpenAlertsHttpFixtureTests
         Assert.Equal(Strings(c, "representatives"), result.Groups.Select(g => g.Representative.ToString()));
         Assert.Equal(Ints(c, "faultCounts"), shown.Select(a => a.GetProperty("fault_count").GetInt32()));
         Assert.Equal(Ints(c, "faultCounts"), result.Groups.Select(g => g.FaultCount));
+        // Each group's faults in order: all of them from the host; MCP's brief list names the
+        // first few of a group of several and counts the rest.
+        var faults = c.GetProperty("faults").EnumerateArray().Select(g => g.EnumerateArray().Select(f => f.GetInt32()).ToArray()).ToArray();
+        Assert.Equal(faults, result.Groups.Select(g => g.Faults.Select(f => f.Key.Id).ToArray()));
+        Assert.All(result.Groups, g => Assert.Equal(0, g.FaultsOmitted));
+        for (var i = 0; i < shown.Count; i++)
+        {
+            if (faults[i].Length == 1)
+            {
+                Assert.False(shown[i].TryGetProperty("faults", out var none) && none.ValueKind == JsonValueKind.Array);
+                continue;
+            }
+
+            var listed = shown[i].GetProperty("faults").EnumerateArray().Select(f => f.GetProperty("fault_id").GetInt32()).ToArray();
+            Assert.Equal(faults[i].Take(AlertTools.BriefFaults), listed);
+            Assert.Equal(faults[i].Length > AlertTools.BriefFaults ? faults[i].Length - AlertTools.BriefFaults : null, Number(shown[i], "faults_omitted"));
+        }
         Assert.Equal(Strings(c, "states"), shown.Select(a => a.GetProperty("state").GetString()));
         Assert.Equal(Strings(c, "states"), result.Groups.Select(g => StateText(g.State)));
         // MCP names an acknowledged count only for a partly acknowledged group of several.

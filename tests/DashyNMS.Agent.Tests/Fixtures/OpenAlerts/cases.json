@@ -49,6 +49,28 @@
         0,
         2
       ],
+      "faults": [
+        [
+          12
+        ],
+        [
+          9500
+        ],
+        [
+          9400,
+          9402
+        ],
+        [
+          9200,
+          9201,
+          9202,
+          9204,
+          9206,
+          9207,
+          9203,
+          9205
+        ]
+      ],
       "states": [
         "active",
         "acknowledged",
@@ -85,6 +107,15 @@
         1,
         0
       ],
+      "faults": [
+        [
+          9500
+        ],
+        [
+          9400,
+          9402
+        ]
+      ],
       "states": [
         "acknowledged",
         "active"
@@ -119,6 +150,14 @@
         0,
         1
       ],
+      "faults": [
+        [
+          12
+        ],
+        [
+          9500
+        ]
+      ],
       "states": [
         "active",
         "acknowledged"
@@ -141,6 +180,7 @@
       "representatives": [],
       "faultCounts": [],
       "acknowledgedCounts": [],
+      "faults": [],
       "states": [],
       "totals": {
         "alert_groups": 0,
@@ -171,6 +211,15 @@
       "acknowledgedCounts": [
         1,
         0
+      ],
+      "faults": [
+        [
+          9500
+        ],
+        [
+          9400,
+          9402
+        ]
       ],
       "states": [
         "acknowledged",
@@ -206,6 +255,14 @@
         0,
         1
       ],
+      "faults": [
+        [
+          12
+        ],
+        [
+          9500
+        ]
+      ],
       "states": [
         "active",
         "acknowledged"
@@ -239,6 +296,14 @@
       "acknowledgedCounts": [
         0,
         1
+      ],
+      "faults": [
+        [
+          12
+        ],
+        [
+          13
+        ]
       ],
       "states": [
         "active",

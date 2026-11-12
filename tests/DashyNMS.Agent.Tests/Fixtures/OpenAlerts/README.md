@@ -19,7 +19,8 @@ client: MCP to `active_alerts` and `HostOpenAlerts`, mobile to Intelligence's
     recovered, which must not appear.
 - `alerts.json`: an older server (no `/faults` route) with alerts 12 and 13.
 - `cases.json`: each case's server, arguments and expected groups in order,
-  representative identities, fault and acknowledged counts, states, totals and
+  representative identities, fault and acknowledged counts, each group's fault
+  ids in order, states, totals and
   the requests each server should log. `requests` gives the default per server;
   a case may override it.
 - `transport.json`: failures on the alert routes while the device list answers.
