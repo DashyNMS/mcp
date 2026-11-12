@@ -145,7 +145,7 @@ for identity, library in sorted(assets['libraries'].items()):
                 target.write_bytes(data)
                 files['package/' + name] = hashlib.sha256(data).hexdigest()
                 if name == declared_file or (is_licence and is_legal_text):
-                    licence_files.add(name)
+                    licence_files.add(target)
         has_text = bool(licence_files)
         supplement = supplements / package_path
         if (supplement / 'provenance.json').is_file():
@@ -181,12 +181,14 @@ for identity, library in sorted(assets['libraries'].items()):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
                 files['supplement/' + name] = source
+                if source['role'] == 'licence':
+                    licence_files.add(target)
             (destination / 'supplement-provenance.json').write_bytes((supplement / 'provenance.json').read_bytes())
             has_text |= supplement_licence
         if not has_text:
             missing.append(f'{identity}: no actual licence text (a notice or SPDX expression alone is insufficient)')
         if expression == 'MIT' and has_text:
-            texts = '\n'.join(path.read_text(encoding='utf-8-sig') for path in destination.rglob('*') if path.is_file() and path.name != 'supplement-provenance.json')
+            texts = '\n'.join(path.read_text(encoding='utf-8-sig') for path in licence_files)
             if not all(part in texts.lower() for part in ('permission is hereby granted', 'copyright', 'the above copyright notice', 'the software is provided')):
                 missing.append(f'{identity}: MIT expression lacks actual MIT terms and copyright evidence')
         (destination / 'package.nuspec').write_bytes(nuspec)
