@@ -250,6 +250,9 @@ the `publish` job; pull requests never reach it. It holds the only write token
    reported as published;
 4. downloads it back through the feed and fails unless the bytes match, then checks
    the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-search.py`).
+   The token is only ever sent over HTTPS to `nuget.pkg.github.com` and
+   `api.github.com`, whatever download URL the feed's service index advertises;
+   storage redirects are followed without it.
 
 A run's version includes its attempt number, and the verify job's attempt fixes it.
 Re-running only the failed publish job therefore fails provenance verification on
@@ -270,11 +273,17 @@ What this does and does not guarantee:
   New GitHub packages can start private, and GitHub has no API to change a
   package's visibility, so the workflow cannot fix it. If the first publish job
   fails on visibility, an organisation owner sets `DashyNMS.Agent.Search` to public
-  in its package settings; the next merge then publishes and passes. Do not pin a
-  version whose publish job failed. Whether the Actions token may read package
-  metadata is undocumented for NuGet; if it is refused the job adds a warning
-  annotation and records visibility as unverified rather than failing after the
-  bytes were confirmed. A mobile restore is the final check.
+  in its package settings (this cannot be undone), then re-runs all jobs or merges
+  again, which publishes a new version that passes. Do not pin a version whose
+  publish job failed, including the private first one, which becomes visible when
+  the package turns public.
+- The visibility check fails closed. GitHub documents the packages REST API for
+  classic personal access tokens only, so the Actions token may be refused package
+  metadata. Then the job checks anonymously instead: a private package's page is a
+  404 to a signed-out visitor, and a public linked package's page redirects to
+  `github.com/DashyNMS/mcp/pkgs/nuget/DashyNMS.Agent.Search`, as Core's does to
+  `DashyNMS/core`. That relies on GitHub's web routes rather than a documented API;
+  any other answer fails the job. A mobile restore is still the final check.
 
 The smoke consumer references the actual Core ILibreNmsClient type used by Search's
 factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
