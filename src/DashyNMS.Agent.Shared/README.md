@@ -14,6 +14,11 @@ switching connection or signing out; the host must also discard stale results.
 The factory does not own or dispose the client. See the repository developer guide
 for the full boundary, cancellation and error contract.
 
+`DashyNMS.Agent.Alerts.HostOpenAlerts` lists the alerts open now as device and rule groups
+under the same rules: one per captured connection, disposed on a switch, fixed `HostFailure`
+categories. Each group's representative is a source-qualified `AlertKey` (`fault:12` or
+`alert:12`), never a bare number.
+
 Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
 (`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
 flags, so an omitted flag reads as down and an ignored device as up or down. `State`

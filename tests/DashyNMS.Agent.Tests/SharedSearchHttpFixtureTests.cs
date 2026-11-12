@@ -26,8 +26,6 @@ namespace DashyNMS.Agent.Tests;
 /// </remarks>
 public sealed class SharedSearchHttpFixtureTests
 {
-    private const string Token = "test-token";
-
     private static readonly string FixtureDirectory = Path.Combine(AppContext.BaseDirectory, "Fixtures", "DeviceSearch");
 
     private static JsonElement Load(string file)
@@ -105,7 +103,7 @@ public sealed class SharedSearchHttpFixtureTests
     {
         var provider = new ServiceCollection().AddLogging().AddDashyNmsAgent().BuildServiceProvider();
         provider.GetRequiredService<ILibreNmsClient>().Connect(
-            new LibreNmsConnection(root, Token, timeoutSeconds: Transport.GetProperty("timeoutSeconds").GetInt32()));
+            new LibreNmsConnection(root, FixtureServer.Token, timeoutSeconds: Transport.GetProperty("timeoutSeconds").GetInt32()));
         return provider;
     }
 
@@ -186,8 +184,8 @@ public sealed class SharedSearchHttpFixtureTests
         var query = Transport.GetProperty("query").GetString()!;
         using var mcpServer = FailingServer(failure);
         using var hostServer = FailingServer(failure);
-        using var mcp = Connected(mcpServer?.Root ?? NothingListening());
-        using var host = Connected(hostServer?.Root ?? NothingListening());
+        using var mcp = Connected(mcpServer?.Root ?? FixtureServer.NothingListening());
+        using var host = Connected(hostServer?.Root ?? FixtureServer.NothingListening());
         using var search = Host(host);
 
         // Side by side: a request that never gets an answer costs the full timeout on each.
@@ -224,108 +222,6 @@ public sealed class SharedSearchHttpFixtureTests
                 var answer = new Answer(failure.GetProperty("status").GetInt32(),
                     Transport.GetProperty("bodies").GetProperty(failure.GetProperty("body").GetString()!).GetString()!);
                 return new FixtureServer(_ => answer);
-        }
-    }
-
-    /// <summary>A loopback address that was free a moment ago, so a connection is refused.</summary>
-    private static Uri NothingListening()
-    {
-        using var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        return new Uri($"http://127.0.0.1:{port}/");
-    }
-
-    private sealed record Answer(int Status, string Body)
-    {
-        /// <summary>Accept the request and never answer it.</summary>
-        public static readonly Answer Hang = new(0, "");
-    }
-
-    /// <summary>
-    /// A loopback LibreNMS answering from the fixture, recording each request's path under
-    /// <c>/api/v0/</c>. Requests without the connection's token are refused, as LibreNMS would.
-    /// </summary>
-    private sealed class FixtureServer : IDisposable
-    {
-        private readonly HttpListener listener = new();
-        private readonly ConcurrentQueue<string> requests = new();
-        private readonly Func<string, Answer?> answer;
-        private readonly CancellationTokenSource stopping = new();
-
-        public FixtureServer(Func<string, Answer?> answer)
-        {
-            this.answer = answer;
-            using (var probe = new TcpListener(IPAddress.Loopback, 0))
-            {
-                probe.Start();
-                Root = new Uri($"http://127.0.0.1:{((IPEndPoint)probe.LocalEndpoint).Port}/");
-                probe.Stop();
-            }
-
-            listener.Prefixes.Add(Root.ToString());
-            listener.Start();
-            _ = Task.Run(ServeAsync);
-        }
-
-        public Uri Root { get; }
-
-        public string[] Requests => requests.ToArray();
-
-        private async Task ServeAsync()
-        {
-            while (listener.IsListening)
-            {
-                HttpListenerContext context;
-                try
-                {
-                    context = await listener.GetContextAsync();
-                }
-                catch (Exception)
-                {
-                    return;
-                }
-
-                _ = Task.Run(() => RespondAsync(context));
-            }
-        }
-
-        private async Task RespondAsync(HttpListenerContext context)
-        {
-            var path = context.Request.Url!.AbsolutePath;
-            const string api = "/api/v0/";
-            var relative = path.StartsWith(api, StringComparison.Ordinal) ? path[api.Length..] : path;
-            requests.Enqueue(relative);
-            var reply = context.Request.Headers["X-Auth-Token"] == Token
-                ? answer(relative) ?? new Answer(404, """{"status":"error","message":"No fixture for this path"}""")
-                : new Answer(401, """{"status":"error","message":"Unauthenticated."}""");
-            try
-            {
-                if (reply == Answer.Hang)
-                {
-                    await Task.Delay(Timeout.Infinite, stopping.Token);
-                    return;
-                }
-
-                var body = Encoding.UTF8.GetBytes(reply.Body);
-                context.Response.StatusCode = reply.Status;
-                context.Response.ContentType = reply.Body.StartsWith('<') ? "text/html" : "application/json";
-                context.Response.ContentLength64 = body.Length;
-                await context.Response.OutputStream.WriteAsync(body);
-                context.Response.Close();
-            }
-            catch (Exception)
-            {
-                // The client gave up (a timeout) or the server is stopping.
-            }
-        }
-
-        public void Dispose()
-        {
-            stopping.Cancel();
-            listener.Stop();
-            listener.Close();
         }
     }
 }

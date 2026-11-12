@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using DashyNMS.Agent.Redaction;
 using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Summaries;
@@ -47,6 +48,18 @@ public sealed record DeviceSummary(
         {
             State = device.ReportedState,
         };
+    }
+
+    /// <summary>
+    /// <see cref="From"/> with every network-supplied text redacted, as typed host results
+    /// return it: device search and open alerts name a device the same way.
+    /// </summary>
+    internal static DeviceSummary Redacted(Device device, AgentOptions options, Redactor redactor)
+    {
+        var d = From(device, options);
+        string? Clean(string? text) => text is null ? null : redactor.Redact(text);
+        return d with { Hostname = Clean(d.Hostname), Display = Clean(d.Display), SysName = Clean(d.SysName),
+            Ip = Clean(d.Ip), Os = Clean(d.Os), Hardware = Clean(d.Hardware), Location = Clean(d.Location) };
     }
 
     /// <summary>Full when asked for, otherwise the few fields that tell devices apart (#35).</summary>
