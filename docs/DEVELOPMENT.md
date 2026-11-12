@@ -214,9 +214,9 @@ the image build does (see `docs/dependency-licences`).
 
 Search is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
-The `core-compatibility` job checks each Core a consumer actually pins: MCP's own
-(`2.0.0-ci.34`) and mobile's (`2.0.0-ci.64`, the version in mobile's
-`DashyNMS.Mobile.Shared.csproj`). For each it:
+The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
+and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) are both
+`2.0.0-ci.64`, so there is one entry. For each it:
 
 - builds Search from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -227,8 +227,12 @@ The `core-compatibility` job checks each Core a consumer actually pins: MCP's ow
   (`scripts/verify-search-core-compatibility.py`). This is the binary a host runs.
 
 When mobile moves Core, update its matrix entry first; a failing entry blocks
-publication. MCP's own pin is unchanged: moving MCP to a newer Core changes alert
-and tool behaviour well beyond search and needs its own review. The ranking tests in
+publication. Moving MCP's own pin can change alert and tool behaviour well beyond
+search, so each move needs its own review of what the Core range changes for MCP.
+The move from `2.0.0-ci.34` to `2.0.0-ci.64` (for the reported device state) was
+reviewed that way: MCP calls none of the changed alert actions or graph legends, the
+new transport members default or pass through, and Core's compatibility flags still
+read an omitted value as false. The ranking tests in
 `DeviceSearchTests` live in the Agent test project and run against MCP's pin only;
 the Search-only tests cover the host boundary, failures and cancellation. This is
 plain .NET evidence, not mobile trimming/AOT, Android runtime or device behaviour.

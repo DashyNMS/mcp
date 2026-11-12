@@ -4,6 +4,7 @@ using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Tools;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -117,12 +118,19 @@ public sealed class SharedSearchFixtureTests
         Assert.Equal(ExpectedRequests(), wired.Transport.Requests);
     }
 
-    [Fact]
-    public async Task Find_device_and_the_host_search_report_the_shared_status_words()
+    /// <summary>
+    /// The status word is MCP's output and filter, and stays as it was; the reported state
+    /// is the typed state hosts show, kept out of MCP's JSON in brief and verbose records.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Find_device_and_the_host_search_report_the_shared_status_words_and_reported_states(bool verbose)
     {
         var mcp = Wire(t => t.On("devices", DevicesJson));
-        var devices = FakeLibreNms.Parse(await mcp.Tools.FindDevice("sw", limit: DeviceTools.MaxMatches, cancellationToken: CancellationToken.None))
+        var devices = FakeLibreNms.Parse(await mcp.Tools.FindDevice("sw", limit: DeviceTools.MaxMatches, verbose: verbose, cancellationToken: CancellationToken.None))
             .GetProperty("data").GetProperty("devices").EnumerateArray().ToList();
+        Assert.All(devices, d => Assert.False(d.TryGetProperty("state", out _)));
         var host = Wire(t => t.On("devices", DevicesJson));
         using var search = Host(host);
         var matches = (await search.FindDevicesAsync(new("sw", Limit: DeviceSearch.MaxMatches))).Result!.Matches;
@@ -132,7 +140,9 @@ public sealed class SharedSearchFixtureTests
             var id = state.GetProperty("id").GetInt32();
             var shared = state.GetProperty("shared").GetString();
             Assert.Equal(shared, devices.Single(d => d.GetProperty("device_id").GetInt32() == id).GetProperty("status").GetString());
-            Assert.Equal(shared, matches.Single(m => m.Device.DeviceId == id).Device.Status);
+            var device = matches.Single(m => m.Device.DeviceId == id).Device;
+            Assert.Equal(shared, device.Status);
+            Assert.Equal(state.GetProperty("reported").GetString(), device.State.ToDisplayString());
         }
     }
 

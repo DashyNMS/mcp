@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Summaries;
@@ -15,6 +16,17 @@ public sealed record DeviceSummary(
     string Status,
     DateTime? LastPolled)
 {
+    /// <summary>
+    /// The state LibreNMS actually reported, from Core's <see cref="Device.ReportedState"/>.
+    /// <see cref="Status"/> reads Core's compatibility flags, so a device whose response
+    /// omits a flag says "down" and an ignored one says "up" or "down"; hosts that show a
+    /// state need Unknown and Ignored kept apart. Maintenance needs a per-device call and is
+    /// never set here. Left out of JSON so MCP's output and status filter stay unchanged.
+    /// Unknown unless set, since the enum's default value is Up.
+    /// </summary>
+    [JsonIgnore]
+    public DeviceState State { get; init; } = DeviceState.Unknown;
+
     public static DeviceSummary From(Device device, AgentOptions options)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -31,7 +43,10 @@ public sealed record DeviceSummary(
             StatusOf(device),
             device.LastPolled is { } polled
                 ? DesktopNMS.Core.ServerTime.ToLocal(polled, options.ServerTimestampsAreUtc).ToUniversalTime()
-                : null);
+                : null)
+        {
+            State = device.ReportedState,
+        };
     }
 
     /// <summary>Full when asked for, otherwise the few fields that tell devices apart (#35).</summary>
