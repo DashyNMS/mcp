@@ -10,11 +10,18 @@ using Microsoft.Extensions.Time.Testing;
 namespace DashyNMS.Agent.Tests;
 
 /// <summary>
-/// The MCP find_device tool against the device search fixture DashyNMS/mobile runs its
-/// Intelligence find_device against (Fixtures/DeviceSearch). Mobile keeps byte-identical
-/// copies and checks them against this repository, so both adapters are held to the same
-/// ranking, totals, scope, status words and failure categories from the same response.
+/// The MCP find_device tool and HostDeviceSearch, the executor mobile's Intelligence
+/// find_device wraps, against the device search fixture shared with DashyNMS/mobile
+/// (Fixtures/DeviceSearch). Mobile keeps byte-identical copies and checks them against this
+/// repository, so both adapters here and mobile's are held to the same ranking, totals,
+/// request scope and status words from the same response.
 /// </summary>
+/// <remarks>
+/// Failures are shared only as far as both adapters failing without data after the same
+/// requests. The DeviceSearchFailure categories are the host's contract; the MCP tool returns
+/// its own sentence for each HTTP status instead, asserted here per status. The README lists
+/// what the fixture does not prove.
+/// </remarks>
 public sealed class SharedSearchFixtureTests
 {
     private static readonly string FixtureDirectory = Path.Combine(AppContext.BaseDirectory, "Fixtures", "DeviceSearch");
@@ -72,6 +79,10 @@ public sealed class SharedSearchFixtureTests
         return new(transport, client, tools);
     }
 
+    /// <summary>The executor as a host gets it, over the same transport the fixture answers from.</summary>
+    private static HostDeviceSearch Host(Wired wired) =>
+        HostDeviceSearch.Create(wired.Client, new FakeTimeProvider(FakeLibreNms.Now), serverTimestampsAreUtc: false);
+
     [Theory]
     [MemberData(nameof(Cases))]
     public async Task Find_device_ranks_and_counts_the_shared_fixture(string query, int[] ids, int total)
@@ -89,33 +100,71 @@ public sealed class SharedSearchFixtureTests
         Assert.Equal(ExpectedRequests(), wired.Transport.Requests);
     }
 
-    [Fact]
-    public async Task Find_device_reports_the_shared_status_words()
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public async Task Host_search_ranks_and_counts_the_shared_fixture(string query, int[] ids, int total)
     {
         var wired = Wire(t => t.On("devices", DevicesJson));
-        var devices = FakeLibreNms.Parse(await wired.Tools.FindDevice("sw", limit: DeviceTools.MaxMatches, cancellationToken: CancellationToken.None))
+        using var search = Host(wired);
+        var outcome = await search.FindDevicesAsync(new(query, Limit: DeviceSearch.MaxMatches));
+
+        Assert.Null(outcome.Error);
+        var result = outcome.Result!;
+        Assert.False(result.IsMacSearch);
+        Assert.Equal(ids, result.Matches.Select(m => m.Device.DeviceId));
+        Assert.Equal(total, result.Page.Total);
+        Assert.DoesNotContain("synthetic-secret", JsonSerializer.Serialize(result), StringComparison.Ordinal);
+        Assert.Equal(ExpectedRequests(), wired.Transport.Requests);
+    }
+
+    [Fact]
+    public async Task Find_device_and_the_host_search_report_the_shared_status_words()
+    {
+        var mcp = Wire(t => t.On("devices", DevicesJson));
+        var devices = FakeLibreNms.Parse(await mcp.Tools.FindDevice("sw", limit: DeviceTools.MaxMatches, cancellationToken: CancellationToken.None))
             .GetProperty("data").GetProperty("devices").EnumerateArray().ToList();
+        var host = Wire(t => t.On("devices", DevicesJson));
+        using var search = Host(host);
+        var matches = (await search.FindDevicesAsync(new("sw", Limit: DeviceSearch.MaxMatches))).Result!.Matches;
 
         foreach (var state in Expectations().GetProperty("states").EnumerateArray())
         {
             var id = state.GetProperty("id").GetInt32();
-            var device = devices.Single(d => d.GetProperty("device_id").GetInt32() == id);
-            Assert.Equal(state.GetProperty("shared").GetString(), device.GetProperty("status").GetString());
+            var shared = state.GetProperty("shared").GetString();
+            Assert.Equal(shared, devices.Single(d => d.GetProperty("device_id").GetInt32() == id).GetProperty("status").GetString());
+            Assert.Equal(shared, matches.Single(m => m.Device.DeviceId == id).Device.Status);
         }
     }
 
+    /// <summary>
+    /// The MCP tool's own sentence for each failed status: not part of the shared fixture,
+    /// since the categories are the host's contract and mobile words its failures itself.
+    /// </summary>
+    private static string McpMessageFor(int status) => status switch
+    {
+        401 => "LibreNMS: the API token was refused.",
+        403 => $"LibreNMS: {LibreNmsApiException.PermissionDeniedMessage}",
+        404 => "LibreNMS: it doesn't have what was asked for (HTTP 404).",
+        >= 500 => $"LibreNMS: it had an error of its own (HTTP {status}). Try again shortly.",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Add the MCP message for this fixture failure."),
+    };
+
     [Theory]
     [MemberData(nameof(Failures))]
-    public async Task Find_device_and_the_host_search_fail_without_data_in_the_shared_categories(int status, string code)
+    public async Task Find_device_and_the_host_search_fail_without_data_after_the_shared_requests(int status, string code)
     {
         var mcp = Wire(t => t.Fails("devices", (HttpStatusCode)status));
         var root = FakeLibreNms.Parse(await mcp.Tools.FindDevice("sw", cancellationToken: CancellationToken.None));
         var host = Wire(t => t.Fails("devices", (HttpStatusCode)status));
-        using var search = HostDeviceSearch.Create(host.Client, new FakeTimeProvider(FakeLibreNms.Now), serverTimestampsAreUtc: false);
+        using var search = Host(host);
         var outcome = await search.FindDevicesAsync(new("sw"));
 
+        // MCP: an error with its own sentence for this status, no data and no server text.
         Assert.Equal("error", root.GetProperty("status").GetString());
+        Assert.Equal(McpMessageFor(status), root.GetProperty("message").GetString());
         Assert.False(root.TryGetProperty("data", out _));
+        Assert.False(root.TryGetProperty("details", out _));
+        // Host: the shared category, no result.
         Assert.Null(outcome.Result);
         Assert.Equal(Enum.Parse<DeviceSearchFailure>(code), outcome.Error!.Code);
         Assert.Equal(ExpectedRequests(), mcp.Transport.Requests);
