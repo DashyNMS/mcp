@@ -1,7 +1,7 @@
 # DashyNMS.Agent.Shared
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
-by the DashyNMS MCP server and the DashyNMS apps. It holds device search today; other
+by the DashyNMS MCP server and the DashyNMS apps. It holds device search, open alerts and network overview; other
 shared operations join it rather than shipping as separate packages. It replaces
 `DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
@@ -68,3 +68,8 @@ pipeline does not inspect PDB mappings or produce a symbol package.
 
 The package includes LICENSE and NOTICES.md for offline access. MIT applies to
 project-owned material; dependency licences and attribution remain applicable.
+
+`DashyNMS.Agent.Overview.HostNetworkOverview` shares the MCP overview: required device
+counts, optional alert/port/system sources, fixed failure categories, and bounded
+redacted alert groups, down devices and down locations with explicit omitted counts.
+Dispose it on retirement and supply a host deadline, as for search and open alerts.
