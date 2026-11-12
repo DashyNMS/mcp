@@ -150,6 +150,30 @@ string/byte cap. MCP adds its existing JSON cap. ARP observations can be numerou
 Device/group lists cache for 60 seconds, while membership/ARP use separate calls;
 results have no freshness metadata and are not an atomic snapshot.
 
+### Open alerts for host-owned clients
+
+`OpenAlerts` (namespace `DashyNMS.Agent.Alerts`) is the alerts open now as typed groups, one
+per rule firing on a device, from Core's `AlertGrouping`. `active_alerts` builds its open view
+on it, so MCP and other hosts share grouping, worst-first order, filters, paging and totals; MCP
+keeps its JSON shape, brief/verbose fault lists and byte cap. Each `OpenAlertGroup` carries:
+
+- its device and rule key (`AlertGroupKey`), a type of its own so it is never taken for a
+  fault or alert id;
+- a source-qualified representative (`AlertKey`: `fault:12` or `alert:12`), the first
+  unacknowledged fault, so a fault and a legacy alert with the same number stay distinct;
+- severity, an active, acknowledged or partly acknowledged state, fault and acknowledged
+  counts, up to 25 faults with their own keys and a count of the rest;
+- the hostname and redacted `DeviceSummary`.
+
+Recovered rows are dropped even if the server returns them, as `OpenAlertTotals` already
+did, so a recovered fault never keeps its group open. Hosts resolve a device to its id
+themselves. `HostOpenAlerts` is the safe boundary, shared with `HostDeviceSearch` through
+`HostBoundary`: fixed `HostFailure` categories and messages, no server text, cancellation
+that wins over late results, and no partial success. If the device list or alerts can't be
+read, the call fails rather than reporting no alerts. `Fixtures/OpenAlerts` holds the shared
+synthetic fixture, and `SharedOpenAlertsHttpFixtureTests` serves it over loopback HTTP to
+both adapters.
+
 ### Verification and publication follow-up
 
 No builds/tests were run locally for this step, as requested. CI must run the whole

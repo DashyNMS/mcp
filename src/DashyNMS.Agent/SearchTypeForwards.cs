@@ -17,3 +17,4 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.ArpSighting))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceMatch))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.FindDevicesResult))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.OpenAlertTotals))]
