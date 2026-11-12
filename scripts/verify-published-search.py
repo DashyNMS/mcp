@@ -5,6 +5,8 @@ short retry for propagation) and compares its SHA-256 with the verify job's
 output. Then reads the package's GitHub metadata: mobile restores with its own
 GITHUB_TOKEN, which can read this package only while it stays public, as Core is.
 A failure here cannot unpublish the version; it flags it so no consumer pins it.
+GitHub offers no API to change a package's visibility, so a first publication that
+arrives private fails here until an organisation owner makes the package public.
 """
 import base64
 import hashlib
@@ -50,6 +52,9 @@ def get(url, authorisation):
 
 resources = json.loads(get(feed, basic))['resources']
 base = next(r['@id'] for r in resources if r['@type'].startswith('PackageBaseAddress/3.0.0'))
+# The token goes to this address, so never accept a cleartext one.
+if not base.startswith('https://'):
+    raise SystemExit(f'Package base address must use HTTPS: {base}')
 lower = version.lower()
 url = f"{base.rstrip('/')}/dashynms.agent.search/{lower}/dashynms.agent.search.{lower}.nupkg"
 for attempt in range(10):
@@ -81,6 +86,10 @@ if package is not None:
                          'mobile needs a public package linked to DashyNMS/mcp')
 access = ('public and linked to DashyNMS/mcp' if package is not None
           else 'visibility unverified (the Actions token could not read package metadata)')
+if package is None:
+    # A workflow annotation keeps this visible on the run page, not only in the summary.
+    print('::warning title=Search package visibility unverified::Confirm DashyNMS.Agent.Search is public '
+          'before mobile pins this version.')
 
 summary = os.environ.get('GITHUB_STEP_SUMMARY')
 if summary:

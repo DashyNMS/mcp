@@ -267,9 +267,14 @@ What this does and does not guarantee:
   audit of the branch rules.
 - The package is linked to this public repository, so it should be public, like
   `DashyNMS.Core`, and mobile's `GITHUB_TOKEN` with `packages: read` can restore it.
-  Whether the Actions token may read package metadata is undocumented for NuGet; if
-  it is refused the job records the visibility as unverified instead of failing.
-  The first publication and a mobile restore are the real checks.
+  New GitHub packages can start private, and GitHub has no API to change a
+  package's visibility, so the workflow cannot fix it. If the first publish job
+  fails on visibility, an organisation owner sets `DashyNMS.Agent.Search` to public
+  in its package settings; the next merge then publishes and passes. Do not pin a
+  version whose publish job failed. Whether the Actions token may read package
+  metadata is undocumented for NuGet; if it is refused the job adds a warning
+  annotation and records visibility as unverified rather than failing after the
+  bytes were confirmed. A mobile restore is the final check.
 
 The smoke consumer references the actual Core ILibreNmsClient type used by Search's
 factory, traverses resolved package dependencies and rejects Agent/MCP dependencies.
