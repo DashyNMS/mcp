@@ -57,12 +57,7 @@ public sealed partial class DeviceSearch
 
     private string? Clean(string? text) => text is null ? null : redactor.Redact(text);
 
-    private DeviceSummary Safe(Device device)
-    {
-        var d = DeviceSummary.From(device, options);
-        return d with { Hostname = Clean(d.Hostname), Display = Clean(d.Display), SysName = Clean(d.SysName),
-            Ip = Clean(d.Ip), Os = Clean(d.Os), Hardware = Clean(d.Hardware), Location = Clean(d.Location) };
-    }
+    private DeviceSummary Safe(Device device) => DeviceSummary.Redacted(device, options, redactor);
 
     public async Task<FindDevicesResult> FindDevicesAsync(FindDevicesRequest request, CancellationToken cancellationToken = default)
     {

@@ -55,50 +55,26 @@ public sealed class HostDeviceSearch : IDisposable
     /// </summary>
     public async Task<DeviceSearchOutcome> FindDevicesAsync(FindDevicesRequest request, CancellationToken cancellationToken = default)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
-        var token = linked.Token;
-        token.ThrowIfCancellationRequested();
-        Task<FindDevicesResult>? inner = null;
-        try
-        {
-            if (request is null)
-                throw new ToolException("A device search request is required.");
-            inner = search.FindDevicesAsync(request, token);
-            var result = await inner.WaitAsync(token).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
+        var (result, failure) = await HostBoundary.RunAsync(
+            token => request is null
+                ? throw new ToolException("A device search request is required.")
+                : search.FindDevicesAsync(request, token),
+            cancellationToken, lifetime.Token).ConfigureAwait(false);
+        if (failure is not { } host)
             return new(result, null);
-        }
-        catch (Exception) when (token.IsCancellationRequested)
+        var code = host switch
         {
-            if (inner is not null)
-                _ = ObserveLateFault(inner);
-            // Cancellation wins even if an uncooperative transport completes with a failure.
-            token.ThrowIfCancellationRequested();
-            throw;
-        }
-        catch (Exception error)
-        {
-            var code = error switch
-            {
-                ToolException => DeviceSearchFailure.InvalidRequest,
-                LibreNmsApiException api when api.IsAuthenticationFailure || api.IsPermissionDenied || api.IsAdminOnlyInApi => DeviceSearchFailure.Refused,
-                LibreNmsApiException { StatusCode: System.Net.HttpStatusCode.NotFound } => DeviceSearchFailure.NotFound,
-                LibreNmsApiException { IsTimeout: true } => DeviceSearchFailure.Timeout,
-                OperationCanceledException or TimeoutException => DeviceSearchFailure.Timeout,
-                LibreNmsApiException or HttpRequestException => DeviceSearchFailure.Unavailable,
-                _ => DeviceSearchFailure.Failed,
-            };
-            return new(null, new(code, MessageFor(code)));
-        }
+            HostFailure.InvalidRequest => DeviceSearchFailure.InvalidRequest,
+            HostFailure.Refused => DeviceSearchFailure.Refused,
+            HostFailure.NotFound => DeviceSearchFailure.NotFound,
+            HostFailure.Timeout => DeviceSearchFailure.Timeout,
+            HostFailure.Unavailable => DeviceSearchFailure.Unavailable,
+            _ => DeviceSearchFailure.Failed,
+        };
+        return new(null, new(code, MessageFor(code)));
     }
 
-    // WaitAsync can abandon an executor whose transport ignores cancellation. Reading
-    // Exception observes its eventual failure without logging or retaining server details.
-    internal static Task ObserveLateFault(Task task) => task.ContinueWith(
-        static completed => { _ = completed.Exception; },
-        CancellationToken.None,
-        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-        TaskScheduler.Default);
+    internal static Task ObserveLateFault(Task task) => HostBoundary.ObserveLateFault(task);
 
     private static string MessageFor(DeviceSearchFailure code) => code switch
     {

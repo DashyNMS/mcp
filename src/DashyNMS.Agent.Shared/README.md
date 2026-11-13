@@ -1,7 +1,7 @@
 # DashyNMS.Agent.Shared
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
-by the DashyNMS MCP server and the DashyNMS apps. It holds device search today; other
+by the DashyNMS MCP server and the DashyNMS apps. It holds device search, open alerts, network overview, device summaries and device sensors; other
 shared operations join it rather than shipping as separate packages. It replaces
 `DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
@@ -13,6 +13,24 @@ one immutable connection generation and a host clock. Dispose the search when
 switching connection or signing out; the host must also discard stale results.
 The factory does not own or dispose the client. See the repository developer guide
 for the full boundary, cancellation and error contract.
+
+`DashyNMS.Agent.Alerts.HostOpenAlerts` lists the alerts open now as device and rule groups
+under the same rules: one per captured connection, disposed on a switch, fixed `HostFailure`
+categories. Each group's representative is a source-qualified `AlertKey` (`fault:12` or
+`alert:12`), never a bare number.
+
+`DashyNMS.Agent.Devices.HostDeviceSummary` reads one device by id from `devices/{id}` under the
+same rules: the redacted `DeviceSummary` with its `State`, uptime (null when none is reported) and
+the location's id, redacted name and exact LibreNMS `FilterName`. The filter name is neither trimmed
+nor redacted, so a host's device filter can match on it; never show it or give it to a model. A
+device the server doesn't return is `NotFound`, never a device-list row. MCP's `device_health`
+builds its device and uptime from the same read and shaping.
+
+`DashyNMS.Agent.Health.HostDeviceSensors` reads one device's sensors, judged as MCP's
+`device_sensors` judges them, under the same rules. It needs the host's transport as well as
+its client, both bound to the captured connection, for the per-device health routes used when
+the account may not read the network-wide sensor list. A missing reading stays null, and each
+reading says what its state was judged against, so an unassessed one is never shown as healthy.
 
 Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
 (`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
@@ -63,3 +81,8 @@ pipeline does not inspect PDB mappings or produce a symbol package.
 
 The package includes LICENSE and NOTICES.md for offline access. MIT applies to
 project-owned material; dependency licences and attribution remain applicable.
+
+`DashyNMS.Agent.Overview.HostNetworkOverview` shares the MCP overview: required device
+counts, optional alert/port/system sources, fixed failure categories, and bounded
+redacted alert groups, down devices and down locations with explicit omitted counts.
+Dispose it on retirement and supply a host deadline, as for search and open alerts.

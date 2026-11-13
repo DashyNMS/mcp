@@ -4,8 +4,10 @@
 
 | Path | What it is |
 | --- | --- |
-| `src/DashyNMS.Agent` | The tool layer: tools, redaction, result caps, device lookup. A plain class library, so it can later move to the desktop repo for the mobile app's chat tab. |
+| `src/DashyNMS.Agent` | The MCP tool layer: tools, redaction, result caps, device lookup. It stays in this repo with the host, so MCP runs standalone. Apps reference `DashyNMS.Agent.Shared` instead. |
+| `src/DashyNMS.Agent.Shared` | Typed, read-only operations over a host-owned Core client, published as the `DashyNMS.Agent.Shared` package for in-process hosts such as DashyNMS mobile. No `ModelContextProtocol` reference. See [Shared package for mobile](#shared-package-for-mobile). |
 | `src/DashyNMS.Mcp` | The host: settings, the startup check, and MCP over stdio |
+| `tests/DashyNMS.Agent.Shared.Tests` | The shared package's operations and its host contract |
 | `tests/DashyNMS.Agent.Tests` | Tools against recorded LibreNMS JSON through Core's real APIs, plus redaction and caps |
 | `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and an end-to-end stdio test against a stand-in LibreNMS |
 
@@ -149,6 +151,48 @@ use search as an authorisation boundary. Typed rows have a 50-match cap but no
 string/byte cap. MCP adds its existing JSON cap. ARP observations can be numerous.
 Device/group lists cache for 60 seconds, while membership/ARP use separate calls;
 results have no freshness metadata and are not an atomic snapshot.
+
+### Open alerts for host-owned clients
+
+`OpenAlerts` (namespace `DashyNMS.Agent.Alerts`) is the alerts open now as typed groups, one
+per rule firing on a device, from Core's `AlertGrouping`. `active_alerts` builds its open view
+on it, so MCP and other hosts share grouping, worst-first order, filters, paging and totals; MCP
+keeps its JSON shape, brief/verbose fault lists and byte cap. Each `OpenAlertGroup` carries:
+
+- its device and rule key (`AlertGroupKey`), a type of its own so it is never taken for a
+  fault or alert id;
+- a source-qualified representative (`AlertKey`: `fault:12` or `alert:12`), the first
+  unacknowledged fault, so a fault and a legacy alert with the same number stay distinct;
+- severity, an active, acknowledged or partly acknowledged state, fault and acknowledged
+  counts, up to 25 faults with their own keys and a count of the rest;
+- the hostname and redacted `DeviceSummary`.
+
+Recovered rows are dropped even if the server returns them, as `OpenAlertTotals` already
+did, so a recovered fault never keeps its group open. Hosts resolve a device to its id
+themselves. `HostOpenAlerts` is the safe boundary, shared with `HostDeviceSearch` through
+`HostBoundary`: fixed `HostFailure` categories and messages, no server text, cancellation
+that wins over late results, and no partial success. If the device list or alerts can't be
+read, the call fails rather than reporting no alerts. `Fixtures/OpenAlerts` holds the shared
+synthetic fixture, and `SharedOpenAlertsHttpFixtureTests` serves it over loopback HTTP to
+both adapters.
+
+### Device summary for host-owned clients
+
+`DeviceSummaries` (namespace `DashyNMS.Agent.Devices`) reads one device by id from
+`devices/{id}` and shapes it: the redacted `DeviceSummary` with Core's `ReportedState`, uptime
+(null when LibreNMS reports none or zero) and a `DeviceLocation` with the location's id, its
+trimmed and redacted name and its exact LibreNMS name for host-side filters. `devices/{id}` can
+send the location as the whole JSON record, which Core keeps as text; the name and, when the
+device has no `location_id`, the id are read out of it. `device_health` builds its `device` and
+`uptime_seconds` from the same read and shaping; its JSON is unchanged, and when the read fails it
+still answers from the device list it resolved from.
+
+`HostDeviceSummary` is the safe boundary, through `HostBoundary` like the others. It has no
+fallback: a device the server doesn't return, or returns under another id, is `NotFound`, and any
+other failure fails the call, so a list row is never reported as the device asked for. It holds no
+cache. `Fixtures/DeviceSummary` holds the shared synthetic fixture, and
+`SharedDeviceSummaryHttpFixtureTests` serves it over loopback HTTP to both adapters. Mobile's
+Intelligence `device_summary` is a reviewed narrower profile of `device_health` built on it.
 
 ### Verification and publication follow-up
 
@@ -328,3 +372,42 @@ Mobile redistribution must include the Shared package's LICENSE and the licence 
 and its dependencies.
 
 All builds, tests, pack/restore, compatibility and publication run in CI only.
+
+### Shared network overview
+
+`NetworkOverview` in Agent.Shared owns overview counts, optional-source failures and
+bounded detail selection for MCP and mobile (DashyNMS/mobile#600). MCP retains its
+JSON field names; in-process hosts consume `HostNetworkOverview` typed results.
+Devices remain required. Alerts, ports and system failures retain other sources
+and expose only fixed categories. Alert row shaping is shared with `OpenAlerts`.
+The NetworkOverview synthetic fixtures cover a complete and a refused-ports case.
+
+### Device sensors for host-owned clients
+
+`DeviceSensors` (namespace `DashyNMS.Agent.Health`) is one device's sensor readings, judged as
+desktop's Health tab and MCP's `device_sensors` judge them, for DashyNMS/mobile#603.
+`SensorSource` and `SensorReading` moved into the Shared package with it, and Agent forwards
+them, so `health_overview`, `device_details` and `graph` keep using the same assessment and
+fallback. `device_sensors` runs the operation; MCP keeps its JSON shape, type filter wording and
+byte cap. The result carries:
+
+- the redacted device summary;
+- every matching reading, critical, then warning, then ok, then unknown, then by class,
+  description and sensor ID, so the network-wide list and the device-by-device route agree;
+- for each reading its value (null for no reading, never a zero), unit, limits, state and a
+  `SensorAssessment` saying what the state was judged against: no reading, no limits, the
+  sensor's own limits, Core's default thresholds, or a state definition. A reading with
+  nothing to judge it by is unknown, never ok. `Assessment` is left out of MCP's JSON;
+- totals (critical, warning, ok, unknown) and counts by class;
+- whether the readings came device by device because the network-wide list was refused.
+
+The thresholds are Core's defaults, as MCP has always used: the server has no settings of its
+own, and desktop doesn't pass the person's thresholds, so a host's custom thresholds don't
+apply here. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
+open alerts it takes the host's transport as well as its client, both bound to the same
+connection, because the per-device health routes aren't in Core's client yet. It reads
+`devices`, `resources/sensors` and, only after that list is refused, the device's sensor
+health routes (never processors, memory pools or storage). A device the list doesn't hold
+is `InvalidRequest`; there is no partial success. Optional sensor definitions should be a
+read-only store, as desktop gives MCP. `Fixtures/DeviceSensors` holds the shared synthetic
+fixture, and `SharedDeviceSensorsHttpFixtureTests` serves it over loopback HTTP to both adapters.
