@@ -78,11 +78,13 @@ public sealed class HostDeviceSensorsTests
     [Fact]
     public async Task Network_text_is_redacted()
     {
-        using var host = Host(Client([Reading(1, "temperature", 48, description: Sensitive)], new Device { DeviceId = 1, Hostname = Sensitive }));
+        using var host = Host(Client([Reading(1, "temperature", 48, description: Sensitive), Reading(2, Sensitive, 5)], new Device { DeviceId = 1, Hostname = Sensitive }));
 
         var result = (await host.ReadAsync(new(1))).Result!;
 
-        Assert.DoesNotContain("synthetic-secret", result.Readings[0].Description!);
+        Assert.DoesNotContain("synthetic-secret", result.Readings.Single(r => r.SensorId == 1).Description!);
+        Assert.All(result.Readings, r => Assert.DoesNotContain("synthetic-secret", r.Type));
+        Assert.All(result.Types, t => Assert.DoesNotContain("synthetic-secret", t.Type));
         Assert.DoesNotContain("synthetic-secret", result.Device.Hostname!);
     }
 

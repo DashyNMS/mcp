@@ -113,7 +113,8 @@ public sealed class DeviceSensors
                 .Where(s => s.DeviceId == device.DeviceId)
                 .Where(s => type is null || s.HasClass(type))
                 .Select(SensorReading.From))
-            .Select(r => r with { Description = Clean(r.Description), StateLabel = Clean(r.StateLabel) })
+            // The class is filtered and judged before redaction; only what a host is given is redacted.
+            .Select(r => r with { Type = redactor.Redact(r.Type), Description = Clean(r.Description), StateLabel = Clean(r.StateLabel) })
             .ToList();
 
         return new(
