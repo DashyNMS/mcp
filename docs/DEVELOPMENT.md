@@ -174,6 +174,24 @@ read, the call fails rather than reporting no alerts. `Fixtures/OpenAlerts` hold
 synthetic fixture, and `SharedOpenAlertsHttpFixtureTests` serves it over loopback HTTP to
 both adapters.
 
+### Device summary for host-owned clients
+
+`DeviceSummaries` (namespace `DashyNMS.Agent.Devices`) reads one device by id from
+`devices/{id}` and shapes it: the redacted `DeviceSummary` with Core's `ReportedState`, uptime
+(null when LibreNMS reports none or zero) and a `DeviceLocation` with the location's id, its
+trimmed and redacted name and its exact LibreNMS name for host-side filters. `devices/{id}` can
+send the location as the whole JSON record, which Core keeps as text; the name and, when the
+device has no `location_id`, the id are read out of it. `device_health` builds its `device` and
+`uptime_seconds` from the same read and shaping; its JSON is unchanged, and when the read fails it
+still answers from the device list it resolved from.
+
+`HostDeviceSummary` is the safe boundary, through `HostBoundary` like the others. It has no
+fallback: a device the server doesn't return, or returns under another id, is `NotFound`, and any
+other failure fails the call, so a list row is never reported as the device asked for. It holds no
+cache. `Fixtures/DeviceSummary` holds the shared synthetic fixture, and
+`SharedDeviceSummaryHttpFixtureTests` serves it over loopback HTTP to both adapters. Mobile's
+Intelligence `device_summary` is a reviewed narrower profile of `device_health` built on it.
+
 ### Verification and publication follow-up
 
 No builds/tests were run locally for this step, as requested. CI must run the whole
