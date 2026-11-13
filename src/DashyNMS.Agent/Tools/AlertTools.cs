@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Alerts;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -52,25 +53,26 @@ public sealed class AlertTools(
             cancellationToken);
 
     /// <summary>
-    /// The alerts open now, one per rule firing on a device (#75): on LibreNMS
-    /// 26.10 that's every fault it keeps for them - eight busy cores are one
-    /// group of eight faults, not eight alerts. Paged by group, in Core's
-    /// stable order (worst, then most recently changed), so pages don't shuffle.
+    /// The alerts open now, one per rule firing on a device (#75), from the shared typed
+    /// operation hosts such as mobile also run, so grouping, order and totals are one
+    /// implementation. On LibreNMS 26.10 eight busy cores are one group of eight faults,
+    /// not eight alerts. Paged by group in Core's stable order, so pages don't shuffle.
     /// </summary>
     private async Task<JsonObject> OpenAsync(string? severityText, string? deviceQuery, string? group, string? location, int offset, int limit, bool verbose, CancellationToken cancellationToken)
     {
-        var (severity, deviceId, scope, devices) = await PrepareAsync(severityText, deviceQuery, group, location, offset, limit, cancellationToken).ConfigureAwait(false);
+        // Checked before the device is resolved, so a bad argument costs no request.
+        OpenAlerts.ParseSeverity(severityText);
+        Paging.Check(offset, limit, MaxAlerts);
+        int? deviceId = string.IsNullOrWhiteSpace(deviceQuery)
+            ? null
+            : (await resolver.ResolveAsync(deviceQuery, cancellationToken).ConfigureAwait(false)).DeviceId;
 
-        var alerts = await client.Alerts.ListAsync(AlertQuery.Open, cancellationToken).ConfigureAwait(false);
-        var matching = AlertGrouping.ByDeviceAndRule(alerts
-                .Where(a => deviceId is null || a.DeviceId == deviceId)
-                .Where(a => scope.Includes(a.DeviceId, devices)))
-            .Where(g => severity is null || g.Severity == severity)
-            .ToList();
+        var result = await new OpenAlerts(client, directory, scopes, options, runner.Redactor)
+            .ListAsync(new OpenAlertsRequest(deviceId, severityText, group, location, offset, limit), cancellationToken)
+            .ConfigureAwait(false);
 
         var now = time.GetUtcNow().UtcDateTime;
-        var totals = OpenAlertTotals.From(matching);
-        var filtered = severity is not null || deviceId is not null || !scope.IsEverything;
+        var totals = result.Totals;
 
         // A page must fit the result cap whole (#80): cut by the cap, the
         // alerts left off would be skipped by next_offset. So a page that's too
@@ -78,16 +80,17 @@ public sealed class AlertTools(
         var take = limit;
         while (true)
         {
-            var shown = Paging.Apply(matching, offset, take, out var page);
-            var summary = matching.Count == 0
-                ? "No open alerts visible to this account" + (filtered ? " match." : ".")
+            var shown = take == limit ? result : result.Repage(take);
+            var page = shown.Page;
+            var summary = totals.AlertGroups == 0
+                ? "No open alerts visible to this account" + (result.Filtered ? " match." : ".")
                 : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
                   PagingNote(page);
-            var result = ToolResult.Ok(summary, new { totals, devices = Shape(shown, devices, now, verbose), page });
+            var output = ToolResult.Ok(summary, new { totals, devices = Shape(shown.Groups, now, verbose), page });
 
-            if (take <= 1 || ToolResult.Fits(result, options.MaxResultBytes))
+            if (take <= 1 || ToolResult.Fits(output, options.MaxResultBytes))
             {
-                return result;
+                return output;
             }
 
             take = Math.Max(1, take * 3 / 4);
@@ -97,30 +100,30 @@ public sealed class AlertTools(
     /// <summary>
     /// A page of alert groups by device. Without verbose a group lists its
     /// first few faults by name and state only; verbose gives up to
-    /// <see cref="AlertGroupSummary.MaxFaults"/> with their entity IDs and times.
+    /// <see cref="OpenAlerts.MaxFaults"/> with their entity IDs and times.
     /// </summary>
-    private object Shape(IReadOnlyList<AlertGroup> shown, IReadOnlyDictionary<int, Device> devices, DateTime now, bool verbose)
+    private static object Shape(IReadOnlyList<OpenAlertGroup> shown, DateTime now, bool verbose)
         => shown
             .GroupBy(g => g.DeviceId)
             .Select(g => new
             {
                 device_id = g.Key,
-                hostname = devices.TryGetValue(g.Key, out var d) ? d.Hostname : g.First().Primary.Hostname,
-                display = DeviceSummary.DisplayOf(d),
-                device_status = d is not null ? DeviceSummary.StatusOf(d) : null,
-                alerts = g.Select(alertGroup =>
+                hostname = g.First().Hostname,
+                display = string.IsNullOrWhiteSpace(g.First().Device?.Display) ? null : g.First().Device!.Display,
+                device_status = g.First().Device?.Status,
+                alerts = g.Select(alert =>
                 {
-                    var alert = AlertGroupSummary.From(alertGroup, options);
-                    var listed = alert.Faults?.Take(verbose ? AlertGroupSummary.MaxFaults : BriefFaults).ToList();
+                    // A group of one names its fault in entity; only larger groups list faults.
+                    var listed = alert.FaultCount > 1 ? alert.Faults.Take(verbose ? OpenAlerts.MaxFaults : BriefFaults).ToList() : null;
                     return new
                     {
-                        alert.GroupId,
-                        alert.AlertId,
+                        GroupId = alert.Key.ToString(),
+                        AlertId = alert.Representative.Id,
                         alert.RuleId,
-                        source = alertGroup.Primary.Source == AlertSource.Fault ? "fault" : "alert",
+                        source = alert.Representative.Source == AlertSource.Fault ? "fault" : "alert",
                         alert.Rule,
-                        alert.Severity,
-                        alert.State,
+                        Severity = alert.Severity.ToString().ToLowerInvariant(),
+                        State = StateText(alert.State),
                         alert.FaultCount,
                         acknowledged_count = alert.AcknowledgedCount > 0 && alert.FaultCount > 1 ? (int?)alert.AcknowledgedCount : null,
                         alert.Entity,
@@ -128,13 +131,21 @@ public sealed class AlertTools(
                         age_minutes = alert.Since is { } started ? (long?)Math.Max(0, (long)(now - started).TotalMinutes) : null,
                         note = verbose ? alert.Note : null,
                         faults = listed?.Select(f => verbose
-                            ? (object)f
-                            : new { f.FaultId, f.Entity, f.State }).ToList(),
+                            ? (object)new FaultBrief(f.Key.Id, f.Entity, f.EntityType, f.EntityId, f.State.ToString().ToLowerInvariant(), f.Since)
+                            : new { FaultId = f.Key.Id, f.Entity, State = f.State.ToString().ToLowerInvariant() }).ToList(),
                         faults_omitted = listed is null || alert.FaultCount <= listed.Count ? (int?)null : alert.FaultCount - listed.Count,
                     };
                 }).ToList(),
             })
             .ToList();
+
+    /// <summary>The state words every alert tool uses: active, acknowledged or partly_acknowledged.</summary>
+    private static string StateText(OpenAlertState state) => state switch
+    {
+        OpenAlertState.PartlyAcknowledged => "partly_acknowledged",
+        OpenAlertState.Acknowledged => "acknowledged",
+        _ => "active",
+    };
 
     /// <summary>Faults listed per group without verbose; alert_details or verbose lists more.</summary>
     public const int BriefFaults = 5;
@@ -245,7 +256,7 @@ public sealed class AlertTools(
     private async Task<(AlertSeverity? Severity, int? DeviceId, Scope Scope, IReadOnlyDictionary<int, Device> Devices)> PrepareAsync(
         string? severityText, string? deviceQuery, string? group, string? location, int offset, int limit, CancellationToken cancellationToken)
     {
-        var severity = ParseSeverity(severityText);
+        var severity = OpenAlerts.ParseSeverity(severityText);
         Paging.Check(offset, limit, MaxAlerts);
         int? deviceId = string.IsNullOrWhiteSpace(deviceQuery)
             ? null
@@ -264,13 +275,4 @@ public sealed class AlertTools(
 
     private static string PagingNote(PageInfo page)
         => page.NextOffset is not null || page.Offset > 0 ? " " + Paging.Describe(page, "alert", "alerts") : string.Empty;
-
-    private static AlertSeverity? ParseSeverity(string? text) => text?.Trim().ToLowerInvariant() switch
-    {
-        null or "" or "all" or "any" => null,
-        "critical" => AlertSeverity.Critical,
-        "warning" => AlertSeverity.Warning,
-        "ok" => AlertSeverity.Ok,
-        _ => throw new ToolException("Severity must be critical, warning or ok, or left out for all."),
-    };
 }

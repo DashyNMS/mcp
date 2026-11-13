@@ -19,6 +19,8 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
 {
     internal Redactor Redactor => redactor;
 
+    internal AgentOptions Options => options;
+
     public async Task<string> RunAsync(string tool, Func<CancellationToken, Task<JsonObject>> body, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);

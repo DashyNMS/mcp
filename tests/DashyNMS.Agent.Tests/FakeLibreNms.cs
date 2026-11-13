@@ -96,7 +96,7 @@ internal sealed class FakeLibreNms
         Timeline = new DeviceTimeline(Client, Options);
         Scope = new DeviceScope(Client, Directory, Time);
         Fleet = new FleetCache(Client, Time);
-        Sensors = new SensorSource(Fleet, Transport, Time);
+        Sensors = new SensorSource(Fleet.GetSensorsAsync, Transport, Time);
     }
 
     public FakeTransport Transport { get; }

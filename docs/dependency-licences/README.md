@@ -1,6 +1,6 @@
 # Dependency licence evidence
 
-The image build and the Search package check run
+The image build and the Shared package check run
 `scripts/collect-dependency-notices.py` against the packages they actually
 restored. It copies legal files verbatim from each archive and records the
 package SHA-256, restore SHA-512, nuspec and file hashes in `inventory.json`
@@ -21,7 +21,7 @@ actual MIT terms and a copyright line.
 
 ## When a dependency changes
 
-A version bump (including from Dependabot) fails the image build and the Search
+A version bump (including from Dependabot) fails the image build and the Shared
 check until the new versions have supplements. Generate them with:
 
 ```sh
