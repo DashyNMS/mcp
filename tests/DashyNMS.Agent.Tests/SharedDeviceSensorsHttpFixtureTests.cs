@@ -47,6 +47,18 @@ public sealed class SharedDeviceSensorsHttpFixtureTests
     private static double?[] Values(JsonElement element)
         => element.GetProperty("values").EnumerateArray().Select(v => v.ValueKind == JsonValueKind.Null ? (double?)null : v.GetDouble()).ToArray();
 
+    /// <summary>Values rounded to two places, compared as numbers: 3.22 may round to 3.2200000000000002.</summary>
+    private static void SameValues(double?[] expected, IEnumerable<double?> actual)
+    {
+        var values = actual.ToArray();
+        Assert.Equal(expected.Length, values.Length);
+        for (var i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i].HasValue, values[i].HasValue);
+            if (expected[i] is { } e) Assert.Equal(e, values[i]!.Value, 9);
+        }
+    }
+
     private static string[] Sorted(IEnumerable<string> requests) => requests.Order(StringComparer.Ordinal).ToArray();
 
     public static TheoryData<string> CaseNames()
@@ -154,8 +166,9 @@ public sealed class SharedDeviceSensorsHttpFixtureTests
         Assert.Equal(Strings(c, "states"), result.Readings.Select(r => r.State));
         Assert.Equal(Strings(c, "assessments"), result.Readings.Select(r => r.Assessment.ToString()));
         // A missing reading stays null on both sides, never a zero.
-        Assert.Equal(Values(c), shown.Select(r => r.GetProperty("value").ValueKind == JsonValueKind.Null ? (double?)null : r.GetProperty("value").GetDouble()));
-        Assert.Equal(Values(c), result.Readings.Select(r => r.Value));
+        // MCP leaves a null value out of its JSON.
+        SameValues(Values(c), shown.Select(r => r.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : (double?)null));
+        SameValues(Values(c), result.Readings.Select(r => r.Value));
         // An unassessed reading is never ok.
         Assert.All(result.Readings.Where(r => r.Assessment is SensorAssessment.NoReading or SensorAssessment.NoLimits), r => Assert.Equal("unknown", r.State));
 
