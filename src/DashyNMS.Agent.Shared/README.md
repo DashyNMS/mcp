@@ -1,7 +1,7 @@
 # DashyNMS.Agent.Shared
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
-by the DashyNMS MCP server and the DashyNMS apps. It holds device search, open alerts, network overview and device summaries; other
+by the DashyNMS MCP server and the DashyNMS apps. It holds device search, open alerts, network overview, device summaries and device sensors; other
 shared operations join it rather than shipping as separate packages. It replaces
 `DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
@@ -25,6 +25,12 @@ the location's id, redacted name and exact LibreNMS `FilterName`. The filter nam
 nor redacted, so a host's device filter can match on it; never show it or give it to a model. A
 device the server doesn't return is `NotFound`, never a device-list row. MCP's `device_health`
 builds its device and uptime from the same read and shaping.
+
+`DashyNMS.Agent.Health.HostDeviceSensors` reads one device's sensors, judged as MCP's
+`device_sensors` judges them, under the same rules. It needs the host's transport as well as
+its client, both bound to the captured connection, for the per-device health routes used when
+the account may not read the network-wide sensor list. A missing reading stays null, and each
+reading says what its state was judged against, so an unassessed one is never shown as healthy.
 
 Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
 (`up`, `down` or `disabled`, also the status filter), read from Core's compatibility

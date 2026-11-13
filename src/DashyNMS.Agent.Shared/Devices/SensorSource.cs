@@ -27,9 +27,16 @@ namespace DashyNMS.Agent.Devices;
 /// alongside DeviceHealthApi, which reads processors, memory and storage the
 /// same way; until it's there, it's built on the transport here.
 /// </para>
+/// <para>
+/// The network-wide list comes through a delegate rather than MCP's fleet cache, so the
+/// class can live in the Shared package: MCP passes its cached list, and other hosts
+/// (<see cref="Health.HostDeviceSensors"/>) read their own connection-bound client. The
+/// transport must be bound to the same connection as that list.
+/// </para>
 /// </remarks>
-public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport, TimeProvider time,
-    SensorDefinitionStore? definitions = null, DeviceDirectory? devices = null)
+/// <param name="fleetSensors">Every sensor in the network, from LibreNMS's /resources/sensors.</param>
+public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sensor>>> fleetSensors, ILibreNmsTransport transport,
+    TimeProvider time, SensorDefinitionStore? definitions = null, DeviceDirectory? devices = null)
 {
     public const int MaxConcurrency = 6;
 
@@ -56,7 +63,7 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
 
         try
         {
-            var sensors = await fleet.GetSensorsAsync(cancellationToken).ConfigureAwait(false);
+            var sensors = await fleetSensors(cancellationToken).ConfigureAwait(false);
             await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
             return sensors;
         }
@@ -69,15 +76,23 @@ public sealed class SensorSource(FleetCache fleet, ILibreNmsTransport transport,
 
     /// <summary>One device's sensors, from the network-wide list when allowed, otherwise read device by device.</summary>
     public async Task<IReadOnlyList<Sensor>> GetForDeviceAsync(int deviceId, CancellationToken cancellationToken)
+        => (await ReadForDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false)).Sensors;
+
+    /// <summary>
+    /// As <see cref="GetForDeviceAsync"/>, and whether the readings came device by device, so a
+    /// host can say the network-wide list was refused rather than infer it from shared state
+    /// another call may have changed.
+    /// </summary>
+    internal async Task<(IReadOnlyList<Sensor> Sensors, bool DeviceByDevice)> ReadForDeviceAsync(int deviceId, CancellationToken cancellationToken)
     {
         if (await TryGetFleetAsync(cancellationToken).ConfigureAwait(false) is { } all)
         {
-            return all.Where(s => s.DeviceId == deviceId).ToList();
+            return (all.Where(s => s.DeviceId == deviceId).ToList(), false);
         }
 
         var sensors = await ReadDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false);
         await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
-        return sensors;
+        return (sensors, true);
     }
 
     /// <summary>

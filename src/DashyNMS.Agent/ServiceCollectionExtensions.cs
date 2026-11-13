@@ -43,7 +43,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DeviceTimeline>();
         services.AddSingleton<DeviceScope>();
         services.AddSingleton<FleetCache>();
-        services.AddSingleton<SensorSource>();
+        services.AddSingleton(sp => new SensorSource(
+            sp.GetRequiredService<FleetCache>().GetSensorsAsync,
+            sp.GetRequiredService<ILibreNmsTransport>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetService<DesktopNMS.Core.Sensors.SensorDefinitionStore>(),
+            sp.GetRequiredService<DeviceDirectory>()));
         services.AddSingleton<UnimusDirectory>();
 
         return services;
