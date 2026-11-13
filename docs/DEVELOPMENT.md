@@ -4,8 +4,10 @@
 
 | Path | What it is |
 | --- | --- |
-| `src/DashyNMS.Agent` | The tool layer: tools, redaction, result caps, device lookup. A plain class library, so it can later move to the desktop repo for the mobile app's chat tab. |
+| `src/DashyNMS.Agent` | The MCP tool layer: tools, redaction, result caps, device lookup. It stays in this repo with the host, so MCP runs standalone. Apps reference `DashyNMS.Agent.Shared` instead. |
+| `src/DashyNMS.Agent.Shared` | Typed, read-only operations over a host-owned Core client, published as the `DashyNMS.Agent.Shared` package for in-process hosts such as DashyNMS mobile. No `ModelContextProtocol` reference. See [Shared package for mobile](#shared-package-for-mobile). |
 | `src/DashyNMS.Mcp` | The host: settings, the startup check, and MCP over stdio |
+| `tests/DashyNMS.Agent.Shared.Tests` | The shared package's operations and its host contract |
 | `tests/DashyNMS.Agent.Tests` | Tools against recorded LibreNMS JSON through Core's real APIs, plus redaction and caps |
 | `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and an end-to-end stdio test against a stand-in LibreNMS |
 
