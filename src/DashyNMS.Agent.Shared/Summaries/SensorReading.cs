@@ -1,7 +1,35 @@
+using System.Text.Json.Serialization;
 using DesktopNMS.Core.Configuration;
 using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Summaries;
+
+/// <summary>
+/// What a reading's state was judged against. Hosts that show a state need to tell "unknown
+/// because there was no reading" from "unknown because nothing says what's healthy", and both
+/// from a judged reading, so none of them is ever presented as healthy by mistake.
+/// </summary>
+public enum SensorAssessment
+{
+    /// <summary>LibreNMS has no current value (not a zero): nothing to judge.</summary>
+    NoReading,
+
+    /// <summary>A value, but no limits of its own and no default for its class: state unknown.</summary>
+    NoLimits,
+
+    /// <summary>The sensor's own LibreNMS limits.</summary>
+    SensorLimits,
+
+    /// <summary>
+    /// Core's default thresholds for dBm, signal, temperature or fan speed, with the sensor's own
+    /// limits winning for any bound they set. A reading in the class's "nothing plugged in" band
+    /// stays unknown.
+    /// </summary>
+    Thresholds,
+
+    /// <summary>An installed state definition's severity, whatever the number.</summary>
+    StateDefinition,
+}
 
 /// <summary>
 /// One sensor's reading, judged the way desktop's Health tab judges it
@@ -25,6 +53,14 @@ public sealed record SensorReading(
     public string? StateLabel { get; init; }
     public string? StateDefinitionVersion { get; init; }
     public string? StateDefinitionOutcome { get; init; }
+
+    /// <summary>
+    /// What <see cref="State"/> was judged against. Left out of JSON so MCP's output stays
+    /// unchanged; MCP's limits and state label already say as much to a model.
+    /// </summary>
+    [JsonIgnore]
+    public SensorAssessment Assessment { get; init; }
+
     /// <summary>Desktop's defaults; the server has no settings of its own for these.</summary>
     private static readonly AppSettings Defaults = new();
 
@@ -58,6 +94,11 @@ public sealed record SensorReading(
         var hasLimits = SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null
             || bounds.LowCritical is not null || bounds.LowWarning is not null || bounds.HighWarning is not null || bounds.HighCritical is not null;
         var severity = sensor.StateDefinition?.Severity ?? (sensor.HasReading && hasLimits ? evaluator.Evaluate(sensor.Current) : AlertSeverity.Unknown);
+        var assessment = sensor.StateDefinition is not null ? SensorAssessment.StateDefinition
+            : !sensor.HasReading ? SensorAssessment.NoReading
+            : SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null ? SensorAssessment.Thresholds
+            : hasLimits ? SensorAssessment.SensorLimits
+            : SensorAssessment.NoLimits;
 
         return new SensorReading(
             sensor.SensorId,
@@ -77,7 +118,7 @@ public sealed record SensorReading(
             sensor.LimitHighWarn,
             sensor.LimitHigh)
         { StateLabel = sensor.StateDefinition?.Label, StateDefinitionVersion = sensor.StateDefinition?.CatalogueVersion,
-          StateDefinitionOutcome = sensor.StateDefinition?.Outcome.ToString() };
+          StateDefinitionOutcome = sensor.StateDefinition?.Outcome.ToString(), Assessment = assessment };
     }
 
     /// <summary>Critical first, then warning, then the rest - the order a problem list wants.</summary>

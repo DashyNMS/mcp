@@ -379,3 +379,33 @@ JSON field names; in-process hosts consume `HostNetworkOverview` typed results.
 Devices remain required. Alerts, ports and system failures retain other sources
 and expose only fixed categories. Alert row shaping is shared with `OpenAlerts`.
 The NetworkOverview synthetic fixtures cover a complete and a refused-ports case.
+
+### Device sensors for host-owned clients
+
+`DeviceSensors` (namespace `DashyNMS.Agent.Health`) is one device's sensor readings, judged as
+desktop's Health tab and MCP's `device_sensors` judge them, for DashyNMS/mobile#603.
+`SensorSource` and `SensorReading` moved into the Shared package with it, and Agent forwards
+them, so `health_overview`, `device_details` and `graph` keep using the same assessment and
+fallback. `device_sensors` runs the operation; MCP keeps its JSON shape, type filter wording and
+byte cap. The result carries:
+
+- the redacted device summary;
+- every matching reading, critical, then warning, then ok, then unknown, then by class,
+  description and sensor ID, so the network-wide list and the device-by-device route agree;
+- for each reading its value (null for no reading, never a zero), unit, limits, state and a
+  `SensorAssessment` saying what the state was judged against: no reading, no limits, the
+  sensor's own limits, Core's default thresholds, or a state definition. A reading with
+  nothing to judge it by is unknown, never ok. `Assessment` is left out of MCP's JSON;
+- totals (critical, warning, ok, unknown) and counts by class;
+- whether the readings came device by device because the network-wide list was refused.
+
+The thresholds are Core's defaults, as MCP has always used: the server has no settings of its
+own, and desktop doesn't pass the person's thresholds, so a host's custom thresholds don't
+apply here. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
+open alerts it takes the host's transport as well as its client, both bound to the same
+connection, because the per-device health routes aren't in Core's client yet. It reads
+`devices`, `resources/sensors` and, only after that list is refused, the device's sensor
+health routes (never processors, memory pools or storage). A device the list doesn't hold
+is `InvalidRequest`; there is no partial success. Optional sensor definitions should be a
+read-only store, as desktop gives MCP. `Fixtures/DeviceSensors` holds the shared synthetic
+fixture, and `SharedDeviceSensorsHttpFixtureTests` serves it over loopback HTTP to both adapters.

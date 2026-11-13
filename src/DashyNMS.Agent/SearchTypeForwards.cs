@@ -18,3 +18,6 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceMatch))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.FindDevicesResult))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.OpenAlertTotals))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.SensorSource))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.SensorRead))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.SensorReading))]

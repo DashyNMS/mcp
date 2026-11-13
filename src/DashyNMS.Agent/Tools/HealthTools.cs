@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Health;
 using DashyNMS.Agent.Summaries;
 using ModelContextProtocol.Server;
 
@@ -49,29 +50,27 @@ public sealed class HealthTools(
         CancellationToken cancellationToken = default)
         => runner.RunAsync("health_overview", ct => OverviewAsync(type, only_problems, group, location, offset, limit, ct), cancellationToken);
 
+    /// <summary>
+    /// One device's readings from the shared typed operation hosts such as mobile also run, so
+    /// the assessment, problem-first order and device-by-device fallback are one implementation.
+    /// </summary>
     private async Task<JsonObject> DeviceAsync(string query, string? typeText, CancellationToken cancellationToken)
     {
-        var type = SensorReading.ParseType(typeText);
         var device = await resolver.ResolveAsync(query, cancellationToken).ConfigureAwait(false);
-        var sensors = await sensorSource.GetForDeviceAsync(device.DeviceId, cancellationToken).ConfigureAwait(false);
-
-        var readings = sensors
-            .Where(s => s.DeviceId == device.DeviceId)
-            .Where(s => type is null || s.HasClass(type))
-            .Select(SensorReading.From)
-            .OrderBy(r => r.Rank)
-            .ThenBy(r => r.Type, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Description, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var result = await new DeviceSensors(sensorSource, directory, runner.Options, runner.Redactor)
+            .ReadAsync(new DeviceSensorsRequest(device.DeviceId, typeText), cancellationToken)
+            .ConfigureAwait(false);
+        var readings = result.Readings;
 
         var shown = ToolResult.Take(readings, MaxReadings, out var omitted);
         var data = new
         {
             device = DeviceBrief.From(device),
-            types = readings.GroupBy(r => r.Type).Select(g => new { type = g.Key, count = g.Count() }).OrderBy(t => t.type).ToList(),
+            types = result.Types.Select(t => new { type = t.Type, count = t.Count }).ToList(),
             readings = shown,
         };
 
+        var type = SensorReading.ParseType(typeText);
         return ToolResult.Ok(Sentence(readings, readings.Count == 0 ? (type is null ? "No sensors on this device." : "No sensors of that type on this device.") : null), data, omitted);
     }
 
