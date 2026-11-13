@@ -17,8 +17,8 @@ public enum HostFailure
 }
 
 /// <summary>
-/// The one safe boundary every host operation runs through, so device search, open alerts and
-/// later operations classify failures and handle cancellation identically.
+/// The one safe boundary every host operation runs through, so device search, open alerts, device
+/// summaries and later operations classify failures and handle cancellation identically.
 /// </summary>
 internal static class HostBoundary
 {
@@ -59,6 +59,7 @@ internal static class HostBoundary
     internal static HostFailure Classify(Exception error) => error switch
     {
         ToolException => HostFailure.InvalidRequest,
+        Devices.DeviceNotFoundException => HostFailure.NotFound,
         LibreNmsApiException api when api.IsAuthenticationFailure || api.IsPermissionDenied || api.IsAdminOnlyInApi => HostFailure.Refused,
         LibreNmsApiException { StatusCode: System.Net.HttpStatusCode.NotFound } => HostFailure.NotFound,
         LibreNmsApiException { IsTimeout: true } => HostFailure.Timeout,
