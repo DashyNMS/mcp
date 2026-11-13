@@ -93,7 +93,7 @@ public sealed class DeviceTools(
 
         // A failed read still answers from the device list the device was resolved from.
         var device = Use(fresh.Result, "device") ?? listed;
-        var summary = summaries.Shape(device);
+        var shaped = summaries.Shape(device);
         // One per rule firing on the device, as active_alerts reports them (#77).
         var deviceGroups = AlertGrouping.ByDeviceAndRule((Use(alerts.Result, "alerts") ?? []).Where(a => a.DeviceId == id));
         var openAlerts = deviceGroups.Select(g => AlertGroupSummary.From(g, options)).ToList();
@@ -111,8 +111,8 @@ public sealed class DeviceTools(
         var status = DeviceSummary.StatusOf(device);
         var data = new
         {
-            device = summary.Device,
-            uptime_seconds = summary.UptimeSeconds,
+            device = shaped.Device,
+            uptime_seconds = shaped.UptimeSeconds,
             under_maintenance = Use(maintenance.Result, "maintenance"),
             open_alerts = openAlerts,
             open_faults = alertTotals.Faults > alertTotals.AlertGroups ? alertTotals.Faults : (int?)null,
