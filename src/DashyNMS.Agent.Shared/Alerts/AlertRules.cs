@@ -73,7 +73,7 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var alert = await FindAlertAsync(request.AlertId, cancellationToken).ConfigureAwait(false)
             ?? throw new ToolException("No alert has that ID. It may have been cleared and removed; active_alerts lists the current ones.");
 
-        if (alert.Id != request.AlertId || request.Source is { } source && alert.Source != source)
+        if (alert.Id != request.AlertId || request.Source is { } expectedSource && alert.Source != expectedSource)
             throw new ToolException("No alert with that source and ID is visible.");
         var rulesTask = Sources.TryAsync(() => fleet.GetRulesAsync(cancellationToken), cancellationToken);
         var history = Sources.TryAsync(() => client.Logs.ListAlertLogAsync(alert.DeviceId, HistoryDepth, cancellationToken), cancellationToken);
