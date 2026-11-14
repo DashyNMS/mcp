@@ -109,10 +109,11 @@ public sealed class DeviceSensors
         var (sensors, deviceByDevice) = await source.ReadForDeviceAsync(device.DeviceId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var settings = options.SensorSettings();
         var readings = Order(sensors
                 .Where(s => s.DeviceId == device.DeviceId)
                 .Where(s => type is null || s.HasClass(type))
-                .Select(SensorReading.From))
+                .Select(sensor => SensorReading.From(sensor, settings)))
             // The class is filtered and judged before redaction; only what a host is given is redacted.
             .Select(r => r with { Type = redactor.Redact(r.Type), Description = Clean(r.Description), StateLabel = Clean(r.StateLabel) })
             .ToList();

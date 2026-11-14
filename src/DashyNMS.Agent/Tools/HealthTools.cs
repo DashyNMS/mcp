@@ -96,10 +96,11 @@ public sealed class HealthTools(
             deniedDevices = read.DeniedDevices;
         }
 
+        var settings = runner.Options.SensorSettings();
         var all = sensors
             .Where(s => type is null || s.HasClass(type))
             .Where(s => devices.TryGetValue(s.DeviceId, out var d) && scope.Includes(d) && !d.Disabled)
-            .Select(s => (Sensor: s, Reading: SensorReading.From(s)))
+            .Select(s => (Sensor: s, Reading: SensorReading.From(s, settings)))
             .ToList();
 
         var listed = all

@@ -448,3 +448,24 @@ health routes (never processors, memory pools or storage). A device the list doe
 is `InvalidRequest`; there is no partial success. Optional sensor definitions should be a
 read-only store, as desktop gives MCP. `Fixtures/DeviceSensors` holds the shared synthetic
 fixture, and `SharedDeviceSensorsHttpFixtureTests` serves it over loopback HTTP to both adapters.
+
+## Host sensor thresholds
+
+`AgentOptions` accepts Core's `DbmThresholds`, `SignalThresholds`,
+`TemperatureThresholds`, `FanSpeedThresholds` and
+`OverrideSensorLimitsWithAppThresholds`. `HostDeviceSensors.Create` has an
+options overload. Both MCP sensor tools use Core's `SensorCategoryRegistry`
+with these settings. Omitted settings preserve the previous defaults.
+
+The standalone server accepts finite invariant-culture numbers in:
+
+- `MCP_DBM_WARNING_THRESHOLD`, `MCP_DBM_CRITICAL_THRESHOLD`,
+  `MCP_DBM_IGNORE_AT_OR_ABOVE`, `MCP_DBM_IGNORE_AT_OR_BELOW`.
+- The same suffixes under `MCP_SIGNAL_`.
+- `MCP_TEMPERATURE_LOW_CRITICAL`, `MCP_TEMPERATURE_LOW_WARNING`,
+  `MCP_TEMPERATURE_HIGH_WARNING`, `MCP_TEMPERATURE_HIGH_CRITICAL`.
+- The same suffixes under `MCP_FAN_SPEED_`.
+
+`MCP_OVERRIDE_SENSOR_LIMITS` is false by default. When true, app thresholds
+replace sensor limits for Core's supported classes. Invalid numbers and
+inconsistent bounds fail startup. No app settings file is read.

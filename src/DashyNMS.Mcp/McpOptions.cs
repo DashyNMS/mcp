@@ -49,7 +49,7 @@ public sealed class McpOptions
         string graylogQueryField,
         bool graylogMatchAnyAddress,
         int maxResultBytes,
-        DashyNMS.Agent.ConfigText configText)
+        DashyNMS.Agent.ConfigText configText, AppSettings sensorSettings)
     {
         Connection = connection;
         TimestampsAreUtc = timestampsAreUtc;
@@ -59,6 +59,7 @@ public sealed class McpOptions
         GraylogMatchAnyAddress = graylogMatchAnyAddress;
         MaxResultBytes = maxResultBytes;
         ConfigText = configText;
+        SensorSettings = sensorSettings;
     }
 
     /// <summary>
@@ -71,6 +72,9 @@ public sealed class McpOptions
     /// The same goes for Unimus and Graylog.
     /// </summary>
     public LibreNmsConnection Connection { get; }
+
+    /// <summary>Thresholds owned by this standalone host, never read from app settings files.</summary>
+    public AppSettings SensorSettings { get; }
 
     /// <summary>
     /// Whether LibreNMS stores its timestamps in UTC, as desktop's "Server
@@ -168,6 +172,7 @@ public sealed class McpOptions
         var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
         var configText = ParseConfigText(lookup, problems);
+        var sensorSettings = LoadSensorSettings(lookup, problems);
 
         errors = problems;
         if (problems.Count > 0)
@@ -183,7 +188,46 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, graylogMatchAny, maxResultBytes, configText);
+        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings);
+    }
+
+    private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)
+    {
+        var settings = new AppSettings();
+        double Number(string key, double fallback)
+        {
+            var text = Value(lookup, key);
+            if (text is null) return fallback;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value)) return value;
+            problems.Add($"{key} must be a finite number.");
+            return fallback;
+        }
+        settings.DbmThresholds.WarningThreshold = Number("MCP_DBM_WARNING_THRESHOLD", settings.DbmThresholds.WarningThreshold);
+        settings.DbmThresholds.CriticalThreshold = Number("MCP_DBM_CRITICAL_THRESHOLD", settings.DbmThresholds.CriticalThreshold);
+        settings.DbmThresholds.IgnoreAtOrAbove = Number("MCP_DBM_IGNORE_AT_OR_ABOVE", settings.DbmThresholds.IgnoreAtOrAbove);
+        settings.DbmThresholds.IgnoreAtOrBelow = Number("MCP_DBM_IGNORE_AT_OR_BELOW", settings.DbmThresholds.IgnoreAtOrBelow);
+        if (!(settings.DbmThresholds.IgnoreAtOrBelow < settings.DbmThresholds.CriticalThreshold && settings.DbmThresholds.CriticalThreshold <= settings.DbmThresholds.WarningThreshold && settings.DbmThresholds.WarningThreshold < settings.DbmThresholds.IgnoreAtOrAbove))
+            problems.Add("MCP_DBM thresholds must be ordered: ignore below < critical <= warning < ignore above.");
+        settings.SignalThresholds.WarningThreshold = Number("MCP_SIGNAL_WARNING_THRESHOLD", settings.SignalThresholds.WarningThreshold);
+        settings.SignalThresholds.CriticalThreshold = Number("MCP_SIGNAL_CRITICAL_THRESHOLD", settings.SignalThresholds.CriticalThreshold);
+        settings.SignalThresholds.IgnoreAtOrAbove = Number("MCP_SIGNAL_IGNORE_AT_OR_ABOVE", settings.SignalThresholds.IgnoreAtOrAbove);
+        settings.SignalThresholds.IgnoreAtOrBelow = Number("MCP_SIGNAL_IGNORE_AT_OR_BELOW", settings.SignalThresholds.IgnoreAtOrBelow);
+        if (!(settings.SignalThresholds.IgnoreAtOrBelow < settings.SignalThresholds.CriticalThreshold && settings.SignalThresholds.CriticalThreshold <= settings.SignalThresholds.WarningThreshold && settings.SignalThresholds.WarningThreshold < settings.SignalThresholds.IgnoreAtOrAbove))
+            problems.Add("MCP_SIGNAL thresholds must be ordered: ignore below < critical <= warning < ignore above.");
+        settings.TemperatureThresholds.LowCritical = Number("MCP_TEMPERATURE_LOW_CRITICAL", settings.TemperatureThresholds.LowCritical);
+        settings.TemperatureThresholds.LowWarning = Number("MCP_TEMPERATURE_LOW_WARNING", settings.TemperatureThresholds.LowWarning);
+        settings.TemperatureThresholds.HighWarning = Number("MCP_TEMPERATURE_HIGH_WARNING", settings.TemperatureThresholds.HighWarning);
+        settings.TemperatureThresholds.HighCritical = Number("MCP_TEMPERATURE_HIGH_CRITICAL", settings.TemperatureThresholds.HighCritical);
+        if (!(settings.TemperatureThresholds.LowCritical <= settings.TemperatureThresholds.LowWarning && settings.TemperatureThresholds.LowWarning < settings.TemperatureThresholds.HighWarning && settings.TemperatureThresholds.HighWarning <= settings.TemperatureThresholds.HighCritical))
+            problems.Add("MCP_TEMPERATURE thresholds must be ordered: low critical <= low warning < high warning <= high critical.");
+        settings.FanSpeedThresholds.LowCritical = Number("MCP_FAN_SPEED_LOW_CRITICAL", settings.FanSpeedThresholds.LowCritical);
+        settings.FanSpeedThresholds.LowWarning = Number("MCP_FAN_SPEED_LOW_WARNING", settings.FanSpeedThresholds.LowWarning);
+        settings.FanSpeedThresholds.HighWarning = Number("MCP_FAN_SPEED_HIGH_WARNING", settings.FanSpeedThresholds.HighWarning);
+        settings.FanSpeedThresholds.HighCritical = Number("MCP_FAN_SPEED_HIGH_CRITICAL", settings.FanSpeedThresholds.HighCritical);
+        if (!(settings.FanSpeedThresholds.LowCritical <= settings.FanSpeedThresholds.LowWarning && settings.FanSpeedThresholds.LowWarning < settings.FanSpeedThresholds.HighWarning && settings.FanSpeedThresholds.HighWarning <= settings.FanSpeedThresholds.HighCritical))
+            problems.Add("MCP_FAN_SPEED thresholds must be ordered: low critical <= low warning < high warning <= high critical.");
+        settings.OverrideSensorLimitsWithAppThresholds = ParseBool(lookup, "MCP_OVERRIDE_SENSOR_LIMITS", false, problems);
+        return settings;
     }
 
     private static UnimusConnection? LoadUnimus(Func<string, string?> lookup, int timeout, List<string> problems)

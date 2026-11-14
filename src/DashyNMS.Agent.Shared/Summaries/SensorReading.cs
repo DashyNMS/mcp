@@ -83,12 +83,16 @@ public sealed record SensorReading(
         ["pressure"] = "kPa",
     };
 
-    public static SensorReading From(Sensor sensor)
+    public static SensorReading From(Sensor sensor) => From(sensor, Defaults);
+
+    /// <summary>Uses the host's captured settings through Core's own evaluator.</summary>
+    public static SensorReading From(Sensor sensor, AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(sensor);
         var bounds = new ThresholdBounds(sensor.LimitLow, sensor.LimitLowWarn, sensor.LimitHighWarn, sensor.LimitHigh);
         IThresholdEvaluator evaluator = SensorCategoryRegistry.Resolve(sensor.SensorClass) is { } entry
-            ? entry.Thresholds(Defaults, sensor)
+            ? entry.Thresholds(settings, sensor)
             : new HybridThresholdEvaluator(default, bounds, overrideSensorLimitsWithAppThresholds: false);
 
         var hasLimits = SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null

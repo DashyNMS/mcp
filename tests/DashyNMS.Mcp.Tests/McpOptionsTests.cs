@@ -13,6 +13,23 @@ public sealed class McpOptionsTests
         [McpOptions.LibreNmsToken] = "secret-token",
     };
 
+    [Theory]
+    [InlineData("MCP_TEMPERATURE_HIGH_WARNING", "NaN")]
+    [InlineData("MCP_TEMPERATURE_HIGH_CRITICAL", "30")]
+    [InlineData("MCP_DBM_IGNORE_AT_OR_BELOW", "0")]
+    [InlineData("MCP_OVERRIDE_SENSOR_LIMITS", "sometimes")]
+    public void Invalid_sensor_settings_are_refused(string key, string value)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            [McpOptions.LibreNmsUrl] = "https://librenms.example.net",
+            [McpOptions.LibreNmsToken] = "synthetic-token",
+            [key] = value,
+        };
+        Assert.Null(Load(values, out var errors));
+        Assert.NotEmpty(errors);
+    }
+
     [Fact]
     public void Minimal_settings_use_defaults()
     {
