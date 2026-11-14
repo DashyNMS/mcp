@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Summaries;
@@ -36,40 +37,27 @@ public sealed class EventTools(
     /// <summary>Graylog's search here is relative to now, so a window that ends earlier can't be counted yet (#30 adds absolute ranges).</summary>
     private static readonly TimeSpan GraylogNowSlack = TimeSpan.FromMinutes(5);
 
-    internal const string WindowHelp =
-        "The window is either hours (1 to 168, counting back from until) or since/until. Each of since and until is " +
-        "a duration before now (90m, 24h, 7d) or an ISO 8601 time; until defaults to now, and the window defaults to the last 24 hours.";
-
-    [McpServerTool(Name = "device_events", Title = "Device events", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "A device's history from LibreNMS for a window of time, newest first: event log entries (interface changes, reboots, discovery), " +
-        "alert state changes, and outages with their length. Use it for \"what happened to X?\", \"when did X go down?\" or " +
-        "\"what happened between 2 and 4 last night?\". " + WindowHelp + " " +
-        "Paged: 50 entries by default; pass the next_offset from page for more. If LibreNMS's logs don't reach back to the window's start, " +
-        "window_complete is false and covered_since says how far they did reach. Config changes and syslog aren't included; what_changed adds those.")]
+    [McpServerTool(Name = ToolText.DeviceEvents.Name, Title = ToolText.DeviceEvents.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.DeviceEvents.Description)]
     public Task<string> DeviceEvents(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("How many hours to look back from until, 1 to 168. Leave out when using since.")] int? hours = null,
-        [Description("Start of the window: a duration before now (90m, 24h, 7d) or an ISO 8601 time.")] string? since = null,
-        [Description("End of the window: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
-        [Description("How many entries to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many entries to return, 1 to 100. Defaults to 50.")] int limit = DefaultEvents,
+        [Description(ToolText.DeviceEvents.Args.Device)] string device,
+        [Description(ToolText.DeviceEvents.Args.Hours)] int? hours = null,
+        [Description(ToolText.DeviceEvents.Args.Since)] string? since = null,
+        [Description(ToolText.DeviceEvents.Args.Until)] string? until = null,
+        [Description(ToolText.DeviceEvents.Args.Offset)] int offset = 0,
+        [Description(ToolText.DeviceEvents.Args.Limit)] int limit = DefaultEvents,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("device_events", ct => EventsAsync(device, hours, since, until, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.DeviceEvents.Name, ct => EventsAsync(device, hours, since, until, offset, limit, ct), cancellationToken);
 
-    [McpServerTool(Name = "what_changed", Title = "What changed", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Everything that changed on a device in a window of time, from every source configured: the LibreNMS timeline (as device_events, up to 30 entries), " +
-        "the config diff for the newest Unimus backup that began inside the window, against the one before it (secrets redacted, long diffs cut), " +
-        "and how many Graylog messages it sent, with up to 10 of the newest. Use it when something broke and the question is why. " +
-        WindowHelp + " Graylog is only counted for windows that end now. Each source says when it isn't configured or couldn't be reached.")]
+    [McpServerTool(Name = ToolText.WhatChanged.Name, Title = ToolText.WhatChanged.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.WhatChanged.Description)]
     public Task<string> WhatChanged(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("How many hours to look back from until, 1 to 168. Leave out when using since.")] int? hours = null,
-        [Description("Start of the window: a duration before now (90m, 24h, 7d) or an ISO 8601 time.")] string? since = null,
-        [Description("End of the window: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
+        [Description(ToolText.WhatChanged.Args.Device)] string device,
+        [Description(ToolText.WhatChanged.Args.Hours)] int? hours = null,
+        [Description(ToolText.WhatChanged.Args.Since)] string? since = null,
+        [Description(ToolText.WhatChanged.Args.Until)] string? until = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("what_changed", ct => ChangesAsync(device, hours, since, until, ct), cancellationToken);
+        => runner.RunAsync(ToolText.WhatChanged.Name, ct => ChangesAsync(device, hours, since, until, ct), cancellationToken);
 
     private async Task<JsonObject> EventsAsync(string query, int? hours, string? since, string? until, int offset, int limit, CancellationToken cancellationToken)
     {

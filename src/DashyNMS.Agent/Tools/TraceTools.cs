@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
@@ -51,18 +52,12 @@ public sealed class TraceTools(
 
     public const int MaxSeenOn = 50;
 
-    [McpServerTool(Name = "trace_endpoint", Title = "Trace endpoint", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Finds where a MAC or IPv4 address is plugged in: the switch and edge port, with its alias, VLAN and state. " +
-        "An IP is turned into its MAC through LibreNMS's ARP tables, then every switch whose forwarding table has learned the MAC is checked, " +
-        "and ports that are links to other switches (LLDP/CDP neighbours, aggregates, ports with many MACs) are passed over. " +
-        "Also gives every port the MAC was seen on, with its role, and the path of switches from the edge upwards. " +
-        "Says when the answer is ambiguous - several possible edge ports, or only uplinks - rather than guessing. " +
-        "Only as current as LibreNMS's last FDB and ARP poll.")]
+    [McpServerTool(Name = ToolText.TraceEndpoint.Name, Title = ToolText.TraceEndpoint.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.TraceEndpoint.Description)]
     public Task<string> TraceEndpoint(
-        [Description("A MAC address (any common form: aa:bb:cc:dd:ee:ff, aabb.ccdd.eeff, AA-BB-...) or an IPv4 address.")] string address,
+        [Description(ToolText.TraceEndpoint.Args.Address)] string address,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("trace_endpoint", ct => TraceAsync(address, ct), cancellationToken);
+        => runner.RunAsync(ToolText.TraceEndpoint.Name, ct => TraceAsync(address, ct), cancellationToken);
 
     private async Task<JsonObject> TraceAsync(string address, CancellationToken cancellationToken)
     {

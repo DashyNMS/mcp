@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Health;
 using DashyNMS.Agent.Summaries;
@@ -19,36 +20,25 @@ public sealed class HealthTools(
     public const int DefaultReadings = 50;
     public const int MaxReadings = 100;
 
-    private const string TypeHelp =
-        "Types are LibreNMS's sensor classes - temperature, fanspeed, dbm (optical power), signal, voltage, current, power, humidity and others - " +
-        "and fan, optics and temp work too.";
-
-    [McpServerTool(Name = "device_sensors", Title = "Device sensors", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "One device's sensor readings: temperatures, fan speeds, optical power in dBm, signal, voltages, currents, power and more. Each reading has its " +
-        "unit, its limits and a state (ok, warning, critical, or unknown when there's nothing to judge it by), judged the way DashyNMS's Health tab judges " +
-        "it: the sensor's own LibreNMS limits where it has them, sensible defaults for dBm, signal, temperature and fans where it doesn't. Problems first. " +
-        TypeHelp + " For the same across the whole network, use health_overview.")]
+    [McpServerTool(Name = ToolText.DeviceSensors.Name, Title = ToolText.DeviceSensors.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.DeviceSensors.Description)]
     public Task<string> DeviceSensors(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("Only this type of sensor, e.g. temperature, fanspeed, dbm or voltage. Leave out for all.")] string? type = null,
+        [Description(ToolText.DeviceSensors.Args.Device)] string device,
+        [Description(ToolText.DeviceSensors.Args.Type)] string? type = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("device_sensors", ct => DeviceAsync(device, type, ct), cancellationToken);
+        => runner.RunAsync(ToolText.DeviceSensors.Name, ct => DeviceAsync(device, type, ct), cancellationToken);
 
-    [McpServerTool(Name = "health_overview", Title = "Health overview", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Sensor readings across the whole network, worst first, for questions like \"is anything running hot?\", \"which optics are low?\" or " +
-        "\"any fans failing?\". By default only readings in warning or critical; set only_problems to false for every reading of a type. " +
-        "Judged the same way as device_sensors. " + TypeHelp + " Filter by device group or location. Paged: 50 by default, up to 100.")]
+    [McpServerTool(Name = ToolText.HealthOverview.Name, Title = ToolText.HealthOverview.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.HealthOverview.Description)]
     public Task<string> HealthOverview(
-        [Description("Only this type of sensor, e.g. temperature, fanspeed, dbm or voltage. Leave out for every type.")] string? type = null,
-        [Description("Only readings in warning or critical (the default). False lists every reading, which needs a type.")] bool only_problems = true,
-        [Description("Only devices in this LibreNMS device group (by name; list_groups_and_locations shows them).")] string? group = null,
-        [Description("Only devices at this location (by name; list_groups_and_locations shows them).")] string? location = null,
-        [Description("How many readings to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many readings to return, 1 to 100. Defaults to 50.")] int limit = DefaultReadings,
+        [Description(ToolText.HealthOverview.Args.Type)] string? type = null,
+        [Description(ToolText.HealthOverview.Args.OnlyProblems)] bool only_problems = true,
+        [Description(ToolText.HealthOverview.Args.Group)] string? group = null,
+        [Description(ToolText.HealthOverview.Args.Location)] string? location = null,
+        [Description(ToolText.HealthOverview.Args.Offset)] int offset = 0,
+        [Description(ToolText.HealthOverview.Args.Limit)] int limit = DefaultReadings,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("health_overview", ct => OverviewAsync(type, only_problems, group, location, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.HealthOverview.Name, ct => OverviewAsync(type, only_problems, group, location, offset, limit, ct), cancellationToken);
 
     /// <summary>
     /// One device's readings from the shared typed operation hosts such as mobile also run, so

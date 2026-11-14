@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -24,34 +25,25 @@ public sealed class DeviceTools(
     public const int MaxProblemPorts = 5;
     public const int MaxStorage = 3;
 
-    [McpServerTool(Name = "find_device", Title = "Find a device", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Search LibreNMS for devices by part of a hostname, display name or sysName, by IP address, or by MAC address, " +
-        "and/or list devices by status, device group or location. Use it when the exact device isn't known yet, to get device IDs " +
-        "for the other tools, or for \"which devices are down at site X?\". A MAC address is looked up in LibreNMS's ARP tables, so it finds the " +
-        "routers or layer-3 switches that have seen it (with the IP it had), not the endpoint itself. Best matches first. " +
-        "Paged: 10 by default, up to 50; when page.next_offset is set, call again with that offset to get every match rather than " +
-        "making narrower searches. Records are short unless verbose is true. It doesn't show health or alerts.")]
+    [McpServerTool(Name = ToolText.FindDevice.Name, Title = ToolText.FindDevice.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.FindDevice.Description)]
     public Task<string> FindDevice(
-        [Description("Part of a hostname, display name or sysName, an IP address, or a MAC address (any common format). Can be left out when status, group or location is given.")] string? query = null,
-        [Description("Only devices with this status: up, down or disabled.")] string? status = null,
-        [Description("Only devices in this LibreNMS device group (by name; list_groups_and_locations shows them).")] string? group = null,
-        [Description("Only devices at this location (by name; list_groups_and_locations shows them).")] string? location = null,
-        [Description("How many matches to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many matches to return, 1 to 50. Defaults to 10.")] int limit = DefaultMatches,
-        [Description("Return every field (sysName, OS, hardware, last polled) instead of the short record.")] bool verbose = false,
+        [Description(ToolText.FindDevice.Args.Query)] string? query = null,
+        [Description(ToolText.FindDevice.Args.Status)] string? status = null,
+        [Description(ToolText.FindDevice.Args.Group)] string? group = null,
+        [Description(ToolText.FindDevice.Args.Location)] string? location = null,
+        [Description(ToolText.FindDevice.Args.Offset)] int offset = 0,
+        [Description(ToolText.FindDevice.Args.Limit)] int limit = DefaultMatches,
+        [Description(ToolText.FindDevice.Args.Verbose)] bool verbose = false,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("find_device", ct => FindAsync(query, status, group, location, offset, limit, verbose, ct), cancellationToken);
+        => runner.RunAsync(ToolText.FindDevice.Name, ct => FindAsync(query, status, group, location, offset, limit, verbose, ct), cancellationToken);
 
-    [McpServerTool(Name = "device_health", Title = "Device health", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "How one device is doing now: up or down, uptime, whether it's in a maintenance window, its open alerts, " +
-        "peak CPU, memory and fullest storage, and the ports that are down while enabled or are counting errors (top 5). " +
-        "Use it for \"is X OK?\" questions. It doesn't cover history; use device_events or what_changed for that, and port_status for one port in detail.")]
+    [McpServerTool(Name = ToolText.DeviceHealth.Name, Title = ToolText.DeviceHealth.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.DeviceHealth.Description)]
     public Task<string> DeviceHealth(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
+        [Description(ToolText.DeviceHealth.Args.Device)] string device,
         CancellationToken cancellationToken)
-        => runner.RunAsync("device_health", ct => HealthAsync(device, ct), cancellationToken);
+        => runner.RunAsync(ToolText.DeviceHealth.Name, ct => HealthAsync(device, ct), cancellationToken);
 
     private async Task<JsonObject> FindAsync(string? query, string? status, string? group, string? location, int offset, int limit, bool verbose, CancellationToken cancellationToken)
     {

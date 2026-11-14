@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
@@ -86,32 +87,22 @@ public sealed class GraphTools(
     /// </summary>
     internal const string WhiteBackground = "bg=FFFFFF&bbg=FFFFFF";
 
-    [McpServerTool(Name = "graph", Title = "Graph", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "A LibreNMS graph as an image, shown in the chat: a device's graph (traffic, processor, memory, ping, temperature and the rest of its health graphs) " +
-        "or one port's (traffic, packets, errors). Use it when a picture of a trend helps: \"show me the traffic on X this week\". " +
-        "Without type, a device gives its traffic graph and the list of graph types it has; a port gives its traffic. " +
-        "With sensor, one sensor alone on its own scale (one temperature, one optic's power) rather than every sensor of its kind together; device_sensors lists them with their IDs. " +
-        "The time range is range (hour, day, week, month or year; a day by default), or since and until for a custom span up to 31 days. " +
-        "The legend lists every line with its figures; turn it off (legend: false) for graphs with many lines, where it would dwarf the graph. " +
-        "The image has its own white background with dark text: show it as it is, on a light background, and never recolour it or place it on a dark one, where it can't be read. " +
-        "For numbers rather than a picture, use port_status, device_health or device_sensors.")]
+    [McpServerTool(Name = ToolText.Graph.Name, Title = ToolText.Graph.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.Graph.Description)]
     public async Task<CallToolResult> Graph(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("The graph type. For a device: a name from its list (device_bits, device_processor, device_mempool, device_icmp_perf, ...) or traffic, cpu, memory, ping, temperature, storage. For a port: bits (traffic), upkts, nupkts or errors. Leave out for traffic.")] string? type = null,
-        [Description("A port on the device, for that port's graph: its name (ifName), description, alias or port ID. Leave out for a device graph.")] string? port = null,
-        [Description("One sensor on the device, for that sensor's own graph: its sensor_id from device_sensors, or its description (e.g. \"Chassis Temperature\"). Type, if given, narrows it to that kind of sensor. Leave out for a device or port graph.")] string? sensor = null,
-        [Description("How far back: hour, day, week, month or year. Defaults to day. Ignored when since is given.")] string? range = null,
-        [Description("Start of a custom span: relative (\"6h\", \"3d\") or ISO 8601 (UTC unless a zone is given). Up to 31 days before until.")] string? since = null,
-        [Description("End of a custom span, the same forms as since. Defaults to now.")] string? until = null,
-        [Description("Draw the legend under the graph (each line's current, average and maximum). Defaults to true. " +
-            "Turn it off for a graph with many lines - a processor graph with a line per core, a device's traffic across dozens of ports - where the legend would be taller than the graph; " +
-            "keep it when the figures matter to the question.")] bool legend = true,
+        [Description(ToolText.Graph.Args.Device)] string device,
+        [Description(ToolText.Graph.Args.Type)] string? type = null,
+        [Description(ToolText.Graph.Args.Port)] string? port = null,
+        [Description(ToolText.Graph.Args.Sensor)] string? sensor = null,
+        [Description(ToolText.Graph.Args.Range)] string? range = null,
+        [Description(ToolText.Graph.Args.Since)] string? since = null,
+        [Description(ToolText.Graph.Args.Until)] string? until = null,
+        [Description(ToolText.Graph.Args.Legend)] bool legend = true,
         CancellationToken cancellationToken = default)
     {
         byte[]? image = null;
         var text = await runner.RunAsync(
-            "graph",
+            ToolText.Graph.Name,
             async ct =>
             {
                 var (result, png) = await GraphAsync(device, type, port, sensor, range, since, until, legend, ct).ConfigureAwait(false);

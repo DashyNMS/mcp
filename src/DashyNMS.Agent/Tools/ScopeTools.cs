@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using ModelContextProtocol.Server;
@@ -10,13 +11,10 @@ namespace DashyNMS.Agent.Tools;
 [McpServerToolType]
 public sealed class ScopeTools(DeviceDirectory directory, DeviceScope scopes, ToolRunner runner)
 {
-    [McpServerTool(Name = "list_groups_and_locations", Title = "Device groups and locations", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The device groups defined in LibreNMS and the locations devices are at, with how many devices are at each location and how many of those are down. " +
-        "Use it to find the names the group and location filters of find_device and active_alerts accept, or for \"which sites are there?\". " +
-        "To list a group's devices, call find_device with that group.")]
+    [McpServerTool(Name = ToolText.ListGroupsAndLocations.Name, Title = ToolText.ListGroupsAndLocations.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.ListGroupsAndLocations.Description)]
     public Task<string> ListGroupsAndLocations(CancellationToken cancellationToken = default)
-        => runner.RunAsync("list_groups_and_locations", ListAsync, cancellationToken);
+        => runner.RunAsync(ToolText.ListGroupsAndLocations.Name, ListAsync, cancellationToken);
 
     private async Task<JsonObject> ListAsync(CancellationToken cancellationToken)
     {

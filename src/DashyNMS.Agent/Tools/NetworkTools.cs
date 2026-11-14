@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
@@ -30,70 +31,57 @@ public sealed class NetworkTools(
     public const int MaxEvents = 100;
     public const int MaxDownLocations = 10;
 
-    [McpServerTool(Name = "network_overview", Title = "Network overview", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The whole network in one call, as the dashboard's counts: how many devices are up, down, disabled or ignored, which locations have the most " +
-        "devices down, open alerts by severity and how many are acknowledged, how many ports are down while enabled or counting errors, and the LibreNMS " +
-        "version. A cheap first call for \"how's the network?\" before drilling in with find_device, active_alerts or the top_ tools.")]
+    [McpServerTool(Name = ToolText.NetworkOverview.Name, Title = ToolText.NetworkOverview.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.NetworkOverview.Description)]
     public Task<string> NetworkOverview(CancellationToken cancellationToken = default)
-        => runner.RunAsync("network_overview", OverviewAsync, cancellationToken);
+        => runner.RunAsync(ToolText.NetworkOverview.Name, OverviewAsync, cancellationToken);
 
-    [McpServerTool(Name = "top_interfaces", Title = "Top interfaces", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The busiest ports across the network right now, by LibreNMS's last polling interval: traffic in and out in Mbps and as a share of the port's speed. " +
-        "Rank by total, in or out. Filter by device group or location. As desktop's Top interfaces widget. For traffic history, use the device's graphs.")]
+    [McpServerTool(Name = ToolText.TopInterfaces.Name, Title = ToolText.TopInterfaces.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.TopInterfaces.Description)]
     public Task<string> TopInterfaces(
-        [Description("Rank by total (the default), in or out.")] string? by = null,
-        [Description("How many ports, 1 to 50. Defaults to 10.")] int limit = DefaultTop,
-        [Description("Only devices in this LibreNMS device group (by name).")] string? group = null,
-        [Description("Only devices at this location (by name).")] string? location = null,
+        [Description(ToolText.TopInterfaces.Args.By)] string? by = null,
+        [Description(ToolText.TopInterfaces.Args.Limit)] int limit = DefaultTop,
+        [Description(ToolText.TopInterfaces.Args.Group)] string? group = null,
+        [Description(ToolText.TopInterfaces.Args.Location)] string? location = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("top_interfaces", ct => TopPortsAsync(errors: false, by, limit, group, location, ct), cancellationToken);
+        => runner.RunAsync(ToolText.TopInterfaces.Name, ct => TopPortsAsync(errors: false, by, limit, group, location, ct), cancellationToken);
 
-    [McpServerTool(Name = "top_errors", Title = "Top errors", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The ports counting the most errors across the network right now, in errors per second in and out, by LibreNMS's last polling interval. " +
-        "An empty list means no port is counting errors. Rank by total, in or out; filter by device group or location. As desktop's Top errors widget.")]
+    [McpServerTool(Name = ToolText.TopErrors.Name, Title = ToolText.TopErrors.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.TopErrors.Description)]
     public Task<string> TopErrors(
-        [Description("Rank by total (the default), in or out.")] string? by = null,
-        [Description("How many ports, 1 to 50. Defaults to 10.")] int limit = DefaultTop,
-        [Description("Only devices in this LibreNMS device group (by name).")] string? group = null,
-        [Description("Only devices at this location (by name).")] string? location = null,
+        [Description(ToolText.TopErrors.Args.By)] string? by = null,
+        [Description(ToolText.TopErrors.Args.Limit)] int limit = DefaultTop,
+        [Description(ToolText.TopErrors.Args.Group)] string? group = null,
+        [Description(ToolText.TopErrors.Args.Location)] string? location = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("top_errors", ct => TopPortsAsync(errors: true, by, limit, group, location, ct), cancellationToken);
+        => runner.RunAsync(ToolText.TopErrors.Name, ct => TopPortsAsync(errors: true, by, limit, group, location, ct), cancellationToken);
 
-    [McpServerTool(Name = "top_devices", Title = "Top devices", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The devices that stand out across the network: by traffic (the default, all their ports' traffic summed, as desktop's Top devices widget) or by " +
-        "problems (most ports down while enabled or counting errors). Filter by device group or location.")]
+    [McpServerTool(Name = ToolText.TopDevices.Name, Title = ToolText.TopDevices.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.TopDevices.Description)]
     public Task<string> TopDevices(
-        [Description("Rank by traffic (the default), in, out, or problems.")] string? by = null,
-        [Description("How many devices, 1 to 50. Defaults to 10.")] int limit = DefaultTop,
-        [Description("Only devices in this LibreNMS device group (by name).")] string? group = null,
-        [Description("Only devices at this location (by name).")] string? location = null,
+        [Description(ToolText.TopDevices.Args.By)] string? by = null,
+        [Description(ToolText.TopDevices.Args.Limit)] int limit = DefaultTop,
+        [Description(ToolText.TopDevices.Args.Group)] string? group = null,
+        [Description(ToolText.TopDevices.Args.Location)] string? location = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("top_devices", ct => TopDevicesAsync(by, limit, group, location, ct), cancellationToken);
+        => runner.RunAsync(ToolText.TopDevices.Name, ct => TopDevicesAsync(by, limit, group, location, ct), cancellationToken);
 
-    [McpServerTool(Name = "network_events", Title = "Network events", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The event log and/or alert log for the whole network over a window of time, newest first, as desktop's Logs tab - for \"what happened overnight?\" " +
-        "or \"anything rebooted today?\". The event log has interface changes, reboots, discovery and user actions; the alert log has every alert state change. " +
-        EventTools.WindowHelp + " Filter by event type, severity, device, device group or location. Paged: 50 by default, up to 100. " +
-        "If LibreNMS's logs don't reach back to the window's start, window_complete is false. For one device, device_events also adds its outages.")]
+    [McpServerTool(Name = ToolText.NetworkEvents.Name, Title = ToolText.NetworkEvents.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.NetworkEvents.Description)]
     public Task<string> NetworkEvents(
-        [Description("Which log: events (the default), alerts, or both.")] string? log = null,
-        [Description("How many hours to look back from until, 1 to 168. Leave out when using since.")] int? hours = null,
-        [Description("Start of the window: a duration before now (90m, 24h, 7d) or an ISO 8601 time.")] string? since = null,
-        [Description("End of the window: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
-        [Description("Only event-log entries of this type, e.g. interface, reboot, discovery, system. Part of the type is enough.")] string? type = null,
-        [Description("Only event-log entries of this severity or worse: ok, info, notice, warning or critical.")] string? severity = null,
-        [Description("Only this device: hostname, display name, IP address or LibreNMS device ID.")] string? device = null,
-        [Description("Only devices in this LibreNMS device group (by name).")] string? group = null,
-        [Description("Only devices at this location (by name).")] string? location = null,
-        [Description("How many entries to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many entries to return, 1 to 100. Defaults to 50.")] int limit = DefaultEvents,
+        [Description(ToolText.NetworkEvents.Args.Log)] string? log = null,
+        [Description(ToolText.NetworkEvents.Args.Hours)] int? hours = null,
+        [Description(ToolText.NetworkEvents.Args.Since)] string? since = null,
+        [Description(ToolText.NetworkEvents.Args.Until)] string? until = null,
+        [Description(ToolText.NetworkEvents.Args.Type)] string? type = null,
+        [Description(ToolText.NetworkEvents.Args.Severity)] string? severity = null,
+        [Description(ToolText.NetworkEvents.Args.Device)] string? device = null,
+        [Description(ToolText.NetworkEvents.Args.Group)] string? group = null,
+        [Description(ToolText.NetworkEvents.Args.Location)] string? location = null,
+        [Description(ToolText.NetworkEvents.Args.Offset)] int offset = 0,
+        [Description(ToolText.NetworkEvents.Args.Limit)] int limit = DefaultEvents,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("network_events", ct => EventsAsync(log, hours, since, until, type, severity, device, group, location, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.NetworkEvents.Name, ct => EventsAsync(log, hours, since, until, type, severity, device, group, location, offset, limit, ct), cancellationToken);
 
     private async Task<JsonObject> OverviewAsync(CancellationToken cancellationToken)
     {

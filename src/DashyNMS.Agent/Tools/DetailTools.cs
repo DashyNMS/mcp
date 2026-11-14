@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -32,33 +33,22 @@ public sealed class DetailTools(
     /// <summary>The sections given when none are named: everything except the MAC and ARP tables, which can run to thousands of rows.</summary>
     public static readonly IReadOnlyList<string> DefaultSections = ["inventory", "vlans", "poe", "wireless", "routing", "availability", "addresses"];
 
-    [McpServerTool(Name = "device_details", Title = "Device details", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "One device's details beyond its health, in sections - ask only for the ones the question needs: " +
-        "inventory (chassis, modules, transceivers, power supplies, fans with models and serials); vlans (each VLAN with its untagged and tagged ports); " +
-        "fdb (MAC addresses learned per port - \"what's connected to port X?\"); arp (IP to MAC entries); poe (PoE power budget used and left); " +
-        "wireless (access points, clients, channel and signal sensors); routing (BGP sessions, OSPF neighbours, VRFs); " +
-        "availability (uptime percentage over the last day, week, month and year); addresses (the device's own IP addresses and which port each is on). " +
-        "Without sections, everything except fdb and arp. Lists are paged together with offset and limit (50 rows by default, up to 200); " +
-        "a section that couldn't be read is listed under unavailable. For health, use device_health; for sensors, device_sensors; for neighbours, device_neighbours.")]
+    [McpServerTool(Name = ToolText.DeviceDetails.Name, Title = ToolText.DeviceDetails.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.DeviceDetails.Description)]
     public Task<string> DeviceDetails(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("Which sections to return: any of inventory, vlans, fdb, arp, poe, wireless, routing, availability, addresses. Leave out for all but fdb and arp.")] string[]? sections = null,
-        [Description("How many rows to skip in each list, for paging. Start at 0, then use the next_offset a section's page gives.")] int offset = 0,
-        [Description("How many rows to return per list, 1 to 200. Defaults to 50.")] int limit = DefaultRows,
+        [Description(ToolText.DeviceDetails.Args.Device)] string device,
+        [Description(ToolText.DeviceDetails.Args.Sections)] string[]? sections = null,
+        [Description(ToolText.DeviceDetails.Args.Offset)] int offset = 0,
+        [Description(ToolText.DeviceDetails.Args.Limit)] int limit = DefaultRows,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("device_details", ct => DetailsAsync(device, sections, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.DeviceDetails.Name, ct => DetailsAsync(device, sections, offset, limit, ct), cancellationToken);
 
-    [McpServerTool(Name = "device_neighbours", Title = "Device neighbours", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Every LLDP and CDP neighbour of one device: the local port, the device on the other end (with its LibreNMS ID when LibreNMS knows it), " +
-        "its port, platform and protocol. Includes neighbours that report this device but that it doesn't report itself (seen_from: neighbour), " +
-        "which often means a discovery problem on one side. Use it for \"what's connected to this switch?\" or topology questions. " +
-        "For one port, port_status shows its neighbour too.")]
+    [McpServerTool(Name = ToolText.DeviceNeighbours.Name, Title = ToolText.DeviceNeighbours.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.DeviceNeighbours.Description)]
     public Task<string> DeviceNeighbours(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
+        [Description(ToolText.DeviceNeighbours.Args.Device)] string device,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("device_neighbours", ct => NeighboursAsync(device, ct), cancellationToken);
+        => runner.RunAsync(ToolText.DeviceNeighbours.Name, ct => NeighboursAsync(device, ct), cancellationToken);
 
     private async Task<JsonObject> DetailsAsync(string query, string[]? requested, int offset, int limit, CancellationToken cancellationToken)
     {
