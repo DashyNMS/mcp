@@ -648,3 +648,25 @@ This intentionally strengthens the previous cut-before-redaction path when a
 secret spans the line limit. Ordinary output and caps are unchanged. Optional
 service exceptions map to fixed refusal, not-found, timeout or unavailable
 categories without returning their server text.
+
+### Unimus config tools for hosts
+
+`ConfigLookups` owns `config_backup`, `config_diff` and `recent_config_changes`
+execution. MCP keeps its schemas, device matching, bounded backup lookup,
+page sizes, stale notices, diff cap, scope filters and concurrency limit.
+Typed results include backup and line totals. Recent changes additionally
+report checked and unreadable device counts, including unreadable notices
+left outside MCP's five-notice cap, for compact formatters to state coverage.
+
+`HostConfigLookups` accepts the host's Unimus client and config-text policy,
+returns fixed failure codes and unreadable-device notices, and retires pending
+and cached reads on disposal. Full mode returns redacted text, summary mode
+returns counts without config text, and off mode refuses all reads before
+accessing either service. Redaction runs before config pagination; diff private
+key bodies are masked before trimming and all diff text is then redacted.
+
+Reviewed reads are LibreNMS devices/groups/memberships and Unimus devices,
+backups, latest backup and diffs. Host settings, credentials, certificate trust
+and deadlines remain host-owned. `Fixtures/ConfigLookups` exercises Core's
+real Unimus client over HTTP with full/summary modes, redaction and request
+parity. Existing MCP tests retain independent bounds and stale-data checks.
