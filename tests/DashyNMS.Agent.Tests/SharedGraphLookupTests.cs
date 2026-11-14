@@ -12,12 +12,12 @@ namespace DashyNMS.Agent.Tests;
 public sealed class SharedGraphLookupTests
 {
     private static readonly string FilePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Graphs", "routes.json");
-    private static FixtureServer Server(bool denied = false, bool oversized = false)
+    private static FixtureServer Server(bool denied = false, bool oversized = false, bool partial = false)
     {
         using var json = JsonDocument.Parse(File.ReadAllText(FilePath));
         var fixture = json.RootElement.Clone();
         var routes = fixture.GetProperty("routes").EnumerateObject().ToDictionary(p => p.Name, p => new Answer(200, p.Value.GetRawText()));
-        return new(path => routes.GetValueOrDefault(path), requestAnswer: request =>
+        return new(path => partial && path == "devices/1/wireless" ? new Answer(403, "{}") : routes.GetValueOrDefault(path), requestAnswer: request =>
         {
             if (request.QueryString["graph_type"] is not { } format) return null;
             var image = denied ? fixture.GetProperty("deniedSvg").GetString()
@@ -93,6 +93,19 @@ public sealed class SharedGraphLookupTests
             .Graph("1", type: explicitType ? "traffic" : null);
         Assert.Single(mcp.Content);
         Assert.Contains("unknown", Assert.IsType<TextContentBlock>(mcp.Content[0]).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Successful_MCP_image_keeps_the_incomplete_listing_notice()
+    {
+        using var server = Server(partial: true);
+        using var provider = Connected(server.Root);
+        var result = await ActivatorUtilities.CreateInstance<GraphTools>(provider).Graph("1");
+        Assert.Equal(2, result.Content.Count);
+        Assert.IsType<ImageContentBlock>(result.Content[1]);
+        var text = FakeLibreNms.Parse(Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+        Assert.Contains("incomplete", text.GetProperty("summary").GetString()!);
+        Assert.Equal("wireless graphs", Assert.Single(text.GetProperty("data").GetProperty("unavailable").EnumerateArray()).GetString());
     }
 
     [Theory]

@@ -709,3 +709,6 @@ project the same name strings, including when names are duplicated.
 Config diffs track recognised XML secret elements on each side through common
 lines before selecting and capping changed lines. Bodies remain redacted when
 their tags are unchanged or outside the displayed diff.
+
+MCP image responses retain failed graph-listing names and explicitly describe
+the available types as incomplete when an image was still found.
