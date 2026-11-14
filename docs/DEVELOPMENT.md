@@ -730,3 +730,7 @@ Shared-package CI also compiles a small consumer against the pinned Agent revisi
 before `DeviceResolver` moved, then runs that unchanged consumer with the current
 Agent and Shared DLLs. This checks binary type forwarding for the resolver and its
 nested candidate API; a fresh source build against Shared would miss that failure.
+
+A failed event log, alert log or outage read makes the common history window
+incomplete with unknown coverage (`CoveredSince = null`). Successful sources'
+entries remain available, and the summary explicitly reports unknown coverage.

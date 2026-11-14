@@ -134,6 +134,31 @@ public sealed class SharedEventLookupsTests
         }
     }
 
+    [Theory]
+    [InlineData("logs/eventlog/1", "event log")]
+    [InlineData("logs/alertlog/1", "alert log")]
+    [InlineData("devices/1/outages", "outages")]
+    public async Task Every_failed_history_source_makes_common_coverage_unknown(string path, string source)
+    {
+        var routes = Routes();
+        routes[path] = new(403, "{}");
+        using var server = new FixtureServer(p => routes.GetValueOrDefault(p));
+        using var provider = Connected(server.Root);
+        using var host = Host(provider);
+        var events = (await host.ReadDeviceAsync(new(1))).Result!;
+        Assert.False(events.Data.Window.WindowComplete);
+        Assert.Null(events.Data.Window.CoveredSince);
+        Assert.Equal(source, Assert.Single(events.Data.Unavailable!).Source);
+        Assert.Contains("coverage is unknown", events.Summary);
+        var changes = (await host.ReadChangesAsync(new(1))).Result!;
+        Assert.False(changes.Data.Window.WindowComplete);
+        Assert.Null(changes.Data.Window.CoveredSince);
+        Assert.Equal(source, Assert.Single(changes.Data.Librenms.Unavailable!).Source);
+        Assert.Contains("coverage is unknown", changes.Summary);
+        var mcp = FakeLibreNms.Parse(await ActivatorUtilities.CreateInstance<EventTools>(provider).DeviceEvents("1"));
+        Assert.False(mcp.GetProperty("data").GetProperty("window").GetProperty("window_complete").GetBoolean());
+    }
+
     [Fact]
     public async Task A_busy_log_reports_an_incomplete_window_and_host_retirement_refuses_cached_reads()
     {
