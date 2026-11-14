@@ -112,93 +112,16 @@ public sealed class NetworkTools(
 
     private async Task<JsonObject> TopPortsAsync(bool errors, string? byText, int limit, string? group, string? location, CancellationToken cancellationToken)
     {
-        var by = ParseRank(byText);
-        Paging.Check(0, limit, MaxTop);
-        var (devices, ports) = await ScopedPortsAsync(group, location, cancellationToken).ConfigureAwait(false);
-
-        var ranked = errors ? PortRankings.TopErrors(ports, by, limit) : PortRankings.TopTraffic(ports, by, limit);
-        var rows = ranked.Select(r =>
-        {
-            var speedMbps = r.Port.IfSpeed is > 0 ? r.Port.IfSpeed.Value / 1_000_000d : (double?)null;
-            return new
-            {
-                device = devices.TryGetValue(r.Port.DeviceId, out var d) ? DeviceBrief.From(d) : null,
-                port_id = r.Port.PortId,
-                port = r.Port.IfName ?? r.Port.IfDescr,
-                alias = string.IsNullOrWhiteSpace(r.Port.IfAlias) || r.Port.IfAlias == r.Port.IfName ? null : r.Port.IfAlias,
-                in_mbps = errors ? (double?)null : Math.Round(r.In / 1_000_000, 2),
-                out_mbps = errors ? (double?)null : Math.Round(r.Out / 1_000_000, 2),
-                in_errors_per_sec = errors ? Math.Round(r.In, 2) : (double?)null,
-                out_errors_per_sec = errors ? Math.Round(r.Out, 2) : (double?)null,
-                speed_mbps = speedMbps,
-                busiest_direction_percent = !errors && speedMbps is > 0 ? Math.Round(Math.Max(r.In, r.Out) / 1_000_000 / speedMbps.Value * 100, 1) : (double?)null,
-            };
-        }).ToList();
-
-        var summary = rows.Count == 0
-            ? errors ? "No port is counting errors." : "No port is carrying traffic."
-            : $"The {DeviceTools.Count(rows.Count, "port")} {(errors ? "counting the most errors" : "carrying the most traffic")}, ranked by {by.ToString().ToLowerInvariant()}, out of {ports.Count} checked.";
-        return ToolResult.Ok(summary, new { ports = rows });
+        var result = await new DashyNMS.Agent.Rankings.FleetRankings(fleet, directory, scopes, runner.Redactor)
+            .ReadPortsAsync(new(errors, byText, limit, group, location), cancellationToken).ConfigureAwait(false);
+        return ToolResult.Ok(result.Summary, result.Data);
     }
 
     private async Task<JsonObject> TopDevicesAsync(string? byText, int limit, string? group, string? location, CancellationToken cancellationToken)
     {
-        var problems = string.Equals(byText?.Trim(), "problems", StringComparison.OrdinalIgnoreCase);
-        var by = problems ? RankBy.Total : ParseRank(byText is null || string.Equals(byText.Trim(), "traffic", StringComparison.OrdinalIgnoreCase) ? null : byText);
-        Paging.Check(0, limit, MaxTop);
-        var (devices, ports) = await ScopedPortsAsync(group, location, cancellationToken).ConfigureAwait(false);
-
-        if (problems)
-        {
-            var rows = ports
-                .GroupBy(p => p.DeviceId)
-                .Select(g => (DeviceId: g.Key, Down: g.Count(DeviceTools.IsDownWhileEnabled), Errors: g.Count(p => DeviceTools.ErrorRate(p) > 0)))
-                .Where(x => x.Down + x.Errors > 0)
-                .OrderByDescending(x => x.Down + x.Errors)
-                .ThenByDescending(x => x.Down)
-                .Take(limit)
-                .Select(x => new
-                {
-                    device = devices.TryGetValue(x.DeviceId, out var d) ? DeviceBrief.From(d) : null,
-                    ports_down_while_enabled = x.Down,
-                    ports_counting_errors = x.Errors,
-                })
-                .ToList();
-
-            return ToolResult.Ok(
-                rows.Count == 0 ? "No device has ports down while enabled or counting errors." : $"The {DeviceTools.Count(rows.Count, "device")} with the most port problems.",
-                new { devices = rows });
-        }
-
-        var ranked = PortRankings.TopDevices(ports, by, limit)
-            .Select(r => new
-            {
-                device = devices.TryGetValue(r.DeviceId, out var d) ? DeviceBrief.From(d) : null,
-                in_mbps = Math.Round(r.In / 1_000_000, 2),
-                out_mbps = Math.Round(r.Out / 1_000_000, 2),
-                active_ports = r.ActivePorts,
-            })
-            .ToList();
-
-        return ToolResult.Ok(
-            ranked.Count == 0 ? "No device is carrying traffic." : $"The {DeviceTools.Count(ranked.Count, "device")} carrying the most traffic, ranked by {by.ToString().ToLowerInvariant()}. Traffic is every port's summed, so traffic passing through counts twice.",
-            new { devices = ranked });
-    }
-
-    /// <summary>The fleet port snapshot, live ports only, cut to the group or location asked for.</summary>
-    private async Task<(IReadOnlyDictionary<int, Device> Devices, IReadOnlyList<Port> Ports)> ScopedPortsAsync(string? group, string? location, CancellationToken cancellationToken)
-    {
-        var scope = await scopes.ResolveAsync(group, location, cancellationToken).ConfigureAwait(false);
-        var devicesTask = directory.GetAllAsync(cancellationToken);
-        var portsTask = fleet.GetPortsAsync(cancellationToken);
-        await Task.WhenAll(devicesTask, portsTask).ConfigureAwait(false);
-
-        var devices = devicesTask.Result.ToDictionary(d => d.DeviceId);
-        var ports = portsTask.Result
-            .Where(p => !p.Deleted && !p.Disabled && !p.Ignore)
-            .Where(p => devices.TryGetValue(p.DeviceId, out var d) && scope.Includes(d) && !d.Disabled)
-            .ToList();
-        return (devices, ports);
+        var result = await new DashyNMS.Agent.Rankings.FleetRankings(fleet, directory, scopes, runner.Redactor)
+            .ReadDevicesAsync(new(byText, limit, group, location), cancellationToken).ConfigureAwait(false);
+        return ToolResult.Ok(result.Summary, result.Data);
     }
 
     private async Task<JsonObject> EventsAsync(
@@ -293,14 +216,6 @@ public sealed class NetworkTools(
     /// <param name="Kind">The event log's type, or what an alert log row means for its alert: active, acknowledged, worse, better, changed or recovered - or, for one fault of several on LibreNMS 26.10, fault_added or fault_cleared (#77).</param>
     /// <param name="Text">The event log's own message - device text, so it's data, not ours.</param>
     private sealed record NetworkEvent(DateTime Time, string Source, int DeviceId, string? Hostname, string? Display, string? Kind, string? Severity, string? Rule, string? Text, string? User);
-
-    private static RankBy ParseRank(string? text) => text?.Trim().ToLowerInvariant() switch
-    {
-        null or "" or "total" or "both" => RankBy.Total,
-        "in" or "rx" or "inbound" => RankBy.In,
-        "out" or "tx" or "outbound" => RankBy.Out,
-        _ => throw new ToolException("By must be total, in or out."),
-    };
 
     /// <summary>LibreNMS's event log severities, 1 (ok) to 5 (critical).</summary>
     private static int? ParseEventSeverity(string? text) => text?.Trim().ToLowerInvariant() switch
