@@ -16,6 +16,12 @@ public sealed record RaisedDeviceGroup(int DeviceId, string? Hostname, string? D
 public sealed record RaisedAlertsData(EventWindowInfo Window, IReadOnlyList<RaisedDeviceGroup> Devices, PageInfo Page);
 public sealed record RaisedAlertsResult(string Summary, RaisedAlertsData Data, bool RulesUnavailable, bool OpenStatusUnavailable);
 
+/// <summary>A filtered history cannot establish matches without rule severities.</summary>
+public sealed class AlertSeverityUnavailableException : Exception
+{
+    public AlertSeverityUnavailableException() : base("Alert rule severities couldn't be read, so filtered historical alerts are unavailable.") { }
+}
+
 /// <summary>Historical alert occurrences, including recovered ones, shared with MCP.</summary>
 public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directory, DeviceScope scopes,
     AgentOptions options, TimeProvider time, Redactor redactor)
@@ -55,6 +61,9 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
         {
             throw new ToolException(logError);
         }
+
+        if (severity is not null && rules.Result.Error is not null)
+            throw new AlertSeverityUnavailableException();
 
         var ruleById = rules.Result.Value?.ToDictionary(r => r.Id) ?? [];
         var openKeys = open.Result.Value?.Select(a => (a.DeviceId, a.RuleId)).ToHashSet();
@@ -96,10 +105,13 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
         var critical = raised.Count(r => r.Severity == AlertSeverity.Critical);
         var warning = raised.Count(r => r.Severity == AlertSeverity.Warning);
         var lead = EventWindowText.Describe(window, time.GetUtcNow().UtcDateTime);
+        var severitySummary = rules.Result.Error is null
+            ? $"{critical} critical, {warning} warning" : "severities unknown";
+        var openSummary = open.Result.Error is null ? $"{stillOpen} still open" : "open status unknown";
         var summary = raised.Count == 0
             ? $"{lead}: no alerts raised" + (severity is not null || deviceId is not null || !scope.IsEverything ? " that match." : ".")
             : $"{lead}: {DeviceHealth.Count(raised.Count, "alert")} raised{FaultNote(raised)} on {DeviceHealth.Count(raised.Select(r => r.DeviceId).Distinct().Count(), "device")} " +
-              $"({critical} critical, {warning} warning); {stillOpen} still open.";
+              $"({severitySummary}); {openSummary}.";
         summary += complete ? string.Empty : $" LibreNMS's alert log only reaches back to {covered:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.";
         summary += PagingNote(page);
 

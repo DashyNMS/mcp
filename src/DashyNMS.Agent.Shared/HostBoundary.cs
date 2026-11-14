@@ -58,6 +58,7 @@ internal static class HostBoundary
 
     internal static HostFailure Classify(Exception error) => error switch
     {
+        Alerts.AlertSeverityUnavailableException => HostFailure.Unavailable,
         Graphs.GraphListingException listing => listing.Failure,
         Graphs.GraphDeniedException => HostFailure.Refused,
         ToolException => HostFailure.InvalidRequest,
