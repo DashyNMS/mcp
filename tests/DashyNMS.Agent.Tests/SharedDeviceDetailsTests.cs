@@ -59,6 +59,22 @@ public sealed class SharedDeviceDetailsTests
     }
 
     [Fact]
+    public async Task Continuation_ignores_exhausted_sections_and_stops_at_the_last_page()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.On("devices/1/wireless-sensors", JsonSerializer.Serialize(new { status = "ok",
+            wireless_sensors = Enumerable.Range(1, 120).Select(i => new { sensor_id = i, device_id = 1, sensor_class = "signal", sensor_current = -60 }) }));
+        using var host = HostDeviceDetails.Create(nms.Client, nms.Transport, nms.Time);
+        var result = (await host.ReadAsync(new(1, ["inventory", "wireless"], Offset: 50, Limit: 50))).Result!;
+        Assert.Empty(result.Data.Inventory!);
+        Assert.Equal(50, result.Data.Wireless!.Count);
+        Assert.Contains("pass offset 100", result.Summary);
+        result = (await host.ReadAsync(new(1, ["inventory", "wireless"], Offset: 100, Limit: 50))).Result!;
+        Assert.Equal(20, result.Data.Wireless!.Count);
+        Assert.DoesNotContain("continue", result.Summary);
+    }
+
+    [Fact]
     public async Task Routing_only_reads_keep_interface_names_for_both_OSPF_versions()
     {
         var nms = new FakeLibreNms();
