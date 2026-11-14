@@ -741,3 +741,15 @@ the missing baseline while retaining usable LibreNMS and Graylog results.
 
 Config-diff XML context tracks comments and CDATA independently on both sides.
 A tag shown as comment or CDATA text cannot terminate secret-body redaction.
+
+Review corrections preserve source uncertainty in additional host and MCP paths:
+maintenance failures leave the flag unknown; endpoint traces retain ARP, VLAN
+and link failures, including multi-MAC projections; fleet-sensor refusal is a
+refusal rather than invalid input. Routing-only device details resolve interface
+names, and continuation instructions use unfinished sections' next offsets.
+
+Alert detail history locates the requested occurrence from its state-change
+time before counting earlier firings. If it cannot identify that occurrence,
+the earlier count is unknown. `what_changed` reads up to 20 pages of 10 backup
+versions to cover the window and a preceding version. A capped search without
+a comparable change remains unknown instead of reporting no change.
