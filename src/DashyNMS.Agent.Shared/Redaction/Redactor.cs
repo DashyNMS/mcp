@@ -233,11 +233,12 @@ public sealed partial class Redactor
                 context.RegionEnd = "?>";
                 index += 2;
             }
-            else
+            else if (IsTagStart(line, index))
             {
                 context.Tag = new System.Text.StringBuilder("<");
                 index++;
             }
+            else index++;
         }
         if (context.Tag is { } pending)
         {
@@ -251,6 +252,13 @@ public sealed partial class Redactor
             masked = true;
         }
         return masked ? Marker : line;
+    }
+
+    private static bool IsTagStart(string line, int index)
+    {
+        var name = index + 1;
+        if (name < line.Length && line[name] == '/') name++;
+        return name < line.Length && (char.IsLetter(line[name]) || line[name] is '_' or ':');
     }
 
     private const string SecretElementNames = "password|bcrypt-hash|sha512-hash|md5-hash|pwhash|pre-shared-key|apikey|prv|authkey|secret|rocommunity|trapstring|tls|shared_key|device_key|ldap_bindpw|radius_secret|radius_secret2|privatekey|presharedkey|auth_pass";

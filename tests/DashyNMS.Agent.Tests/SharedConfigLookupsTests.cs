@@ -156,6 +156,20 @@ public sealed class SharedConfigLookupsTests
         Assert.Equal($"- {Redactor.Marker}\n+ {Redactor.Marker}\n+ vlan 120", rendered.Text);
     }
 
+    [Theory]
+    [InlineData("read mode < /etc/device-mode")]
+    [InlineData("if (count < 10)")]
+    public void Plain_text_less_than_operators_do_not_hide_subsequent_changes(string common)
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = common }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", OriginalLines = [new() { Text = "hostname old-switch" }],
+                RevisedLines = [new() { Text = "hostname new-switch" }] },
+        ] };
+        Assert.Equal("- hostname old-switch\n+ hostname new-switch", ConfigDiff.Render(diff).Text);
+    }
+
     [Fact]
     public void Oversized_unfinished_XML_syntax_keeps_subsequent_text_hidden()
     {
