@@ -89,6 +89,9 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
             traced.Add(await TraceMacAsync(each, cancellationToken).ConfigureAwait(false));
         }
 
+        if (arpForMac?.Error is { } arpError)
+            traced[0] = traced[0] with { Unavailable = traced[0].Unavailable.Append(new Unavailable("arp", arpError)).ToList() };
+
         if (traced.Count == 1)
         {
             var only = traced[0];
@@ -108,6 +111,7 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
         return new(summary, new TraceEndpointData
         {
             Query = text, Ip = ip, Ambiguous = true,
+            Unavailable = traced.SelectMany(t => t.Unavailable).Distinct().ToList() is { Count: > 0 } failures ? failures : null,
             Traces = traced.Select(t => new TraceBranch(t.Mac, t.Found, t.Found ? t.Ambiguous : null, t.Reason, t.Edge,
                 t.OtherCandidates.Count > 0 ? t.OtherCandidates : null, t.Path.Count > 1 ? t.Path : null, t.SeenOn)).ToList(),
         }, Math.Max(0, macs.Count - MaxMacsPerIp), traced);
@@ -124,16 +128,16 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
         cancellationToken.ThrowIfCancellationRequested();
 
         var rows = fdbTask.Result;
+        var unavailable = new List<Unavailable>();
+        if (linksTask.Result.Error is { } linksError)
+            unavailable.Add(new Unavailable("links", linksError));
+        if (vlansTask.Result.Error is { } vlansError)
+            unavailable.Add(new Unavailable("vlans", vlansError));
         if (rows.Count == 0)
         {
             return MacTrace.NotFound(mac,
-                "No switch's forwarding table has this MAC. It may be offline, behind a switch LibreNMS doesn't poll the FDB of, or not yet polled.");
-        }
-
-        var unavailable = new List<Unavailable>();
-        if (linksTask.Result.Error is { } linksError)
-        {
-            unavailable.Add(new Unavailable("links", linksError));
+                "No switch's forwarding table has this MAC. It may be offline, behind a switch LibreNMS doesn't poll the FDB of, or not yet polled.")
+                with { Unavailable = unavailable };
         }
 
         var devices = devicesTask.Result.ToDictionary(d => d.DeviceId);
