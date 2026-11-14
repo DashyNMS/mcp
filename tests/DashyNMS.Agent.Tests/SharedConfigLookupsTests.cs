@@ -116,6 +116,27 @@ public sealed class SharedConfigLookupsTests
         if (cap >= 3) Assert.Contains("+ vlan 120", rendered.Text);
     }
 
+    [Theory]
+    [InlineData("<!-- example: </secret> -->")]
+    [InlineData("<!-- example: </secret>\nstill a comment -->")]
+    [InlineData("<![CDATA[example: </secret>]]>")]
+    [InlineData("<![CDATA[example: </secret>\nstill data ]]>")]
+    public void Comment_and_CDATA_closing_tags_cannot_expose_changed_secret_bodies(string context)
+    {
+        var common = new[] { "<secret>" }.Concat(context.Split('\n'));
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = common.Select(t => new UnimusDiffLine { Text = t }).ToList() },
+            new UnimusDiffLineGroup { Type = "CHANGED",
+                OriginalLines = [new() { Text = "SyntheticOldBody" }], RevisedLines = [new() { Text = "SyntheticNewBody" }] },
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "</secret>" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "vlan 120" }] },
+        ] };
+        var rendered = ConfigDiff.Render(diff);
+        Assert.DoesNotContain("Synthetic", rendered.Text);
+        Assert.Equal($"- {Redactor.Marker}\n+ {Redactor.Marker}\n+ vlan 120", rendered.Text);
+    }
+
     [Fact]
     public void Xml_secret_context_is_independent_on_each_side()
     {
