@@ -499,3 +499,14 @@ Group and location records keep exact `FilterName` values as host metadata,
 excluded from serialised model data. Display names are redacted. The reviewed
 reads are the device list and device groups. Hosts retire the operation on
 connection changes, apply presentation budgets and count omitted rows.
+
+### Maintenance in device search
+
+Search checks maintenance sequentially for the returned page only, at most
+`DeviceSearch.MaxMatches` requests. `UnderMaintenance` is true or false when
+read successfully and null when the read fails. Active maintenance takes
+precedence in the typed state and MCP's status word, including brief rows.
+Filtering and ranking still use the original reported status before paging.
+Caller cancellation propagates; an individual failed maintenance check leaves
+that row's reported state intact. The shared search fixtures record the extra
+requests and distinguish failed checks from known inactive maintenance.

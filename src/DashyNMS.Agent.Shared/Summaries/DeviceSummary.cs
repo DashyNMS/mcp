@@ -28,6 +28,10 @@ public sealed record DeviceSummary(
     [JsonIgnore]
     public DeviceState State { get; init; } = DeviceState.Unknown;
 
+    /// <summary>Null means the maintenance check failed or was not requested, never false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UnderMaintenance { get; init; }
+
     public static DeviceSummary From(Device device, AgentOptions options)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -126,11 +130,14 @@ public sealed record DeviceSummary(
 /// </summary>
 public sealed record DeviceBrief(int DeviceId, string? Hostname, string? Display, string? Ip, string? Location, string Status)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UnderMaintenance { get; init; }
+
     /// <summary>Projects an already redacted search row into the MCP short record.</summary>
     public static DeviceBrief FromSummary(DeviceSummary device)
         => new(device.DeviceId, device.Hostname, device.Display,
             string.Equals(device.Ip, device.Hostname, StringComparison.OrdinalIgnoreCase) ? null : device.Ip,
-            device.Location, device.Status);
+            device.Location, device.Status) { UnderMaintenance = device.UnderMaintenance };
 
     public static DeviceBrief From(Device device)
     {
