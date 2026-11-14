@@ -2,6 +2,7 @@ using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Configuration;
 using DesktopNMS.Core.Models;
 using DesktopNMS.Core.Sensors;
 
@@ -65,6 +66,7 @@ public sealed class DeviceSensors
     private readonly DeviceDirectory directory;
     private readonly AgentOptions options;
     private readonly Redactor redactor;
+    private readonly AppSettings sensorSettings;
 
     /// <summary>Reuses MCP's connection-bound caches; other hosts use <see cref="Create"/>.</summary>
     internal DeviceSensors(SensorSource source, DeviceDirectory directory, AgentOptions options, Redactor redactor)
@@ -72,6 +74,7 @@ public sealed class DeviceSensors
         this.source = source;
         this.directory = directory;
         this.options = options;
+        sensorSettings = options.SensorSettings();
         this.redactor = redactor;
     }
 
@@ -109,11 +112,10 @@ public sealed class DeviceSensors
         var (sensors, deviceByDevice) = await source.ReadForDeviceAsync(device.DeviceId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var settings = options.SensorSettings();
         var readings = Order(sensors
                 .Where(s => s.DeviceId == device.DeviceId)
                 .Where(s => type is null || s.HasClass(type))
-                .Select(sensor => SensorReading.From(sensor, settings)))
+                .Select(sensor => SensorReading.From(sensor, sensorSettings)))
             // The class is filtered and judged before redaction; only what a host is given is redacted.
             .Select(r => r with { Type = redactor.Redact(r.Type), Description = Clean(r.Description), StateLabel = Clean(r.StateLabel) })
             .ToList();
