@@ -25,6 +25,18 @@ public sealed class GraphDeniedException : Exception
     public GraphDeniedException() : base("LibreNMS: this account isn't allowed to see this graph. LibreNMS 26.10 checks graph permissions per device and port.") { }
 }
 
+/// <summary>A fixed source failure when graph listings cannot establish an answer.</summary>
+public sealed class GraphListingException : Exception
+{
+    public GraphListingException(HostFailure failure) : base(failure switch
+    {
+        HostFailure.Refused => "LibreNMS: this account isn't allowed to list this device's graphs.",
+        HostFailure.Timeout => "LibreNMS timed out while listing this device's graphs.",
+        _ => "LibreNMS couldn't read this device's graph listings. Try again when the source is available.",
+    }) => Failure = failure;
+    public HostFailure Failure { get; }
+}
+
 /// <summary>Typed device, port and sensor graphs over the host's own client and transport.</summary>
 public sealed class GraphLookup(ILibreNmsClient client, ILibreNmsTransport transport, SensorSource sensors,
     DeviceDirectory directory, TimeProvider time, Redactor redactor)
@@ -136,17 +148,19 @@ public sealed class GraphLookup(ILibreNmsClient client, ILibreNmsTransport trans
         var available = listing.Types;
         var listed = available.Take(MaxTypesListed).Select(g => new GraphTypeInfo(redactor.Redact(g.Name), Clean(g.Description))).ToList();
         var omitted = Math.Max(0, available.Count - MaxTypesListed);
-        GraphType? chosen;
-        if (string.IsNullOrWhiteSpace(typeText))
+        var explicitType = !string.IsNullOrWhiteSpace(typeText);
+        var chosen = explicitType ? Find(available, typeText!.Trim()) : available.FirstOrDefault(g => g.Name == DefaultDeviceGraph);
+        if (chosen is null)
         {
-            chosen = available.FirstOrDefault(g => g.Name == DefaultDeviceGraph);
-            if (chosen is null)
-                return new(available.Count == 0 ? "LibreNMS has no graphs for this device." : $"This device has no traffic graph; it has {DeviceHealth.Count(available.Count, "graph type")}. Ask again with one of them as type.",
+            if (listing.Unavailable.Count > 0)
+                return new("LibreNMS couldn't read every graph listing, so whether the requested graph exists is unknown. The available types are incomplete.",
                     new GraphLookupData(brief, AvailableTypes: listed), null, omitted, listing.Unavailable);
+            if (explicitType)
+                throw new ToolException("This device has no graph of that type. Use one of the types listed under details.",
+                    new { available_types = listed, omitted = omitted > 0 ? omitted : (int?)null });
+            return new(available.Count == 0 ? "LibreNMS has no graphs for this device." : $"This device has no traffic graph; it has {DeviceHealth.Count(available.Count, "graph type")}. Ask again with one of them as type.",
+                new GraphLookupData(brief, AvailableTypes: listed), null, omitted, []);
         }
-        else
-            chosen = Find(available, typeText.Trim()) ?? throw new ToolException("This device has no graph of that type. Use one of the types listed under details.",
-                new { available_types = listed, omitted = omitted > 0 ? omitted : (int?)null });
         var image = await FetchAsync($"devices/{id}/{Uri.EscapeDataString(chosen.Name)}?{query}", cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var name = string.IsNullOrWhiteSpace(chosen.Description) ? chosen.Name : chosen.Description;
@@ -165,19 +179,20 @@ public sealed class GraphLookup(ILibreNmsClient client, ILibreNmsTransport trans
     private async Task<GraphTypeListing> ListTypesAsync(int id, CancellationToken cancellationToken)
     {
         var lists = await Task.WhenAll(
-            Sources.TryAsync(() => client.Graphs.ListAsync(id, cancellationToken), cancellationToken),
-            Sources.TryAsync(() => client.Graphs.ListHealthAsync(id, cancellationToken), cancellationToken),
-            Sources.TryAsync(() => client.Graphs.ListWirelessAsync(id, cancellationToken), cancellationToken)).ConfigureAwait(false);
-
-        if (lists.All(l => !l.Ok))
-        {
-            throw new ToolException($"LibreNMS wouldn't list this device's graphs: {lists[0].Error}");
-        }
-
+            HostBoundary.RunAsync(ct => client.Graphs.ListAsync(id, ct), cancellationToken, CancellationToken.None),
+            HostBoundary.RunAsync(ct => client.Graphs.ListHealthAsync(id, ct), cancellationToken, CancellationToken.None),
+            HostBoundary.RunAsync(ct => client.Graphs.ListWirelessAsync(id, ct), cancellationToken, CancellationToken.None)).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return new(lists.SelectMany(l => l.Value ?? []).Where(g => !string.IsNullOrWhiteSpace(g.Name))
+        if (lists.All(l => l.Failure is not null))
+        {
+            var failure = lists.All(l => l.Failure == HostFailure.Refused) ? HostFailure.Refused
+                : lists.All(l => l.Failure == HostFailure.Timeout) ? HostFailure.Timeout
+                : lists.All(l => l.Failure == HostFailure.Failed) ? HostFailure.Failed : HostFailure.Unavailable;
+            throw new GraphListingException(failure);
+        }
+        return new(lists.SelectMany(l => l.Result ?? []).Where(g => !string.IsNullOrWhiteSpace(g.Name))
             .DistinctBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList(),
-            lists.Select((list, index) => (list, index)).Where(x => !x.list.Ok)
+            lists.Select((list, index) => (list, index)).Where(x => x.list.Failure is not null)
                 .Select(x => x.index switch { 0 => "device graphs", 1 => "health graphs", _ => "wireless graphs" }).ToList());
     }
 

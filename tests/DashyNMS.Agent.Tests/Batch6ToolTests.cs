@@ -93,6 +93,7 @@ public sealed class Batch6ToolTests
         var nms = WithGraphs();
         nms.Transport.On("devices/1/graphs", """{"status":"ok","graphs":[{"desc":"Ping Response","name":"device_icmp_perf"}]}""");
 
+        nms.Transport.On("devices/1/wireless", """{"status":"ok","graphs":[]}""");
         var result = await Graphs(nms).Graph("core-sw1");
 
         Assert.StartsWith("This device has no traffic graph", Text(result).GetProperty("summary").GetString(), StringComparison.Ordinal);

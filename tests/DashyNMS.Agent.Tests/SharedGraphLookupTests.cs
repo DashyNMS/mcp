@@ -69,6 +69,47 @@ public sealed class SharedGraphLookupTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation.ReadAsync(new(1)));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task A_failed_listing_keeps_negative_results_unknown(bool otherTypes, bool explicitType)
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.Fails("devices/1/graphs", System.Net.HttpStatusCode.Forbidden)
+            .On("devices/1/health", otherTypes ? """{"graphs":[{"name":"device_temperature","desc":"Temperature"}]}""" : """{"graphs":[]}""")
+            .On("devices/1/wireless", """{"graphs":[]}""");
+        using var host = HostGraphLookup.Create(nms.Client, nms.Transport, nms.Time);
+        var outcome = await host.ReadAsync(new(1, Type: explicitType ? "traffic" : null));
+        Assert.Null(outcome.Error);
+        var result = outcome.Result!;
+        Assert.Null(result.Image);
+        Assert.Equal(new[] { "device graphs" }, result.Unavailable);
+        Assert.Equal(otherTypes ? 1 : 0, result.Data.AvailableTypes!.Count);
+        Assert.Contains("unknown", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("has no", result.Summary, StringComparison.Ordinal);
+        var mcp = await new GraphTools(nms.Client, nms.Transport, nms.Sensors, nms.Resolver, nms.Runner, nms.Time)
+            .Graph("1", type: explicitType ? "traffic" : null);
+        Assert.Single(mcp.Content);
+        Assert.Contains("unknown", Assert.IsType<TextContentBlock>(mcp.Content[0]).Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(403, HostFailure.Refused)]
+    [InlineData(404, HostFailure.Unavailable)]
+    [InlineData(500, HostFailure.Unavailable)]
+    public async Task All_failed_listings_are_source_failures_not_invalid_requests(int status, HostFailure expected)
+    {
+        var nms = new FakeLibreNms();
+        foreach (var path in new[] { "devices/1/graphs", "devices/1/health", "devices/1/wireless" })
+            nms.Transport.Fails(path, (System.Net.HttpStatusCode)status);
+        using var host = HostGraphLookup.Create(nms.Client, nms.Transport, nms.Time);
+        var result = await host.ReadAsync(new(1));
+        Assert.Null(result.Result);
+        Assert.Equal(expected, result.Error);
+    }
+
     [Fact]
     public async Task Denied_image_returns_refusal_and_no_image()
     {
