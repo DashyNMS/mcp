@@ -15,6 +15,14 @@ public sealed record HealthOverviewData(IReadOnlyList<HealthTypeTotals> Types, I
 public sealed record HealthOverviewResult(string Summary, HealthOverviewData Data, SensorTotals Totals, int DeniedDevices);
 
 /// <summary>Network sensor assessment, bounded fallback, filtering and paging shared with MCP.</summary>
+public sealed class FleetSensorsRefusedException : Exception
+{
+    public FleetSensorsRefusedException(int devices) : base(
+        "LibreNMS only gives the network-wide sensor list to users with global read access, which this token's user doesn't have. " +
+        $"Narrow it with group or location to {SensorSource.MaxDevicesOneByOne} devices or fewer (this covers {devices}), " +
+        "or use device_sensors for one device.") { }
+}
+
 public sealed class HealthOverview
 {
     public const int MaxReadings = 100;
@@ -72,10 +80,7 @@ public sealed class HealthOverview
         {
             if (scope.IsEverything || inScope.Count > SensorSource.MaxDevicesOneByOne)
             {
-                throw new ToolException(
-                    $"LibreNMS only gives the network-wide sensor list to users with global read access, which this token's user doesn't have. " +
-                    $"Narrow it with group or location to {SensorSource.MaxDevicesOneByOne} devices or fewer (this covers {inScope.Count}), " +
-                    "or use device_sensors for one device.");
+                throw new FleetSensorsRefusedException(inScope.Count);
             }
 
             var read = await sensorSource.GetForDevicesAsync(inScope, cancellationToken).ConfigureAwait(false);
