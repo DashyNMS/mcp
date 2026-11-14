@@ -93,10 +93,13 @@ public sealed class DeviceHealth
         }
 
         // A failed read still answers from the device list the device was resolved from.
-        var device = Use(fresh.Result, "device") ?? listed;
+        var freshDevice = Use(fresh.Result, "device");
+        if (fresh.Result.Error is null && (freshDevice is null || freshDevice.DeviceId != id))
+            unavailable.Add(new Unavailable("device", "The requested device was not returned."));
+        var device = freshDevice?.DeviceId == id ? freshDevice : listed;
         var shaped = summaries.Shape(device);
         // One per rule firing on the device, as active_alerts reports them (#77).
-        var deviceGroups = AlertGrouping.ByDeviceAndRule((Use(alerts.Result, "alerts") ?? []).Where(a => a.DeviceId == id));
+        var deviceGroups = AlertGrouping.ByDeviceAndRule((Use(alerts.Result, "alerts") ?? []).Where(a => a.DeviceId == id && a.State != AlertState.Recovered));
         var openAlerts = deviceGroups.Select(g => CleanAlert(AlertGroupSummary.From(g, options))).ToList();
         var alertTotals = OpenAlertTotals.From(deviceGroups);
 

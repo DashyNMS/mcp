@@ -8,6 +8,41 @@ namespace DashyNMS.Agent.Tests;
 
 public sealed class SharedDeviceHealthTests
 {
+    [Theory]
+    [InlineData("{\"status\":\"ok\",\"devices\":[]}")]
+    [InlineData("{\"status\":\"ok\",\"devices\":[{\"device_id\":99,\"hostname\":\"other.example.net\",\"os\":\"wrong\"}]}")]
+    public async Task Missing_or_mismatched_fresh_device_uses_only_the_listed_device(string response)
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.On("devices/1", response);
+        using var health = HostDeviceHealth.Create(nms.Client, nms.Time, nms.Options);
+        var data = (await health.ReadAsync(new(1))).Result!.Data;
+        Assert.Equal(1, data.Device.DeviceId);
+        Assert.NotEqual("wrong", data.Device.Os);
+        Assert.Contains(data.Unavailable!, u => u.Source == "device");
+    }
+
+    [Fact]
+    public async Task Recovered_alerts_never_form_open_groups_or_inflate_live_groups()
+    {
+        var nms = new FakeLibreNms();
+        var alerts = Substitute.For<IAlertsApi>();
+        nms.Client.Alerts.Returns(alerts);
+        alerts.ListAsync(DesktopNMS.Core.Api.AlertQuery.Open, Arg.Any<CancellationToken>()).Returns(
+            new DesktopNMS.Core.Models.Alert[]
+            {
+                new() { Id = 12, DeviceId = 1, RuleId = 3, StateValue = 1 },
+                new() { Id = 13, DeviceId = 1, RuleId = 3, StateValue = 0 },
+                new() { Id = 14, DeviceId = 1, RuleId = 4, StateValue = 0 },
+            });
+        using var health = HostDeviceHealth.Create(nms.Client, nms.Time, nms.Options);
+        var result = (await health.ReadAsync(new(1))).Result!;
+        var group = Assert.Single(result.AlertGroups);
+        Assert.Equal(3, group.RuleId);
+        Assert.Equal(1, group.FaultCount);
+        Assert.Equal(12, Assert.Single(result.Data.OpenAlerts).AlertId);
+    }
+
     [Fact]
     public async Task Complete_health_matches_MCP_over_loopback_HTTP_with_failed_optional_sources()
     {
