@@ -199,6 +199,46 @@ public sealed class SharedEventLookupsTests
         await unimus.DidNotReceive().GetDiffAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Config_history_reads_later_pages_and_keeps_capped_searches_unknown(bool capped)
+    {
+        var nms = new FakeLibreNms();
+        var unimus = Substitute.For<IUnimusApi>();
+        unimus.IsConfigured.Returns(true);
+        unimus.ListAllDevicesAsync(Arg.Any<CancellationToken>()).Returns(new[] { new UnimusDevice { Id = 40, Address = "10.0.0.1" } });
+        unimus.GetBackupsAsync(40, Arg.Any<int>(), WhatChanged.BackupPageSize, Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var page = call.ArgAt<int>(1);
+            return new UnimusBackupPage { Page = page, TotalPages = capped ? 100 : 2,
+                Backups = page == 0 || capped
+                    ? Enumerable.Range(0, 10).Select(i => new UnimusBackup { Id = 1000 + page * 10 + i,
+                        ValidSince = FakeLibreNms.Now.AddMinutes(-page * 10 - i).ToUnixTimeSeconds() }).ToList()
+                    : [new UnimusBackup { Id = 901, ValidSince = FakeLibreNms.Now.AddHours(-30).ToUnixTimeSeconds() },
+                       new UnimusBackup { Id = 900, ValidSince = FakeLibreNms.Now.AddHours(-60).ToUnixTimeSeconds() }] };
+        });
+        unimus.GetDiffAsync(900, 901, Arg.Any<CancellationToken>()).Returns(new UnimusBackupDiff
+        { LineGroups = [new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "vlan 120" }] }] });
+        using var host = HostEventLookups.Create(nms.Client, unimus, Substitute.For<IGraylogApi>(), nms.Time, nms.Options);
+        var result = (await host.ReadChangesAsync(new(1, Since: FakeLibreNms.Now.AddHours(-48).ToString("O"),
+            Until: FakeLibreNms.Now.AddHours(-24).ToString("O")))).Result!;
+        if (capped)
+        {
+            Assert.Null(result.Data.Unimus.ConfigChanged);
+            Assert.Contains("bounded backup search", result.Data.Unimus.Warning!);
+            await unimus.Received(WhatChanged.MaxBackupPages).GetBackupsAsync(40, Arg.Any<int>(), 10, Arg.Any<CancellationToken>());
+            await unimus.DidNotReceive().GetDiffAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.True(result.Data.Unimus.ConfigChanged);
+            Assert.Equal(1, result.Data.Unimus.ChangedLines);
+            await unimus.Received(1).GetBackupsAsync(40, 1, 10, Arg.Any<CancellationToken>());
+            await unimus.Received(1).GetDiffAsync(900, 901, Arg.Any<CancellationToken>());
+        }
+    }
+
     [Fact]
     public async Task A_busy_log_reports_an_incomplete_window_and_host_retirement_refuses_cached_reads()
     {

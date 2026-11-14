@@ -49,6 +49,8 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
     public const int MaxChangeEvents = 30;
     public const int MaxDiffLines = 200;
     public const int MaxLogSamples = 10;
+    public const int BackupPageSize = 10;
+    public const int MaxBackupPages = 20;
     private static readonly TimeSpan GraylogNowSlack = EventWindowText.NowSlack;
 
     public static WhatChanged Create(ILibreNmsClient client, IUnimusApi unimus, IGraylogApi graylog, TimeProvider time, AgentOptions options)
@@ -113,17 +115,31 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
             return (new ConfigChangeData { Configured = true, DeviceFound = false }, "Unimus doesn't know this device.");
         }
 
-        var fetched = await Sources.TryAsync<(List<UnimusBackup> Backups, int Changed, UnimusBackupDiff? Diff)>(async () =>
+        var fetched = await Sources.TryAsync<(List<UnimusBackup> Backups, int Changed, UnimusBackupDiff? Diff, bool Complete)>(async () =>
         {
-            var page = await unimus.GetBackupsAsync(match.Id, 0, 10, cancellationToken).ConfigureAwait(false);
-            var backups = page.Backups.OrderByDescending(b => b.ValidSince ?? 0).ToList();
+            var backups = new List<UnimusBackup>();
+            var ids = new HashSet<int>();
+            var searchComplete = false;
+            for (var pageIndex = 0; pageIndex < MaxBackupPages; pageIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var page = await unimus.GetBackupsAsync(match.Id, pageIndex, BackupPageSize, cancellationToken).ConfigureAwait(false);
+                var added = page.Backups.Where(b => ids.Add(b.Id)).ToList();
+                backups.AddRange(added);
+                // Read one version before the window too, so a version at its start has a baseline.
+                searchComplete = backups.Any(b => b.ValidSinceUtc is { } began && began < window.Since)
+                    || page.Backups.Count < BackupPageSize
+                    || (page.TotalPages > 0 && pageIndex + 1 >= page.TotalPages);
+                if (searchComplete || added.Count == 0) break;
+            }
+            backups = backups.OrderByDescending(b => b.ValidSince ?? 0).ToList();
             var changed = backups.FindIndex(b => b.ValidSinceUtc is { } began && window.Contains(began));
             if (changed < 0 || changed + 1 >= backups.Count)
             {
-                return (backups, changed, null);
+                return (backups, changed, null, searchComplete);
             }
 
-            return (backups, changed, await unimus.GetDiffAsync(backups[changed + 1].Id, backups[changed].Id, cancellationToken).ConfigureAwait(false));
+            return (backups, changed, await unimus.GetDiffAsync(backups[changed + 1].Id, backups[changed].Id, cancellationToken).ConfigureAwait(false), searchComplete);
         }, cancellationToken).ConfigureAwait(false);
 
         if (fetched.Error is { } error)
@@ -131,11 +147,13 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
             return (new ConfigChangeData { Configured = true, DeviceFound = true, Error = error }, "Unimus backups couldn't be read.");
         }
 
-        var (list, index, diff) = fetched.Value;
+        var (list, index, diff, complete) = fetched.Value;
         var latest = list.FirstOrDefault();
-        if (diff is null && (index >= 0 || latest is null))
+        if (diff is null && (!complete || index >= 0 || latest is null))
         {
-            var reason = index >= 0
+            var reason = !complete
+                ? "The bounded backup search didn't cover this window and its preceding version."
+                : index >= 0
                 ? "A config version starts in this window, but no earlier backup is available to compare."
                 : "No config backups are available to compare.";
             return (new ConfigChangeData
