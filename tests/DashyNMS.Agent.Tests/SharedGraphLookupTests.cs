@@ -58,6 +58,9 @@ public sealed class SharedGraphLookupTests
         var result = (await operation.ReadAsync(new(1, Type: type, Port: port, Sensor: sensor))).Result!;
         var expected = await ActivatorUtilities.CreateInstance<GraphTools>(mcp).Graph("1", type: type, port: port, sensor: sensor);
         var text = FakeLibreNms.Parse(Assert.IsType<TextContentBlock>(expected.Content[0]).Text);
+        using var baselines = JsonDocument.Parse(File.ReadAllText(Path.Combine(Path.GetDirectoryName(FilePath)!, "expected-mcp.json")));
+        var baseline = sensor is not null ? "sensor" : port is not null ? "port" : type is null ? "device" : "cpu";
+        Assert.True(JsonElement.DeepEquals(baselines.RootElement.GetProperty(baseline), text), baseline);
         Assert.Equal(text.GetProperty("summary").GetString(), result.Summary);
         Assert.True(JsonElement.DeepEquals(text.GetProperty("data"), JsonSerializer.SerializeToElement(result.Data, ToolResult.Json)));
         Assert.Equal(1, result.Data.Device.DeviceId);
