@@ -212,17 +212,8 @@ public sealed class LogTools(
     /// (<see cref="AgentOptions.GraylogMatchAnyAddress"/>). If those can't be
     /// read, its own names and address still make a search.
     /// </summary>
-    internal static async Task<IReadOnlyList<string>> AddressesAsync(ILibreNmsClient client, Device device, AgentOptions options, CancellationToken cancellationToken)
-    {
-        IReadOnlyList<DeviceIpAddress>? interfaceAddresses = null;
-        if (options.GraylogMatchAnyAddress)
-        {
-            var fetched = await Sources.TryAsync(() => client.Ports.ListIpAddressesAsync(device.DeviceId, cancellationToken), cancellationToken).ConfigureAwait(false);
-            interfaceAddresses = fetched.Value;
-        }
-
-        return GraylogQuery.DeviceAddresses(device, resolvedHostname: null, interfaceAddresses);
-    }
+    internal static Task<IReadOnlyList<string>> AddressesAsync(ILibreNmsClient client, Device device, AgentOptions options, CancellationToken cancellationToken)
+        => DashyNMS.Agent.Graylog.GraylogDeviceAddresses.ReadAsync(client, device, options, cancellationToken);
 
     private async Task<GraylogStream> ResolveStreamAsync(string text, CancellationToken cancellationToken)
     {
