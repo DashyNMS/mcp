@@ -22,6 +22,7 @@ public static class ToolErrors
 
     public static ToolError? Describe(Exception ex) => ex switch
     {
+        Graphs.GraphDeniedException denied => new ToolError(denied.Message),
         ToolException expected => new ToolError(expected.Message),
         LibreNmsApiException libreNms => LibreNms(libreNms),
         UnimusApiException unimus => Other("Unimus", unimus.StatusCode, unimus.IsAuthenticationFailure, unimus.ToUserMessage()),
