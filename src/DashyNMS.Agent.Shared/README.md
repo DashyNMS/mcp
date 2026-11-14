@@ -1,7 +1,7 @@
 # DashyNMS.Agent.Shared
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
-by the DashyNMS MCP server and the DashyNMS apps. It holds device search, open alerts, network overview, device summaries and device sensors; other
+by the DashyNMS MCP server and the DashyNMS apps. It holds device search and resolution, open alerts, network overview, device summaries, device sensors and the tool catalogue; other
 shared operations join it rather than shipping as separate packages. It replaces
 `DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
@@ -31,6 +31,17 @@ builds its device and uptime from the same read and shaping.
 its client, both bound to the captured connection, for the per-device health routes used when
 the account may not read the network-wide sensor list. A missing reading stays null, and each
 reading says what its state was judged against, so an unassessed one is never shown as healthy.
+
+`DashyNMS.Agent.Devices.HostDeviceResolver` resolves the device a model names (an ID,
+hostname, display name, sysName or IP address) in MCP's tiers, under the same rules. The result is
+`Found` with the redacted device, `Ambiguous` with up to five redacted candidates and the rest
+counted, or `NoMatch`. A device list that can't be read is a `HostFailure`, never no match.
+
+`DashyNMS.Agent.Catalogue.ToolCatalogue` lists every MCP tool with its name, title, description
+and parameters (type, required, default, documented values or range, description), and the other
+tools each description names. MCP's own attributes read the same text, so a host describing a tool
+from the catalogue tells its model exactly what MCP tells a client. Leave out what a host doesn't
+support; don't reword it.
 
 Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
 (`up`, `down` or `disabled`, also the status filter), read from Core's compatibility

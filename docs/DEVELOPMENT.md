@@ -194,6 +194,43 @@ cache. `Fixtures/DeviceSummary` holds the shared synthetic fixture, and
 `SharedDeviceSummaryHttpFixtureTests` serves it over loopback HTTP to both adapters. Mobile's
 Intelligence `device_summary` is a reviewed narrower profile of `device_health` built on it.
 
+### Device resolution for host-owned clients
+
+`DeviceResolver` (namespace `DashyNMS.Agent.Devices`) is in the shared package. It turns the
+`device` a model gives (ID, hostname, display name, sysName or IP address) into one device, in the
+same tiers for every tool: ID, then an exact name or address, then the short hostname, then part of
+a name, stopping at the first tier that finds anything. Several matches in a tier is ambiguous,
+never a guess. MCP's tools call `ResolveAsync`, whose `ToolException` sentences and candidate list
+are unchanged. `FindAsync` returns the same tiers as a `DeviceResolution`: `Found` with the redacted
+`DeviceSummary`, `Ambiguous` with up to five redacted `DeviceCandidate`s and the rest counted, or
+`NoMatch`.
+
+`HostDeviceResolver` is the safe boundary, through `HostBoundary` like the others. An empty phrase
+is `InvalidRequest`, and a device list that can't be read fails the call with its category; it's
+never reported as no match. Each instance caches the device list for a minute, so one per captured
+connection, disposed on a switch. `Fixtures/DeviceResolution` holds the shared synthetic fixture,
+and `SharedDeviceResolutionHttpFixtureTests` serves it over loopback HTTP to both.
+
+### Tool catalogue for hosts
+
+`ToolText` and `ToolCatalogue` (namespace `DashyNMS.Agent.Catalogue`) hold every tool's name,
+title, description and parameters. `ToolText` is constants because attributes take nothing else;
+each tool's `[McpServerTool]` and `[Description]` attributes read them, so there is one copy of each
+description. `ToolCatalogue` gives hosts the same as records: each parameter's type (string,
+integer, boolean or string list), whether it's required, its default, its documented values or
+range, and its description, plus the other tools each description names (`NamedTools`).
+
+A host that describes tools to a model without MCP reads the catalogue and never rewords it. It
+may leave out a tool or parameter it doesn't support yet. Text written for one host, such as a
+shorter description for a phone, doesn't go in the catalogue.
+
+`Fixtures/tools-list.json` in `DashyNMS.Mcp.Tests` records each tool's raw `tools/list` JSON, and
+the stdio smoke test holds the running server to it byte for byte. The tools are sorted by name
+because the SDK lists them in no fixed order. The same test, and `ToolCatalogueTests` against the
+recording, hold the listed names, descriptions and schemas equal to the catalogue. When a tool's
+text changes on purpose, change `ToolText`, then replace the recording with the list the failing
+test prints (base64) and review the diff.
+
 ### Verification and publication follow-up
 
 No builds/tests were run locally for this step, as requested. CI must run the whole
