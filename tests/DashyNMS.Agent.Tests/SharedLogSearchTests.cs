@@ -94,6 +94,24 @@ public sealed class SharedLogSearchTests
         Assert.True(text.Length <= LogSearch.MaxLineLength + 1);
     }
 
+    [Fact]
+    public async Task Interface_address_failure_stops_host_and_MCP_searches()
+    {
+        var graylog = Substitute.For<IGraylogApi>();
+        graylog.IsConfigured.Returns(true);
+        var nms = new FakeLibreNms(new AgentOptions { GraylogMatchAnyAddress = true });
+        nms.Transport.Fails("devices/1/ip", HttpStatusCode.Forbidden);
+        using var host = HostLogSearch.Create(nms.Client, graylog, nms.Time, nms.Options);
+        var outcome = await host.ReadAsync(new(DeviceId: 1));
+        Assert.Null(outcome.Result);
+        Assert.Equal(HostFailure.Refused, outcome.Error);
+        var mcp = FakeLibreNms.Parse(await new LogTools(nms.Client, graylog, nms.Resolver, nms.Runner, nms.Options, nms.Time)
+            .SearchLogs(device: "1"));
+        Assert.Equal("error", mcp.GetProperty("status").GetString());
+        await graylog.DidNotReceive().SearchAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(403, HostFailure.Refused)]
     [InlineData(404, HostFailure.NotFound)]

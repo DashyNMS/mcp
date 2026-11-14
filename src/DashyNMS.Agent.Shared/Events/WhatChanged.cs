@@ -186,8 +186,12 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
 
         // A switch often logs from a VLAN interface rather than the address
         // LibreNMS polls it on, hence "match any address" (see LogTools).
-        var addresses = await GraylogDeviceAddresses.ReadAsync(client, device, options, cancellationToken).ConfigureAwait(false);
-        var query = GraylogQuery.BuildSimpleQuery(search: null, options.GraylogQueryField, addresses);
+        var addresses = await Sources.TryAsync(
+            () => GraylogDeviceAddresses.ReadAsync(client, device, options, cancellationToken), cancellationToken).ConfigureAwait(false);
+        if (addresses.Error is not null)
+            return (new GraylogChangeData { Configured = true, Error = "The device's interface addresses couldn't be read, so Graylog wasn't searched." },
+                "Graylog couldn't be searched with the requested address coverage.");
+        var query = GraylogQuery.BuildSimpleQuery(search: null, options.GraylogQueryField, addresses.Value);
         var rangeSeconds = (int)Math.Ceiling((now - window.Since).TotalSeconds);
 
         var search = await Sources.TryAsync(

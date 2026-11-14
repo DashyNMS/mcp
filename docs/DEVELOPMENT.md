@@ -712,3 +712,7 @@ their tags are unchanged or outside the displayed diff.
 
 MCP image responses retain failed graph-listing names and explicitly describe
 the available types as incomplete when an image was still found.
+
+With `GRAYLOG_MATCH_ANY_ADDRESS=true`, a failed interface-address read fails
+`search_logs` instead of searching fewer addresses. `what_changed` keeps its
+other sources and reports the Graylog section unavailable without a count.
