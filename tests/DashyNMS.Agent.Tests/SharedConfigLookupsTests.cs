@@ -4,6 +4,7 @@ using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Tools;
 using DashyNMS.Agent.Unimus;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DashyNMS.Agent.Tests;
@@ -90,6 +91,44 @@ public sealed class SharedConfigLookupsTests
         Assert.DoesNotContain("synthetic-key-material", rendered);
         operation.Dispose();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation.ReadChangesAsync(new()));
+    }
+
+    [Theory]
+    [InlineData("secret", 1)]
+    [InlineData("privatekey", 2)]
+    [InlineData("rocommunity", 200)]
+    public void Xml_secret_bodies_stay_hidden_without_tags_and_across_the_cap(string tag, int cap)
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = $"<{tag}>" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED",
+                OriginalLines = [new() { Text = "SyntheticOldBody" }],
+                RevisedLines = [new() { Text = "SyntheticNewBody" }] },
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = $"</{tag}>" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "vlan 120" }] },
+        ] };
+        var rendered = ConfigDiff.Render(diff, cap);
+        Assert.DoesNotContain("Synthetic", rendered.Text);
+        Assert.Contains(Redactor.Marker, rendered.Text);
+        Assert.Equal(3, rendered.Lines);
+        Assert.Equal(Math.Max(0, 3 - cap), rendered.Omitted);
+        if (cap >= 3) Assert.Contains("+ vlan 120", rendered.Text);
+    }
+
+    [Fact]
+    public void Xml_secret_context_is_independent_on_each_side()
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "CHANGED",
+                OriginalLines = [new() { Text = "<secret>" }, new() { Text = "SyntheticOldBody" }, new() { Text = "</secret>" }],
+                RevisedLines = [new() { Text = "vlan 120" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "<SECRET>SyntheticNewBody</SECRET>" }] },
+        ] };
+        var rendered = ConfigDiff.Render(diff);
+        Assert.DoesNotContain("Synthetic", rendered.Text);
+        Assert.Contains("+ vlan 120", rendered.Text);
     }
 
     [Fact]
