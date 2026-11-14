@@ -720,3 +720,8 @@ other sources and reports the Graylog section unavailable without a count.
 Severity-filtered historical alerts fail as unavailable when rule severities
 cannot be read. Unfiltered history retains occurrences and describes severity
 or open counts as unknown when the corresponding source failed.
+
+Sensor assessment metadata distinguishes sensor limits, host thresholds and a
+mix of both. Partial device limits can use host fallback bounds. dBm and signal
+always use host sentinel bands, so their sensor limits yield a mixed assessment.
+Core still evaluates severity; MCP's serialised readings remain unchanged.
