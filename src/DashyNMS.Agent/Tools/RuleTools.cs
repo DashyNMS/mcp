@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -29,37 +30,25 @@ public sealed class RuleTools(
     public static readonly TimeSpan HistoryPeriod = AlertHistory.DefaultPeriod;
     public static readonly TimeSpan RecentlyRaised = TimeSpan.FromDays(7);
 
-    [McpServerTool(Name = "alert_details", Title = "Alert details", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Everything about one alert: why it fired (the ports, sensors or other things the rule matched, with the values that tripped it), the rule's " +
-        "name, severity, condition, procedure link and notes, its state, acknowledgement note and how long it's been open, and how often the same rule " +
-        "has fired on the same device in the last 30 days, with the most recent times - to tell a one-off from a flapping alert. " +
-        "Takes an alert ID, which active_alerts gives for open alerts. On LibreNMS 26.10 and later that's a fault ID: the details are that fault's own " +
-        "(never another core's or port's), and group lists every fault the same rule has open on the device.")]
+    [McpServerTool(Name = ToolText.AlertDetails.Name, Title = ToolText.AlertDetails.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.AlertDetails.Description)]
     public Task<string> AlertDetails(
-        [Description("The LibreNMS alert ID - on 26.10 and later, a fault ID - from active_alerts (alert_id, or a fault_id from its faults).")] int alert_id,
+        [Description(ToolText.AlertDetails.Args.AlertId)] int alert_id,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("alert_details", ct => DetailsAsync(alert_id, ct), cancellationToken);
+        => runner.RunAsync(ToolText.AlertDetails.Name, ct => DetailsAsync(alert_id, ct), cancellationToken);
 
-    [McpServerTool(Name = "alert_rules", Title = "Alert rules", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "LibreNMS's alert rules: each one's name, severity, whether it's enabled, its condition, which devices, device groups and locations it applies to " +
-        "(or all), its alert template, how many alerts it has open now and how many it raised in the last 7 days. For \"what are we alerting on?\", " +
-        "\"why didn't X alert?\" or \"which rules are noisiest?\". Filter by part of the name or by severity; sort by name, open or raised. " +
-        "On LibreNMS 26.10 and later each rule also says whether it notifies per entity (notify_per_entity, max_entities - null max_entities " +
-        "inherits the server's default, 20 unless changed), which decides whether acknowledging one fault acknowledges the device's others, and " +
-        "flags conditions using device columns 26.10 removed (removed_columns; latency is now device_stats.ping_rtt_last). " +
-        "Paged: 50 by default, up to 100. Read-only: rules can only be changed in LibreNMS.")]
+    [McpServerTool(Name = ToolText.AlertRules.Name, Title = ToolText.AlertRules.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.AlertRules.Description)]
     public Task<string> AlertRules(
-        [Description("Only rules whose name contains this.")] string? name = null,
-        [Description("Only rules of this severity: critical, warning or ok.")] string? severity = null,
-        [Description("Include disabled rules (by default only enabled ones are listed).")] bool include_disabled = false,
-        [Description("Sort by name (the default), open (most open alerts first) or raised (most raised in the last 7 days first).")] string? sort = null,
-        [Description("How many rules to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many rules to return, 1 to 100. Defaults to 50.")] int limit = DefaultRules,
-        [Description("Include each rule's notes and procedure link.")] bool verbose = false,
+        [Description(ToolText.AlertRules.Args.Name)] string? name = null,
+        [Description(ToolText.AlertRules.Args.Severity)] string? severity = null,
+        [Description(ToolText.AlertRules.Args.IncludeDisabled)] bool include_disabled = false,
+        [Description(ToolText.AlertRules.Args.Sort)] string? sort = null,
+        [Description(ToolText.AlertRules.Args.Offset)] int offset = 0,
+        [Description(ToolText.AlertRules.Args.Limit)] int limit = DefaultRules,
+        [Description(ToolText.AlertRules.Args.Verbose)] bool verbose = false,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("alert_rules", ct => RulesAsync(name, severity, include_disabled, sort, offset, limit, verbose, ct), cancellationToken);
+        => runner.RunAsync(ToolText.AlertRules.Name, ct => RulesAsync(name, severity, include_disabled, sort, offset, limit, verbose, ct), cancellationToken);
 
     /// <summary>
     /// One alert or fault by ID, in any state. LibreNMS's alerts/{id} (and

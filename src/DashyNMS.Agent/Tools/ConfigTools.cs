@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Summaries;
@@ -49,52 +50,37 @@ public sealed class ConfigTools(
     /// <summary>Requests to Unimus at once when checking many devices.</summary>
     public const int MaxConcurrency = 8;
 
-    private const string TextHelp =
-        "Secrets (passwords, keys, SNMP communities, private keys) are redacted. If the server is set to MCP_CONFIG_TEXT=summary, " +
-        "only sizes, times and line counts come back, never config text.";
-
-    [McpServerTool(Name = "config_backup", Title = "Config backup", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "A device's configuration as Unimus backed it up: the newest backup by default, or an earlier one by ID, with the list of recent backups " +
-        "(each is a config version: valid_since is when Unimus first saw it, valid_until when it last confirmed it unchanged). " +
-        "For \"what's configured on X?\", \"is VLAN 120 on this switch?\" or reading an old version. " + TextHelp + " " +
-        "Long configs are paged by line: 200 lines by default, up to 1000; use lines.next_offset for more. To compare versions, use config_diff.")]
+    [McpServerTool(Name = ToolText.ConfigBackup.Name, Title = ToolText.ConfigBackup.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.ConfigBackup.Description)]
     public Task<string> ConfigBackup(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("A backup ID from the backups list. Leave out for the newest.")] int? backup_id = null,
-        [Description("How many lines to skip, for paging. Start at 0, then use lines.next_offset.")] int offset = 0,
-        [Description("How many lines to return, 1 to 1000. Defaults to 200.")] int limit = DefaultLines,
+        [Description(ToolText.ConfigBackup.Args.Device)] string device,
+        [Description(ToolText.ConfigBackup.Args.BackupId)] int? backup_id = null,
+        [Description(ToolText.ConfigBackup.Args.Offset)] int offset = 0,
+        [Description(ToolText.ConfigBackup.Args.Limit)] int limit = DefaultLines,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("config_backup", ct => BackupAsync(device, backup_id, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.ConfigBackup.Name, ct => BackupAsync(device, backup_id, offset, limit, ct), cancellationToken);
 
-    [McpServerTool(Name = "config_diff", Title = "Config diff", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "The difference between two of a device's Unimus config backups, as changed lines only (- removed, + added). By default the newest backup " +
-        "against the one before it; give from_backup and to_backup (IDs from config_backup's list) for any two. " + TextHelp + " " +
-        "Long diffs are cut at 200 lines, with the total counted. For changes in a time window together with events and logs, use what_changed.")]
+    [McpServerTool(Name = ToolText.ConfigDiff.Name, Title = ToolText.ConfigDiff.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.ConfigDiff.Description)]
     public Task<string> ConfigDiffTool(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("The older backup's ID. Leave out (with to_backup) for the one before the newest.")] int? from_backup = null,
-        [Description("The newer backup's ID. Leave out for the newest.")] int? to_backup = null,
+        [Description(ToolText.ConfigDiff.Args.Device)] string device,
+        [Description(ToolText.ConfigDiff.Args.FromBackup)] int? from_backup = null,
+        [Description(ToolText.ConfigDiff.Args.ToBackup)] int? to_backup = null,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("config_diff", ct => DiffAsync(device, from_backup, to_backup, ct), cancellationToken);
+        => runner.RunAsync(ToolText.ConfigDiff.Name, ct => DiffAsync(device, from_backup, to_backup, ct), cancellationToken);
 
-    [McpServerTool(Name = "recent_config_changes", Title = "Recent config changes", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Every device whose configuration changed in a window of time, according to Unimus, newest change first - for \"what changed in the network " +
-        "since Friday?\" or \"has anyone touched the core switches today?\". " + EventTools.WindowHelp + " Filter by device group or location " +
-        "(much quicker on a big network: each device is one request to Unimus). Devices Unimus backs up but LibreNMS doesn't know are included when " +
-        "there's no filter. This says when each device changed; config_diff on a device shows what changed. Paged: 50 by default, up to 100.")]
+    [McpServerTool(Name = ToolText.RecentConfigChanges.Name, Title = ToolText.RecentConfigChanges.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.RecentConfigChanges.Description)]
     public Task<string> RecentConfigChanges(
-        [Description("How many hours to look back from until, 1 to 168. Leave out when using since.")] int? hours = null,
-        [Description("Start of the window: a duration before now (90m, 24h, 7d) or an ISO 8601 time.")] string? since = null,
-        [Description("End of the window: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
-        [Description("Only devices in this LibreNMS device group (by name).")] string? group = null,
-        [Description("Only devices at this location (by name).")] string? location = null,
-        [Description("How many changes to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many changes to return, 1 to 100. Defaults to 50.")] int limit = DefaultChanges,
+        [Description(ToolText.RecentConfigChanges.Args.Hours)] int? hours = null,
+        [Description(ToolText.RecentConfigChanges.Args.Since)] string? since = null,
+        [Description(ToolText.RecentConfigChanges.Args.Until)] string? until = null,
+        [Description(ToolText.RecentConfigChanges.Args.Group)] string? group = null,
+        [Description(ToolText.RecentConfigChanges.Args.Location)] string? location = null,
+        [Description(ToolText.RecentConfigChanges.Args.Offset)] int offset = 0,
+        [Description(ToolText.RecentConfigChanges.Args.Limit)] int limit = DefaultChanges,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("recent_config_changes", ct => ChangesAsync(hours, since, until, group, location, offset, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.RecentConfigChanges.Name, ct => ChangesAsync(hours, since, until, group, location, offset, limit, ct), cancellationToken);
 
     private async Task<JsonObject> BackupAsync(string query, int? backupId, int offset, int limit, CancellationToken cancellationToken)
     {

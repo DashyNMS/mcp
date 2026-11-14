@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
@@ -61,25 +62,19 @@ public sealed class LogTools(
     /// <summary>A window ending this close to now counts as ending now: the clock moved while the question was asked.</summary>
     public static readonly TimeSpan NowSlack = TimeSpan.FromMinutes(2);
 
-    [McpServerTool(Name = "search_logs", Title = "Search logs", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Searches Graylog's log messages across the network or for one device, over any window up to 31 days: \"any errors from the core switches overnight?\", " +
-        "\"what did this firewall log between 2 and 4am?\". Gives the message count first, then the busiest sources, levels, facilities and applications, " +
-        "messages over time, and the newest lines. Narrow it by text in the message, a device (matched on its names and addresses, as LibreNMS's Graylog tab does), " +
-        "a maximum syslog level (0 emergency to 7 debug: 3 means errors and worse) and a stream. " +
-        "The count and messages over time are exact for any window; the busiest values and the lines come from up to 150 messages, and top_from says which. " +
-        "When nothing matches, it says what might be why. For a device's logs alongside its events and config changes, use what_changed.")]
+    [McpServerTool(Name = ToolText.SearchLogs.Name, Title = ToolText.SearchLogs.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.SearchLogs.Description)]
     public Task<string> SearchLogs(
-        [Description("Words to find in the message text, matched as a phrase. Leave out for every message.")] string? text = null,
-        [Description("A device whose messages to search: hostname, display name, IP address or LibreNMS device ID. Leave out for the whole network.")] string? device = null,
-        [Description("Start of the window: relative (\"90m\", \"6h\", \"3d\") or ISO 8601 (UTC unless a zone is given). Defaults to 24 hours before until.")] string? since = null,
-        [Description("End of the window, the same forms as since. Defaults to now.")] string? until = null,
-        [Description("Shorthand for since: this many hours before until, 1 to 168. Use since instead for longer windows.")] int? hours = null,
-        [Description("Only messages at this syslog level or more severe: 0 emergency, 1 alert, 2 critical, 3 error, 4 warning, 5 notice, 6 informational, 7 debug.")] int? level = null,
-        [Description("A Graylog stream, by title or ID. Leave out for every stream the account can read.")] string? stream = null,
-        [Description("How many of the newest lines to return, 0 to 50. Defaults to 20; 0 for the counts alone.")] int limit = DefaultLines,
+        [Description(ToolText.SearchLogs.Args.Text)] string? text = null,
+        [Description(ToolText.SearchLogs.Args.Device)] string? device = null,
+        [Description(ToolText.SearchLogs.Args.Since)] string? since = null,
+        [Description(ToolText.SearchLogs.Args.Until)] string? until = null,
+        [Description(ToolText.SearchLogs.Args.Hours)] int? hours = null,
+        [Description(ToolText.SearchLogs.Args.Level)] int? level = null,
+        [Description(ToolText.SearchLogs.Args.Stream)] string? stream = null,
+        [Description(ToolText.SearchLogs.Args.Limit)] int limit = DefaultLines,
         CancellationToken cancellationToken = default)
-        => runner.RunAsync("search_logs", ct => SearchAsync(text, device, since, until, hours, level, stream, limit, ct), cancellationToken);
+        => runner.RunAsync(ToolText.SearchLogs.Name, ct => SearchAsync(text, device, since, until, hours, level, stream, limit, ct), cancellationToken);
 
     private async Task<JsonObject> SearchAsync(
         string? text, string? deviceQuery, string? since, string? until, int? hours, int? level, string? streamQuery, int limit, CancellationToken cancellationToken)

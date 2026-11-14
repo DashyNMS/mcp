@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Alerts;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
@@ -24,29 +25,22 @@ public sealed class AlertTools(
     public const int DefaultAlerts = 50;
     public const int MaxAlerts = 100;
 
-    [McpServerTool(Name = "active_alerts", Title = "Active alerts", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "Alerts in LibreNMS, grouped by device, with rule name, severity and age. With no time window: the alerts open now (firing or " +
-        "acknowledged), worst first, for \"what's alerting?\" or \"is anything critical?\". On LibreNMS 26.10 and later one alert is a rule firing on a " +
-        "device, and may hold several faults - one per core, port or sensor it matched: fault_count says how many, faults lists them, and totals counts " +
-        "alerts and faults separately. alert_id is the first fault's ID, for alert_details; group_id names the device and rule. With a window (hours, or since/until): every alert raised in it, " +
-        "including ones that have since recovered, each with still_open and recovered_at - for \"what fired overnight?\" or \"what alerted between " +
-        "Friday and Monday?\". " + EventTools.WindowHelp + " Filter by severity, device, device group or location. " +
-        "Paged: 50 by default, up to 100; use page.next_offset for more. Records are short unless verbose is true.")]
+    [McpServerTool(Name = ToolText.ActiveAlerts.Name, Title = ToolText.ActiveAlerts.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.ActiveAlerts.Description)]
     public Task<string> ActiveAlerts(
-        [Description("Only alerts of this severity: critical, warning or ok. Leave out for all.")] string? severity = null,
-        [Description("Only alerts on this device: hostname, display name, IP address or LibreNMS device ID. Leave out for every device.")] string? device = null,
-        [Description("Only devices in this LibreNMS device group (by name; list_groups_and_locations shows them).")] string? group = null,
-        [Description("Only devices at this location (by name; list_groups_and_locations shows them).")] string? location = null,
-        [Description("Alerts raised in the last this many hours, 1 to 168. Leave out for alerts open now.")] int? hours = null,
-        [Description("Alerts raised since: a duration before now (90m, 24h, 7d) or an ISO 8601 time. Leave out for alerts open now.")] string? since = null,
-        [Description("Alerts raised until: a duration before now or an ISO 8601 time. Defaults to now.")] string? until = null,
-        [Description("How many alerts to skip, for paging. Start at 0, then use page.next_offset.")] int offset = 0,
-        [Description("How many alerts to return, 1 to 100. Defaults to 50.")] int limit = DefaultAlerts,
-        [Description("Include each alert's start time and note.")] bool verbose = false,
+        [Description(ToolText.ActiveAlerts.Args.Severity)] string? severity = null,
+        [Description(ToolText.ActiveAlerts.Args.Device)] string? device = null,
+        [Description(ToolText.ActiveAlerts.Args.Group)] string? group = null,
+        [Description(ToolText.ActiveAlerts.Args.Location)] string? location = null,
+        [Description(ToolText.ActiveAlerts.Args.Hours)] int? hours = null,
+        [Description(ToolText.ActiveAlerts.Args.Since)] string? since = null,
+        [Description(ToolText.ActiveAlerts.Args.Until)] string? until = null,
+        [Description(ToolText.ActiveAlerts.Args.Offset)] int offset = 0,
+        [Description(ToolText.ActiveAlerts.Args.Limit)] int limit = DefaultAlerts,
+        [Description(ToolText.ActiveAlerts.Args.Verbose)] bool verbose = false,
         CancellationToken cancellationToken = default)
         => runner.RunAsync(
-            "active_alerts",
+            ToolText.ActiveAlerts.Name,
             ct => hours is null && string.IsNullOrWhiteSpace(since) && string.IsNullOrWhiteSpace(until)
                 ? OpenAsync(severity, device, group, location, offset, limit, verbose, ct)
                 : RaisedAsync(severity, device, group, location, TimeWindow.Resolve(since, until, hours, EventTools.DefaultHours, time), offset, limit, verbose, ct),

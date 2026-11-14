@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
@@ -15,16 +16,13 @@ public sealed class PortTools(ILibreNmsClient client, DeviceResolver resolver, T
 {
     public const int MaxCandidates = 5;
 
-    [McpServerTool(Name = "port_status", Title = "Port status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description(
-        "One port on one device: admin and operational state, speed, duplex, VLAN, current traffic and error rates, its description (alias), " +
-        "and the neighbour LibreNMS sees on it (LLDP/CDP). Use it for \"is port X up?\" or \"what's plugged into X?\". " +
-        "Rates are LibreNMS's last polling interval, not history. For every problem port on a device at once, use device_health.")]
+    [McpServerTool(Name = ToolText.PortStatus.Name, Title = ToolText.PortStatus.Title, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description(ToolText.PortStatus.Description)]
     public Task<string> PortStatus(
-        [Description("The device: hostname, display name, IP address or LibreNMS device ID.")] string device,
-        [Description("The port: its name (ifName, e.g. 1/1/7 or Gi0/1), description (ifDescr), alias, or LibreNMS port ID.")] string port,
+        [Description(ToolText.PortStatus.Args.Device)] string device,
+        [Description(ToolText.PortStatus.Args.Port)] string port,
         CancellationToken cancellationToken)
-        => runner.RunAsync("port_status", ct => StatusAsync(device, port, ct), cancellationToken);
+        => runner.RunAsync(ToolText.PortStatus.Name, ct => StatusAsync(device, port, ct), cancellationToken);
 
     private async Task<JsonObject> StatusAsync(string deviceQuery, string portQuery, CancellationToken cancellationToken)
     {
