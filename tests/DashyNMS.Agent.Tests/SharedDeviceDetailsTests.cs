@@ -84,7 +84,7 @@ public sealed class SharedDeviceDetailsTests
         var result = (await host.ReadAsync(new(1, ["routing"]))).Result!;
         Assert.Equal(2, result.Data.Routing!.OspfNeighbours.Count);
         Assert.All(result.Data.Routing.OspfNeighbours, n => Assert.Equal("1/1/1", n.Port));
-        Assert.Contains("devices/1/ports", nms.Transport.Requests);
+        Assert.Contains(nms.Transport.Requests, r => r.Split('?')[0] == "devices/1/ports");
     }
 
     [Fact]
