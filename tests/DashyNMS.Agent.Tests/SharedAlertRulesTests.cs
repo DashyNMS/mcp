@@ -56,7 +56,7 @@ public sealed class SharedAlertRulesTests
         Assert.Equal(new[] { 1, 2 }, targets.Devices!.Select(t => t.Id));
         Assert.Equal(new[] { 1, 2 }, targets.Groups!.Select(t => t.Id));
         Assert.Equal(new[] { 1, 2 }, targets.Locations!.Select(t => t.Id));
-        Assert.Equal(new[] { "same.example.net", "same.example.net" }, targets.Devices.Select(t => t.Name));
+        Assert.Equal(new[] { "same.example.net", "same.example.net" }, targets.Devices!.Select(t => t.Name));
         var mcp = FakeLibreNms.Parse(await new RuleTools(nms.Client, nms.Fleet, nms.Directory, nms.Scope, nms.Runner, nms.Options, nms.Time).AlertRules());
         var names = mcp.GetProperty("data").GetProperty("rules")[0].GetProperty("applies_to").GetProperty("devices");
         Assert.Equal(new[] { "same.example.net", "same.example.net" }, names.EnumerateArray().Select(n => n.GetString()));
