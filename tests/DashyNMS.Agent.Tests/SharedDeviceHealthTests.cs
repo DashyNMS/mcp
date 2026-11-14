@@ -23,6 +23,20 @@ public sealed class SharedDeviceHealthTests
     }
 
     [Fact]
+    public async Task A_maintenance_timeout_keeps_the_state_unknown()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.FailsWith("devices/1/maintenance", new OperationCanceledException());
+        using var host = HostDeviceHealth.Create(nms.Client, nms.Time, nms.Options);
+        var result = (await host.ReadAsync(new(1))).Result!;
+        Assert.Null(result.Data.UnderMaintenance);
+        Assert.Contains(result.Data.Unavailable!, u => u.Source == "maintenance");
+        var mcp = FakeLibreNms.Parse(await new DeviceTools(nms.Client, nms.Directory, nms.Resolver, nms.Scope, nms.Runner, nms.Options)
+            .DeviceHealth("1", CancellationToken.None));
+        Assert.False(mcp.GetProperty("data").TryGetProperty("under_maintenance", out _));
+    }
+
+    [Fact]
     public async Task Recovered_alerts_never_form_open_groups_or_inflate_live_groups()
     {
         var nms = new FakeLibreNms();

@@ -112,12 +112,13 @@ public sealed class DeviceHealth
             .Select(p => { var row = PortProblem.From(p); return row with { IfName = Clean(row.IfName), Alias = Clean(row.Alias), OperStatus = Clean(row.OperStatus) }; });
         var topProblems = TakeProblems(problemPorts, out var otherProblems);
 
+        var underMaintenance = Use(maintenance.Result, "maintenance");
         var status = DeviceSummary.StatusOf(device);
         var data = new DeviceHealthData
         {
             Device = shaped.Device,
             UptimeSeconds = shaped.UptimeSeconds,
-            UnderMaintenance = Use(maintenance.Result, "maintenance"),
+            UnderMaintenance = maintenance.Result.Error is null ? underMaintenance : null,
             OpenAlerts = openAlerts,
             OpenFaults = alertTotals.Faults > alertTotals.AlertGroups ? alertTotals.Faults : (int?)null,
             CpuMaxPercent = Max(Use(processors.Result, "processors")?.Select(p => p.UsagePercent)),

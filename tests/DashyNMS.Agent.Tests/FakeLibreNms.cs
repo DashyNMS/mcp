@@ -35,6 +35,12 @@ internal sealed class FakeTransport : ILibreNmsTransport
         return this;
     }
 
+    public FakeTransport FailsWith(string path, Exception error)
+    {
+        _routes[path] = () => throw error;
+        return this;
+    }
+
     public Task<JsonDocument> SendAsync(HttpMethod method, string relativeUrl, object? body = null, CancellationToken cancellationToken = default)
     {
         Assert.Equal(HttpMethod.Get, method);
