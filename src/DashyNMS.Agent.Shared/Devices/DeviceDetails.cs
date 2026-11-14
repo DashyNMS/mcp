@@ -140,7 +140,7 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
                     Blank(e.Model), Blank(e.Serial), Blank(e.Manufacturer), Blank(e.HardwareRev), Blank(e.FirmwareRev), Blank(e.SoftwareRev),
                     e.IsFieldReplaceable ? true : null)).ToList()) };
         }
-        if (Wants("vlans") && vlans is not null)
+        if (Wants("vlans") && vlans is not null && vlans.Result.Error is null)
             data = data with { Vlans = Paged("vlans", vlanList.OrderBy(v => v.VlanNumber).Select(v => new VlanDetail(v.VlanNumber, Clean(v.VlanName),
                 portList.Where(p => p.Vlans.Any(m => m.Vlan == v.VlanNumber && m.Untagged) || (p.Vlans.Count == 0 && p.IfVlan == v.VlanNumber)).Select(p => Clean(portName[p.PortId])).ToList(),
                 portList.Where(p => p.Vlans.Any(m => m.Vlan == v.VlanNumber && !m.Untagged)).Select(p => Clean(portName[p.PortId])).ToList())).ToList()) };

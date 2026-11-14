@@ -68,7 +68,13 @@ public sealed class RuleTools(
             rules = result.Data.Rules.Select(r => new
             {
                 r.RuleId, r.Name, r.Severity, r.Enabled, r.Condition,
-                applies_to = r.AppliesTo.AllDevices ? (object)"all devices" : r.AppliesTo.Targets!,
+                applies_to = r.AppliesTo.AllDevices ? (object)"all devices" : new
+                {
+                    r.AppliesTo.Targets!.Except,
+                    devices = r.AppliesTo.Targets.Devices?.Select(t => t.Name).ToList(),
+                    groups = r.AppliesTo.Targets.Groups?.Select(t => t.Name).ToList(),
+                    locations = r.AppliesTo.Targets.Locations?.Select(t => t.Name).ToList(),
+                },
                 r.Template, r.NotifyPerEntity, r.MaxEntities, r.MaxEntitiesInherited, r.Acknowledging,
                 r.RemovedColumns, r.OpenAlerts, raised_last_7_days = r.RaisedLast7Days, r.Notes, r.Procedure,
             }).ToList(),

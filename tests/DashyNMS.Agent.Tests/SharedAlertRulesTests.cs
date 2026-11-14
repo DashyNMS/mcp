@@ -26,6 +26,43 @@ public sealed class SharedAlertRulesTests
     }
 
     [Fact]
+    public async Task Failed_history_never_claims_a_first_firing_or_a_known_zero_count()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.Fails("logs/alertlog/1", System.Net.HttpStatusCode.Forbidden);
+        using var host = HostAlertRules.Create(nms.Client, nms.Time, nms.Options);
+        var result = (await host.ReadDetailsAsync(new(10))).Result!;
+        Assert.False(result.Data.History.Available);
+        Assert.Null(result.Data.History.FiredBeforeIn30Days);
+        Assert.Null(result.Data.History.AtLeast);
+        Assert.Contains("previous firings are unknown", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("first time", result.Summary, StringComparison.Ordinal);
+        Assert.Contains(result.Data.Unavailable!, u => u.Source == "history");
+        var mcp = FakeLibreNms.Parse(await new RuleTools(nms.Client, nms.Fleet, nms.Directory, nms.Scope, nms.Runner, nms.Options, nms.Time).AlertDetails(10));
+        Assert.False(mcp.GetProperty("data").GetProperty("history").TryGetProperty("fired_before_in_30_days", out _));
+        Assert.Contains("unknown", mcp.GetProperty("summary").GetString()!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Duplicate_target_names_preserve_distinct_typed_ids_and_MCP_names()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.On("rules", """{"status":"ok","rules":[{"id":3,"name":"Example rule","devices":[1,2],"groups":[1,2],"locations":[1,2]}]}""")
+            .On("devices", """{"status":"ok","devices":[{"device_id":1,"hostname":"same.example.net"},{"device_id":2,"hostname":"same.example.net"}]}""")
+            .On("devicegroups", """{"status":"ok","groups":[{"id":1,"name":"Same group"},{"id":2,"name":"Same group"}]}""")
+            .On("resources/locations", """{"status":"ok","locations":[{"id":1,"location":"Same site"},{"id":2,"location":"Same site"}]}""");
+        using var host = HostAlertRules.Create(nms.Client, nms.Time, nms.Options);
+        var targets = Assert.Single((await host.ReadRulesAsync(new())).Result!.Data.Rules).AppliesTo.Targets!;
+        Assert.Equal(new[] { 1, 2 }, targets.Devices!.Select(t => t.Id));
+        Assert.Equal(new[] { 1, 2 }, targets.Groups!.Select(t => t.Id));
+        Assert.Equal(new[] { 1, 2 }, targets.Locations!.Select(t => t.Id));
+        Assert.Equal(new[] { "same.example.net", "same.example.net" }, targets.Devices.Select(t => t.Name));
+        var mcp = FakeLibreNms.Parse(await new RuleTools(nms.Client, nms.Fleet, nms.Directory, nms.Scope, nms.Runner, nms.Options, nms.Time).AlertRules());
+        var names = mcp.GetProperty("data").GetProperty("rules")[0].GetProperty("applies_to").GetProperty("devices");
+        Assert.Equal(new[] { "same.example.net", "same.example.net" }, names.EnumerateArray().Select(n => n.GetString()));
+    }
+
+    [Fact]
     public async Task Details_match_independent_facts_and_MCP_over_HTTP()
     {
         var routes = Routes();
@@ -70,7 +107,13 @@ public sealed class SharedAlertRulesTests
             foreach (var property in rows[i].EnumerateObject().Where(p => p.Name != "applies_to"))
                 Assert.True(JsonElement.DeepEquals(property.Value, actual.GetProperty(property.Name)), property.Name);
             Assert.False(row.AppliesTo.AllDevices);
-            Assert.True(JsonElement.DeepEquals(rows[i].GetProperty("applies_to"), JsonSerializer.SerializeToElement(row.AppliesTo.Targets, ToolResult.Json)));
+            Assert.True(JsonElement.DeepEquals(rows[i].GetProperty("applies_to"), JsonSerializer.SerializeToElement(new
+            {
+                row.AppliesTo.Targets!.Except,
+                devices = row.AppliesTo.Targets.Devices?.Select(t => t.Name),
+                groups = row.AppliesTo.Targets.Groups?.Select(t => t.Name),
+                locations = row.AppliesTo.Targets.Locations?.Select(t => t.Name),
+            }, ToolResult.Json)));
         }
         Assert.Equal(expected.GetProperty("summary").GetString(), result.Summary);
         Assert.Equal(mcpServer.Requests.Order(), hostServer.Requests.Order());

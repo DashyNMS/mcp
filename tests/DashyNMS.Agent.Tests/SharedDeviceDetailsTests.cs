@@ -59,6 +59,26 @@ public sealed class SharedDeviceDetailsTests
     }
 
     [Fact]
+    public async Task Refused_VLANs_are_unavailable_and_a_successful_empty_list_is_distinct()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.Fails("resources/vlans", System.Net.HttpStatusCode.Forbidden);
+        using var host = HostDeviceDetails.Create(nms.Client, nms.Transport, nms.Time);
+        var result = (await host.ReadAsync(new(1, ["vlans"]))).Result!;
+        Assert.Null(result.Data.Vlans);
+        Assert.DoesNotContain("vlans", result.ReturnedSections);
+        Assert.False(result.SectionTotals.ContainsKey("vlans"));
+        Assert.Contains(result.Data.Unavailable!, u => u.Source == "vlans");
+        var mcp = FakeLibreNms.Parse(await new DetailTools(nms.Client, nms.Fleet, nms.Sensors, nms.Directory, nms.Resolver, nms.Runner).DeviceDetails("1", ["vlans"]));
+        Assert.False(mcp.GetProperty("data").TryGetProperty("vlans", out _));
+        nms.Transport.On("resources/vlans", """{"status":"ok","vlans":[]}""");
+        result = (await host.ReadAsync(new(1, ["vlans"]))).Result!;
+        Assert.Empty(result.Data.Vlans!);
+        Assert.Contains("vlans", result.ReturnedSections);
+        Assert.Equal(0, result.SectionTotals["vlans"]);
+    }
+
+    [Fact]
     public async Task Paging_counts_original_rows_and_refused_inventory_preserves_other_sections()
     {
         var nms = new FakeLibreNms();
