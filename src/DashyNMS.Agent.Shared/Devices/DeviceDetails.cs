@@ -201,9 +201,10 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
             _ => false,
         };
         var returned = sections.Where(Returned).ToList();
+        var nextOffset = pages.Values.Where(p => p.NextOffset is not null).Select(p => p.NextOffset).Min();
         var summary = $"{DeviceHealth.Count(returned.Count, "section")}: {string.Join(", ", returned)}" +
             (unavailable.Count > 0 ? $"; {DeviceHealth.Count(unavailable.Count, "part")} couldn't be read" : string.Empty) +
-            (pages.Count > 0 ? $". Some lists continue: pass offset {pages.Values.Min(p => p.Offset + p.Returned)} for more." : ".");
+            (nextOffset is not null ? $". Some lists continue: pass offset {nextOffset} for more." : ".");
         return new(summary, data, returned, totals);
     }
 
