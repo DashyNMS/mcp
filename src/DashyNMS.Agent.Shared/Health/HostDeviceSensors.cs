@@ -50,6 +50,11 @@ public sealed class HostDeviceSensors : IDisposable
         bool serverTimestampsAreUtc, SensorDefinitionStore? definitions = null)
         => new(DeviceSensors.Create(client, transport, time, new AgentOptions { ServerTimestampsAreUtc = serverTimestampsAreUtc }, definitions));
 
+    /// <summary>Captures the host's threshold choices for this connection-bound operation.</summary>
+    public static HostDeviceSensors Create(ILibreNmsClient client, ILibreNmsTransport transport, TimeProvider time,
+        AgentOptions options, SensorDefinitionStore? definitions = null)
+        => new(DeviceSensors.Create(client, transport, time, options, definitions));
+
     /// <summary>
     /// Returns safe failures without logging. Caller and retired-generation cancellation throw.
     /// Hosts supply their own linked deadline token and distinguish its expiry from user cancellation.
