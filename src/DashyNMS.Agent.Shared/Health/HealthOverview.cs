@@ -14,7 +14,7 @@ public sealed record HealthTypeTotals(string Type, int Count, int Critical, int 
 public sealed record HealthOverviewData(IReadOnlyList<HealthTypeTotals> Types, IReadOnlyList<HealthOverviewRow> Readings, PageInfo Page);
 public sealed record HealthOverviewResult(string Summary, HealthOverviewData Data, SensorTotals Totals, int DeniedDevices);
 
-/// <summary>Network sensor assessment, bounded fallback, filtering and paging shared with MCP.</summary>
+/// <summary>Global sensor access was refused and the requested scope cannot use the bounded fallback.</summary>
 public sealed class FleetSensorsRefusedException : Exception
 {
     public FleetSensorsRefusedException(int devices) : base(
@@ -23,6 +23,7 @@ public sealed class FleetSensorsRefusedException : Exception
         "or use device_sensors for one device.") { }
 }
 
+/// <summary>Network sensor assessment, bounded fallback, filtering and paging shared with MCP.</summary>
 public sealed class HealthOverview
 {
     public const int MaxReadings = 100;
