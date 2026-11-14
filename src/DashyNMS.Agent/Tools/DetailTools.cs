@@ -282,68 +282,10 @@ public sealed class DetailTools(
     private async Task<JsonObject> NeighboursAsync(string query, CancellationToken cancellationToken)
     {
         var device = await resolver.ResolveAsync(query, cancellationToken).ConfigureAwait(false);
-        var id = device.DeviceId;
-
-        var portsTask = Sources.TryAsync(() => client.Ports.ListForDeviceAsync(id, cancellationToken), cancellationToken);
-        var linksTask = fleet.GetLinksAsync(cancellationToken);
-        var devicesTask = directory.GetAllAsync(cancellationToken);
-        await Task.WhenAll(portsTask, linksTask, devicesTask).ConfigureAwait(false);
-
-        var portName = (portsTask.Result.Value ?? []).ToDictionary(p => p.PortId, p => p.IfName ?? p.IfDescr);
-        var devices = devicesTask.Result.ToDictionary(d => d.DeviceId);
-        var links = linksTask.Result;
-
-        string? Name(int? deviceId) => deviceId is { } d && devices.TryGetValue(d, out var dev) ? DeviceSummary.NameOf(dev) : null;
-
-        // What this device reports about its own ports.
-        var reported = links
-            .Where(l => l.LocalDeviceId == id && l.Active)
-            .Select(l => new Neighbour(
-                portName.GetValueOrDefault(l.LocalPortId),
-                l.RemoteDeviceId is > 0 ? l.RemoteDeviceId : null,
-                l.RemoteDeviceId is > 0 ? Name(l.RemoteDeviceId) ?? l.RemoteHostname : l.RemoteHostname,
-                l.RemotePort,
-                l.RemotePlatform,
-                l.Protocol,
-                "this device"))
-            .ToList();
-
-        // What other devices report about this one, where this one says nothing back.
-        var reverse = links
-            .Where(l => l.RemoteDeviceId == id && l.LocalDeviceId != id && l.Active)
-            .Where(l => !reported.Any(r => r.RemoteDeviceId == l.LocalDeviceId))
-            .Select(l => new Neighbour(
-                l.RemotePort,
-                l.LocalDeviceId,
-                Name(l.LocalDeviceId),
-                null,
-                null,
-                l.Protocol,
-                "neighbour"))
-            .ToList();
-
-        var all = reported.Concat(reverse)
-            .OrderBy(n => n.LocalPort, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(n => n.RemoteHostname, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var shown = ToolResult.Take(all, MaxRows, out var omitted);
-        var known = all.Count(n => n.RemoteDeviceId is not null);
-        var summary = all.Count == 0
-            ? "LibreNMS has no LLDP or CDP neighbours for this device."
-            : $"{DeviceTools.Count(all.Count, "neighbour")} ({known} known to LibreNMS)" +
-              (reverse.Count > 0 ? $"; {reverse.Count} only reported from the other side." : ".");
-
-        return ToolResult.Ok(summary, new
-        {
-            device = DeviceBrief.From(device),
-            neighbours = shown,
-            unavailable = portsTask.Result.Error is { } error ? new[] { new Unavailable("ports", error) } : null,
-        }, omitted);
+        var result = await new DashyNMS.Agent.Ports.DeviceNeighbours(client, fleet, directory, runner.Redactor)
+            .ReadAsync(device, cancellationToken).ConfigureAwait(false);
+        return ToolResult.Ok(result.Summary, result.Data, result.Omitted);
     }
-
-    /// <param name="SeenFrom">"this device" when it reports the link itself; "neighbour" when only the other end does.</param>
-    private sealed record Neighbour(string? LocalPort, int? RemoteDeviceId, string? RemoteHostname, string? RemotePort, string? RemotePlatform, string? Protocol, string SeenFrom);
 
     private static HashSet<string> ParseSections(string[]? requested)
     {
