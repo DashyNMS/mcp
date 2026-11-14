@@ -26,6 +26,33 @@ public sealed class HostThresholdTests
     }
 
     [Theory]
+    [InlineData("temperature", false, false, SensorAssessment.Thresholds)]
+    [InlineData("temperature", true, false, SensorAssessment.SensorLimits)]
+    [InlineData("temperature", true, true, SensorAssessment.Thresholds)]
+    [InlineData("fanspeed", true, false, SensorAssessment.SensorLimits)]
+    [InlineData("dbm", true, false, SensorAssessment.MixedLimits)]
+    [InlineData("signal", true, false, SensorAssessment.MixedLimits)]
+    public void Assessment_identifies_the_effective_limit_sources(string type, bool ownLimits, bool overrideLimits, SensorAssessment expected)
+    {
+        var sensor = new Sensor { SensorClass = type, Current = 10,
+            LimitLow = ownLimits ? -100 : null, LimitLowWarn = ownLimits ? -80 : null,
+            LimitHighWarn = ownLimits ? 60 : null, LimitHigh = ownLimits ? 80 : null };
+        var settings = new AppSettings { OverrideSensorLimitsWithAppThresholds = overrideLimits };
+        Assert.Equal(expected, SensorReading.From(sensor, settings).Assessment);
+    }
+
+    [Theory]
+    [InlineData(false, SensorAssessment.MixedLimits)]
+    [InlineData(true, SensorAssessment.Thresholds)]
+    public void Partial_sensor_limits_report_host_fallbacks(bool overrideLimits, SensorAssessment expected)
+    {
+        var sensor = new Sensor { SensorClass = "temperature", Current = 81, LimitHigh = 80 };
+        var reading = SensorReading.From(sensor, new AppSettings { OverrideSensorLimitsWithAppThresholds = overrideLimits });
+        Assert.Equal(expected, reading.Assessment);
+        Assert.Equal("critical", reading.State);
+    }
+
+    [Theory]
     [InlineData(false, false, "ok")]
     [InlineData(true, false, "warning")]
     [InlineData(true, true, "critical")]
