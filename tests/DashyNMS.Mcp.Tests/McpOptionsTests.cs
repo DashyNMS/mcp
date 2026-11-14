@@ -14,6 +14,23 @@ public sealed class McpOptionsTests
     };
 
     [Theory]
+    [InlineData("TEMPERATURE")]
+    [InlineData("FAN_SPEED")]
+    public void Equal_warning_bounds_are_valid_as_in_Core(string category)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            [McpOptions.LibreNmsUrl] = "https://librenms.example.net",
+            [McpOptions.LibreNmsToken] = "synthetic-token",
+            [$"MCP_{category}_LOW_WARNING"] = "1000",
+            [$"MCP_{category}_HIGH_WARNING"] = "1000",
+            [$"MCP_{category}_HIGH_CRITICAL"] = "2000",
+        };
+        Assert.NotNull(Load(values, out var errors));
+        Assert.Empty(errors);
+    }
+
+    [Theory]
     [InlineData("MCP_TEMPERATURE_HIGH_WARNING", "NaN")]
     [InlineData("MCP_TEMPERATURE_HIGH_CRITICAL", "30")]
     [InlineData("MCP_DBM_IGNORE_AT_OR_BELOW", "0")]

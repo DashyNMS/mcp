@@ -218,14 +218,14 @@ public sealed class McpOptions
         settings.TemperatureThresholds.LowWarning = Number("MCP_TEMPERATURE_LOW_WARNING", settings.TemperatureThresholds.LowWarning);
         settings.TemperatureThresholds.HighWarning = Number("MCP_TEMPERATURE_HIGH_WARNING", settings.TemperatureThresholds.HighWarning);
         settings.TemperatureThresholds.HighCritical = Number("MCP_TEMPERATURE_HIGH_CRITICAL", settings.TemperatureThresholds.HighCritical);
-        if (!(settings.TemperatureThresholds.LowCritical <= settings.TemperatureThresholds.LowWarning && settings.TemperatureThresholds.LowWarning < settings.TemperatureThresholds.HighWarning && settings.TemperatureThresholds.HighWarning <= settings.TemperatureThresholds.HighCritical))
-            problems.Add("MCP_TEMPERATURE thresholds must be ordered: low critical <= low warning < high warning <= high critical.");
+        if (!(settings.TemperatureThresholds.LowCritical <= settings.TemperatureThresholds.LowWarning && settings.TemperatureThresholds.LowWarning <= settings.TemperatureThresholds.HighWarning && settings.TemperatureThresholds.HighWarning <= settings.TemperatureThresholds.HighCritical))
+            problems.Add("MCP_TEMPERATURE thresholds must be ordered: low critical <= low warning <= high warning <= high critical.");
         settings.FanSpeedThresholds.LowCritical = Number("MCP_FAN_SPEED_LOW_CRITICAL", settings.FanSpeedThresholds.LowCritical);
         settings.FanSpeedThresholds.LowWarning = Number("MCP_FAN_SPEED_LOW_WARNING", settings.FanSpeedThresholds.LowWarning);
         settings.FanSpeedThresholds.HighWarning = Number("MCP_FAN_SPEED_HIGH_WARNING", settings.FanSpeedThresholds.HighWarning);
         settings.FanSpeedThresholds.HighCritical = Number("MCP_FAN_SPEED_HIGH_CRITICAL", settings.FanSpeedThresholds.HighCritical);
-        if (!(settings.FanSpeedThresholds.LowCritical <= settings.FanSpeedThresholds.LowWarning && settings.FanSpeedThresholds.LowWarning < settings.FanSpeedThresholds.HighWarning && settings.FanSpeedThresholds.HighWarning <= settings.FanSpeedThresholds.HighCritical))
-            problems.Add("MCP_FAN_SPEED thresholds must be ordered: low critical <= low warning < high warning <= high critical.");
+        if (!(settings.FanSpeedThresholds.LowCritical <= settings.FanSpeedThresholds.LowWarning && settings.FanSpeedThresholds.LowWarning <= settings.FanSpeedThresholds.HighWarning && settings.FanSpeedThresholds.HighWarning <= settings.FanSpeedThresholds.HighCritical))
+            problems.Add("MCP_FAN_SPEED thresholds must be ordered: low critical <= low warning <= high warning <= high critical.");
         settings.OverrideSensorLimitsWithAppThresholds = ParseBool(lookup, "MCP_OVERRIDE_SENSOR_LIMITS", false, problems);
         return settings;
     }

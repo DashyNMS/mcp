@@ -53,7 +53,6 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     TemperatureThresholds = options.SensorSettings.TemperatureThresholds,
     FanSpeedThresholds = options.SensorSettings.FanSpeedThresholds,
     OverrideSensorLimitsWithAppThresholds = options.SensorSettings.OverrideSensorLimitsWithAppThresholds,
-
 });
 builder.Services
     .AddMcpServer(o =>
