@@ -577,3 +577,26 @@ Hosts must review those reads in their endpoint allowlist and discard replies
 from retired generations. All network-supplied display strings are redacted.
 `Fixtures/DeviceDetails` covers the sections over loopback HTTP; existing MCP
 field expectations remain, with additional host paging and refusal checks.
+
+### Fleet rankings and health for hosts
+
+`FleetRankings` owns `top_interfaces`, `top_errors` and `top_devices`, using
+Core's ranking functions over the same filtered port snapshot as MCP. Typed
+results retain `CandidatesTotal` and `PortsChecked` outside MCP's data, so a
+compact formatter can count matches left out of the requested top list.
+`HostFleetRankings` has fixed failures and retires all cached reads on disposal.
+Its reads are devices, fleet port status, device groups and group membership.
+
+`HealthOverview` owns `health_overview`, including scope, paging, problem-first
+ordering, class totals and bounded per-device fallback. Its host factory
+captures thresholds before any asynchronous read, through Core's own evaluator.
+`HostHealthOverview` returns fixed failures and includes full sensor totals and
+`DeniedDevices` outside MCP's data. Hosts must show denied-device counts rather
+than presenting partial coverage as all devices. Reads are devices, groups and
+memberships, fleet sensors, or the existing restricted per-device sensor health
+routes after fleet access is refused. Definitions may be supplied read-only.
+
+Both adapters keep MCP's output and use host-owned connections and deadlines.
+`Fixtures/FleetRankings` covers HTTP parity, independent rankings and health
+counts. Shared-only tests cover changed thresholds for dBm, signal, temperature
+and fan speed, mutation after capture, and sensor-limit override on and off.
