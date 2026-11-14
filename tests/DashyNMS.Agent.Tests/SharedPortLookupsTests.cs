@@ -77,6 +77,42 @@ public sealed class SharedPortLookupsTests
         Assert.Equal(mcpServer.Requests.Order(), hostServer.Requests.Order());
     }
 
+    [Theory]
+    [InlineData("resources/ip/arp/aa:bb:cc:00:00:05", "arp")]
+    [InlineData("resources/vlans", "vlans")]
+    public async Task Trace_preserves_optional_source_failures_in_host_and_MCP(string path, string source)
+    {
+        var routes = Routes();
+        routes[path] = new(403, "{}");
+        using var server = new FixtureServer(p => routes.GetValueOrDefault(p));
+        using var provider = Connected(server.Root);
+        using var host = HostPortLookups.Create(provider.GetRequiredService<ILibreNmsClient>(), provider.GetRequiredService<ILibreNmsTransport>(), TimeProvider.System, new());
+        var trace = (await host.TraceAsync(new("aa:bb:cc:00:00:05"))).Result!;
+        Assert.True(trace.Data.Found);
+        Assert.Contains(trace.Data.Unavailable!, u => u.Source == source);
+        Assert.Contains(Assert.Single(trace.Observations).Unavailable, u => u.Source == source);
+        var mcp = FakeLibreNms.Parse(await ActivatorUtilities.CreateInstance<TraceTools>(provider).TraceEndpoint("aa:bb:cc:00:00:05"));
+        Assert.Contains(mcp.GetProperty("data").GetProperty("unavailable").EnumerateArray(), u => u.GetProperty("source").GetString() == source);
+    }
+
+    [Fact]
+    public async Task Multi_MAC_trace_retains_link_failures_in_the_MCP_projection()
+    {
+        var routes = Routes();
+        routes["resources/ip/arp/192.0.2.50"] = new(200, """{"status":"ok","arp":[{"mac_address":"aabbcc000005"},{"mac_address":"aabbcc000006"}]}""");
+        routes["resources/fdb/aabbcc000006"] = routes["resources/fdb/aabbcc000005"];
+        routes["resources/links"] = new(403, "{}");
+        using var server = new FixtureServer(p => routes.GetValueOrDefault(p));
+        using var provider = Connected(server.Root);
+        using var host = HostPortLookups.Create(provider.GetRequiredService<ILibreNmsClient>(), provider.GetRequiredService<ILibreNmsTransport>(), TimeProvider.System, new());
+        var trace = (await host.TraceAsync(new("192.0.2.50"))).Result!;
+        Assert.Equal(2, trace.Data.Traces!.Count);
+        Assert.Equal("links", Assert.Single(trace.Data.Unavailable!).Source);
+        var mcp = FakeLibreNms.Parse(await ActivatorUtilities.CreateInstance<TraceTools>(provider).TraceEndpoint("192.0.2.50"));
+        Assert.Equal(2, mcp.GetProperty("data").GetProperty("traces").GetArrayLength());
+        Assert.Equal("links", Assert.Single(mcp.GetProperty("data").GetProperty("unavailable").EnumerateArray()).GetProperty("source").GetString());
+    }
+
     [Fact]
     public async Task Invalid_requests_make_no_reads_and_retirement_cancels_a_pending_port_read()
     {
