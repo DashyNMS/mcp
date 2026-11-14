@@ -626,3 +626,25 @@ Optional reads are Unimus devices/backups/diffs and Graylog search. Hosts
 supply deadlines and immutable connection generations and discard old replies.
 `Fixtures/EventHistory` covers HTTP parity, recovered historical alerts and a
 busy incomplete window. MCP's independent existing expectations remain.
+
+### Graylog search for hosts
+
+`LogSearch` now owns `search_logs` execution over the host's Graylog API.
+MCP retains its schema, window-edge counts, phrase/level/stream filtering,
+device address matching, ordering, top values and deep-paging sample notices.
+Typed results additionally report `SampledMessages`, `NewestRead` and
+`LinesOmitted` for compact formatters. Counts and top values must be described
+with the sample coverage rather than as an exhaustive set of messages.
+
+`HostLogSearch` returns fixed failures and retires pending and cached reads
+on disposal. Hosts control configuration, credentials and certificate trust;
+no environment variables are read. The reviewed routes are Graylog streams
+and relative search, plus LibreNMS devices and optional device IPs for matching.
+The host must offer this tool only when its own Graylog connection is ready.
+`Fixtures/LogSearch` exercises Core's real Graylog client over loopback HTTP.
+
+Log text is redacted before line shortening as well as MCP's final rendering.
+This intentionally strengthens the previous cut-before-redaction path when a
+secret spans the line limit. Ordinary output and caps are unchanged. Optional
+service exceptions map to fixed refusal, not-found, timeout or unavailable
+categories without returning their server text.
