@@ -21,8 +21,8 @@ public enum SensorAssessment
     SensorLimits,
 
     /// <summary>
-    /// Core's default thresholds for dBm, signal, temperature or fan speed, with the sensor's own
-    /// limits winning for any bound they set. A reading in the class's "nothing plugged in" band
+    /// Core's host thresholds for dBm, signal, temperature or fan speed, with the sensor's own
+    /// limits winning unless the host requests an override. A reading in the class's "nothing plugged in" band
     /// stays unknown.
     /// </summary>
     Thresholds,
@@ -34,8 +34,8 @@ public enum SensorAssessment
 /// <summary>
 /// One sensor's reading, judged the way desktop's Health tab judges it
 /// (#24): against the sensor's own LibreNMS limits where it has them, and
-/// desktop's default thresholds for dBm, signal, temperature and fans where
-/// it doesn't (Core's <see cref="SensorCategoryRegistry"/>).
+/// the host's thresholds for dBm, signal, temperature and fans according to
+/// its sensor-limit override choice (Core's <see cref="SensorCategoryRegistry"/>).
 /// </summary>
 /// <param name="State">ok, warning, critical, or unknown (no limits to judge by, or a "nothing plugged in" reading).</param>
 public sealed record SensorReading(
@@ -83,12 +83,16 @@ public sealed record SensorReading(
         ["pressure"] = "kPa",
     };
 
-    public static SensorReading From(Sensor sensor)
+    public static SensorReading From(Sensor sensor) => From(sensor, Defaults);
+
+    /// <summary>Uses the host's captured settings through Core's own evaluator.</summary>
+    public static SensorReading From(Sensor sensor, AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(sensor);
         var bounds = new ThresholdBounds(sensor.LimitLow, sensor.LimitLowWarn, sensor.LimitHighWarn, sensor.LimitHigh);
         IThresholdEvaluator evaluator = SensorCategoryRegistry.Resolve(sensor.SensorClass) is { } entry
-            ? entry.Thresholds(Defaults, sensor)
+            ? entry.Thresholds(settings, sensor)
             : new HybridThresholdEvaluator(default, bounds, overrideSensorLimitsWithAppThresholds: false);
 
         var hasLimits = SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null

@@ -97,8 +97,8 @@ public sealed class SharedSearchFixtureTests
         Assert.Equal(ids, data.GetProperty("devices").EnumerateArray().Select(d => d.GetProperty("device_id").GetInt32()));
         Assert.Equal(total, data.GetProperty("page").GetProperty("total").GetInt32());
         Assert.DoesNotContain("synthetic-secret", text, StringComparison.Ordinal);
-        // Scope: a text search reads the device list and nothing else.
-        Assert.Equal(ExpectedRequests(), wired.Transport.Requests);
+        // Only the returned rows receive maintenance reads.
+        Assert.Equal(ExpectedRequests().Concat(ids.Select(id => $"devices/{id}/maintenance")), wired.Transport.Requests);
     }
 
     [Theory]
@@ -115,7 +115,7 @@ public sealed class SharedSearchFixtureTests
         Assert.Equal(ids, result.Matches.Select(m => m.Device.DeviceId));
         Assert.Equal(total, result.Page.Total);
         Assert.DoesNotContain("synthetic-secret", JsonSerializer.Serialize(result), StringComparison.Ordinal);
-        Assert.Equal(ExpectedRequests(), wired.Transport.Requests);
+        Assert.Equal(ExpectedRequests().Concat(ids.Select(id => $"devices/{id}/maintenance")), wired.Transport.Requests);
     }
 
     /// <summary>

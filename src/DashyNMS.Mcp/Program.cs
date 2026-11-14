@@ -48,6 +48,11 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     GraylogQueryField = options.GraylogField,
     GraylogMatchAnyAddress = options.GraylogMatchAnyAddress,
     ConfigText = options.ConfigText,
+    DbmThresholds = options.SensorSettings.DbmThresholds,
+    SignalThresholds = options.SensorSettings.SignalThresholds,
+    TemperatureThresholds = options.SensorSettings.TemperatureThresholds,
+    FanSpeedThresholds = options.SensorSettings.FanSpeedThresholds,
+    OverrideSensorLimitsWithAppThresholds = options.SensorSettings.OverrideSensorLimitsWithAppThresholds,
 });
 builder.Services
     .AddMcpServer(o =>

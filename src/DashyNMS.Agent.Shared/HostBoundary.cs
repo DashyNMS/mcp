@@ -58,13 +58,17 @@ internal static class HostBoundary
 
     internal static HostFailure Classify(Exception error) => error switch
     {
+        Graphs.GraphDeniedException => HostFailure.Refused,
         ToolException => HostFailure.InvalidRequest,
         Devices.DeviceNotFoundException => HostFailure.NotFound,
         LibreNmsApiException api when api.IsAuthenticationFailure || api.IsPermissionDenied || api.IsAdminOnlyInApi => HostFailure.Refused,
         LibreNmsApiException { StatusCode: System.Net.HttpStatusCode.NotFound } => HostFailure.NotFound,
         LibreNmsApiException { IsTimeout: true } => HostFailure.Timeout,
+        GraylogApiException { IsAuthenticationFailure: true } or UnimusApiException { IsAuthenticationFailure: true } => HostFailure.Refused,
+        GraylogApiException { StatusCode: System.Net.HttpStatusCode.NotFound } or UnimusApiException { StatusCode: System.Net.HttpStatusCode.NotFound } => HostFailure.NotFound,
+        GraylogApiException { InnerException: OperationCanceledException or TimeoutException } or UnimusApiException { InnerException: OperationCanceledException or TimeoutException } => HostFailure.Timeout,
         OperationCanceledException or TimeoutException => HostFailure.Timeout,
-        LibreNmsApiException or HttpRequestException => HostFailure.Unavailable,
+        LibreNmsApiException or GraylogApiException or UnimusApiException or HttpRequestException => HostFailure.Unavailable,
         _ => HostFailure.Failed,
     };
 
