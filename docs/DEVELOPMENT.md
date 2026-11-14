@@ -725,3 +725,8 @@ Sensor assessment metadata distinguishes sensor limits, host thresholds and a
 mix of both. Partial device limits can use host fallback bounds. dBm and signal
 always use host sentinel bands, so their sensor limits yield a mixed assessment.
 Core still evaluates severity; MCP's serialised readings remain unchanged.
+
+Shared-package CI also compiles a small consumer against the pinned Agent revision
+before `DeviceResolver` moved, then runs that unchanged consumer with the current
+Agent and Shared DLLs. This checks binary type forwarding for the resolver and its
+nested candidate API; a fresh source build against Shared would miss that failure.

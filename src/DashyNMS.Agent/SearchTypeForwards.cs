@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.DeviceSummary))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.DeviceBrief))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceDirectory))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceResolver))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceScope))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.Scope))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.DeviceSearch))]
