@@ -109,15 +109,19 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var now = time.GetUtcNow().UtcDateTime;
         var summary = AlertSummary.From(alert, options);
 
-        // Earlier occurrences of this rule on this device (#76): eight cores
-        // going into alert together are one, and the newest is this alert's own
-        // (as Core's AlertHistory counts them for the apps).
+        // Eight cores going into alert together are one occurrence. Locate the
+        // occurrence containing this alert's last state change, including a recovery,
+        // rather than assuming a requested recovered alert is the newest one.
         var historyFailed = history.Result.Error is not null;
         var log = history.Result.Value ?? [];
         var occurrences = AlertOccurrences.From(log, options)
             .Where(o => o.DeviceId == alert.DeviceId && o.RuleId == alert.RuleId)
             .ToList();
-        var earlier = occurrences.Take(Math.Max(0, occurrences.Count - 1)).ToList();
+        var selected = summary.Since is { } changedAt
+            ? occurrences.FindLastIndex(o => (o.Started is null || o.Started <= changedAt) && (o.Ended is null || o.Ended >= changedAt))
+            : -1;
+        var historyUnknown = historyFailed || selected < 0;
+        var earlier = occurrences.Take(Math.Max(0, selected)).ToList();
         var firings = earlier
             .Where(o => o.Started is { } started && now - started <= HistoryPeriod)
             .Select(o => o.Started!.Value)
@@ -144,10 +148,12 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
                 faults.Select(f => new DetailFault(redactor.Redact(f.Title), f.PrimaryFields.Take(MaxFaultFields)
                     .Select(x => new TriggerValue(redactor.Redact(x.Name), redactor.Redact(x.Value))).ToList())).ToList(),
                 omittedFaults > 0 ? omittedFaults : null),
-            new DetailHistory(historyFailed ? null : firings.Count, historyFailed ? null : historyIncomplete ? true : null, firings.Take(RecentFirings).ToList(), Available: !historyFailed),
+            new DetailHistory(historyUnknown ? null : firings.Count, historyUnknown ? null : historyIncomplete ? true : null, firings.Take(RecentFirings).ToList(), Available: !historyUnknown),
             unavailable.Count > 0 ? unavailable : null);
 
-        var times = historyFailed ? "the alert history couldn't be read, so previous firings are unknown" : (firings.Count, historyIncomplete) switch
+        var times = historyFailed ? "the alert history couldn't be read, so previous firings are unknown"
+            : selected < 0 ? "the selected occurrence couldn't be identified in the alert history, so previous firings are unknown"
+            : (firings.Count, historyIncomplete) switch
         {
             (0, true) => "no earlier firing in the alert log LibreNMS returned, which doesn't cover the whole 30 days",
             (0, _) => "the first time this rule has fired on this device in 30 days",
