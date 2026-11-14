@@ -14,6 +14,19 @@ public sealed class AlertHistoryToolsTests
     private RuleTools Rules() => new(_nms.Client, _nms.Fleet, _nms.Directory, _nms.Scope, _nms.Runner, _nms.Options, _nms.Time);
 
     [Fact]
+    public async Task Recovered_alert_details_never_count_later_occurrences_as_previous()
+    {
+        Log("logs/alertlog/1", [Row(1, null, 1, "2026-10-08 09:00:00"), Row(2, null, 0, "2026-10-08 10:00:00"),
+            Row(3, null, 1, "2026-10-17 09:00:00")]);
+        _nms.Transport.On("alerts/12", """{"status":"ok","alerts":[{"id":12,"device_id":1,"rule_id":5,"state":0,"timestamp":"2026-10-08 10:00:00","severity":"warning"}]}""");
+        var root = FakeLibreNms.Parse(await Rules().AlertDetails(12, CancellationToken.None));
+        var history = root.GetProperty("data").GetProperty("history");
+        Assert.Equal(0, history.GetProperty("fired_before_in_30_days").GetInt32());
+        Assert.Empty(history.GetProperty("recent").EnumerateArray());
+        Assert.Contains("the first time", root.GetProperty("summary").GetString()!);
+    }
+
+    [Fact]
     public async Task Eight_cores_firing_together_are_one_raise()
     {
         // At 02:00 eight cores go into alert; they recover one by one from 03:00.
