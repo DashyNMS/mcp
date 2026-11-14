@@ -23,5 +23,7 @@ public static class EventWindowText
         => $"{Describe(window, now)}: {DeviceHealth.Count(result.Events, "event")}, " +
             $"{DeviceHealth.Count(result.AlertChanges, "alert change")}, {DeviceHealth.Count(result.Outages, "outage")}" +
             (result.Unavailable.Count > 0 ? $" ({DeviceHealth.Count(result.Unavailable.Count, "log")} couldn't be read)" : string.Empty) +
-            (result.WindowComplete ? "." : $". LibreNMS's logs only reach back to {result.CoveredSince:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.");
+            (result.WindowComplete ? "." : result.CoveredSince is null
+                ? ". History coverage is unknown because a source couldn't be read."
+                : $". LibreNMS's logs only reach back to {result.CoveredSince:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.");
 }
