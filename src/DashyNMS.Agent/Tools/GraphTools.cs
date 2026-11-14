@@ -94,7 +94,13 @@ public sealed class GraphTools(
         var span = operation.Span(rangeText, since, until);
         var device = await resolver.ResolveAsync(deviceQuery, cancellationToken).ConfigureAwait(false);
         var result = await operation.ReadAsync(device, span, typeText, portQuery, sensorQuery, legend, cancellationToken).ConfigureAwait(false);
-        return (ToolResult.Ok(result.Summary, result.Data, result.Omitted), result.Image?.Data);
+        var summary = result.Summary;
+        if (result.Unavailable.Count > 0 && result.Image is not null)
+            summary += " Some graph listings couldn't be read, so the available types are incomplete.";
+        var response = ToolResult.Ok(summary, result.Data, result.Omitted);
+        if (result.Unavailable.Count > 0)
+            response["data"]!["unavailable"] = System.Text.Json.JsonSerializer.SerializeToNode(result.Unavailable, ToolResult.Json);
+        return (response, result.Image?.Data);
     }
 
     internal static (string Type, string Description) PortType(string? text) => DashyNMS.Agent.Graphs.GraphLookup.PortType(text);
