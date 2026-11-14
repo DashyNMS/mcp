@@ -124,19 +124,20 @@ public static class ConfigDiff
         var lines = new List<string>();
         int removed = 0, added = 0;
         bool originalInKey = false, revisedInKey = false;
-        string? originalSecret = null, revisedSecret = null;
+        var originalSecret = new Redactor.SecretElementContext();
+        var revisedSecret = new Redactor.SecretElementContext();
         foreach (var group in diff.LineGroups)
         {
             if (group.IsCommon)
             {
                 foreach (var line in group.OriginalLines)
                 {
-                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), ref originalSecret);
+                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), originalSecret);
                 }
 
                 foreach (var line in group.RevisedLines.Count > 0 ? group.RevisedLines : group.OriginalLines)
                 {
-                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), ref revisedSecret);
+                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), revisedSecret);
                 }
 
                 continue;
@@ -144,13 +145,13 @@ public static class ConfigDiff
 
             foreach (var line in group.OriginalLines)
             {
-                lines.Add("- " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), ref originalSecret));
+                lines.Add("- " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), originalSecret));
                 removed++;
             }
 
             foreach (var line in group.RevisedLines)
             {
-                lines.Add("+ " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), ref revisedSecret));
+                lines.Add("+ " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), revisedSecret));
                 added++;
             }
         }

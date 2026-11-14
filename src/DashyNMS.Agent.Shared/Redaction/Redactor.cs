@@ -146,39 +146,50 @@ public sealed partial class Redactor
         return inKey ? Marker : line;
     }
 
-    /// <summary>Tracks recognised XML secrets before a diff drops context or truncates lines.</summary>
-    public static string MaskSecretElementLine(string line, ref string? secretElement)
+    internal sealed class SecretElementContext
+    {
+        internal List<string> Elements { get; } = [];
+        internal string? RegionEnd { get; set; }
+    }
+
+    /// <summary>Tracks XML syntax before a diff drops context or truncates lines.</summary>
+    internal static string MaskSecretElementLine(string line, SecretElementContext context)
     {
         ArgumentNullException.ThrowIfNull(line);
-        var masked = secretElement is not null;
-        foreach (Match tag in SecretElementTag().Matches(line))
+        var masked = context.Elements.Count > 0;
+        foreach (Match token in XmlDiffToken().Matches(line))
         {
-            var name = tag.Groups["name"].Value;
-            if (tag.Groups["close"].Success)
+            if (context.RegionEnd is { } end)
             {
-                if (secretElement is not null)
-                {
-                    var separator = secretElement.LastIndexOf('/');
-                    if (string.Equals(name, secretElement[(separator + 1)..], StringComparison.OrdinalIgnoreCase))
-                        secretElement = separator < 0 ? null : secretElement[..separator];
-                }
+                if (token.Value == end) context.RegionEnd = null;
+                continue;
             }
-            else if (!tag.Groups["self"].Success)
+            if (token.Value is "<!--" or "<![CDATA[")
             {
-                secretElement = secretElement is null ? name : secretElement + "/" + name;
+                context.RegionEnd = token.Value == "<!--" ? "-->" : "]]>";
+                continue;
             }
+            var name = token.Groups["name"].Value;
+            if (!SecretElements.Contains(name)) continue;
+            if (token.Groups["close"].Success)
+            {
+                if (context.Elements.Count > 0 && string.Equals(name, context.Elements[^1], StringComparison.OrdinalIgnoreCase))
+                    context.Elements.RemoveAt(context.Elements.Count - 1);
+            }
+            else if (!token.Groups["self"].Success) context.Elements.Add(name);
             masked = true;
         }
-
-        // Mask the whole line, including any inline body or nested content. Each diff side
-        // owns its state: a changed closing tag must not affect the other side.
         return masked ? Marker : line;
     }
 
     private const string SecretElementNames = "password|bcrypt-hash|sha512-hash|md5-hash|pwhash|pre-shared-key|apikey|prv|authkey|secret|rocommunity|trapstring|tls|shared_key|device_key|ldap_bindpw|radius_secret|radius_secret2|privatekey|presharedkey|auth_pass";
 
-    [GeneratedRegex(@"<(?<close>/)?(?<name>" + SecretElementNames + @")(?:\s+[^<>]*?)?\s*(?<self>/)?>", RegexOptions.IgnoreCase)]
-    private static partial Regex SecretElementTag();
+    private static readonly HashSet<string> SecretElements = new(SecretElementNames.Split('|'), StringComparer.OrdinalIgnoreCase);
+
+    // Consume complete tags, including quoted attributes, so markup-like attribute text
+    // cannot close a secret element. Comments and CDATA have their own cross-line state.
+    [GeneratedRegex("""<!--|<!\[CDATA\[|-->|\]\]>|<(?<close>/)?(?<name>[A-Za-z_][\w.:-]*)(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*?)?\s*(?<self>/)?>""")]
+    private static partial Regex XmlDiffToken();
 
     [GeneratedRegex(@"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")]
     private static partial Regex PrivateKeyBegin();

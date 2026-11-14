@@ -738,3 +738,6 @@ entries remain available, and the summary explicitly reports unknown coverage.
 `what_changed` leaves `ConfigChanged` unknown when Unimus has no backups or a
 version began in the window without an earlier backup to compare. It reports
 the missing baseline while retaining usable LibreNMS and Graylog results.
+
+Config-diff XML context tracks comments and CDATA independently on both sides.
+A tag shown as comment or CDATA text cannot terminate secret-body redaction.
