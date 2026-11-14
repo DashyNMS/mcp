@@ -533,3 +533,27 @@ The shared dependency closure now includes the fleet cache, time window,
 timeline and alert occurrence helpers. Cached fleet reads check cancellation
 before returning cached data and before storing a completed fetch, so a late
 cancelled response cannot populate that cache.
+
+### Ports and topology for hosts
+
+`PortStatus`, `DeviceNeighbours` and `TraceEndpoint` now own the execution
+behind the corresponding MCP tools. MCP keeps its schemas, field names,
+ordering and caps. Host requests use a visible device ID rather than a name;
+hosts resolve names with the shared resolver. Port matching retains its ID,
+exact-text and partial-text tiers, refusing ambiguity. Neighbours include
+reverse-only links and distinguish a known remote device from an unmonitored
+hostname. All network-supplied display strings are redacted.
+
+`HostPortLookups` owns one connection's directory and fleet caches. It returns
+fixed failure codes and partial-source notices, cancels waits when disposed,
+and refuses later cached reads. Its reads are the device list, that device's
+ports and links, fleet links and VLANs, ARP lookups, FDB lookups by a validated
+MAC or IPv4 address, and bounded per-device FDB/port reads. Raw writes are
+never required. Mobile must review these paths in its transport allowlist.
+
+Endpoint tracing reports stored observations, never ownership. The typed
+result retains per-MAC omissions and source notices in `Observations`, even
+when MCP's multi-MAC projection leaves them out. Host formatters must show
+those limitations and count their own presentation omissions. Synthetic
+`Fixtures/PortLookups` covers port rates, reverse neighbours and an edge-port
+trace over HTTP; existing MCP tests retain the broader ambiguity/cap cases.
