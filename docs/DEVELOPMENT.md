@@ -698,3 +698,10 @@ an explicit unknown notice and the failed listing names. A complete successful
 listing can establish absence. If every listing fails, the host gets a source
 failure, including refusal or timeout where established, rather than an invalid
 request. MCP uses the same uncertainty notices and source-failure messages.
+
+Typed VLAN sections are absent when their source failed, rather than empty with
+a zero total. Alert detail history has an unknown previous-firing count and an
+explicit availability flag when the log failed; its summary never calls that a
+first firing. These failure-case corrections also apply to MCP. Typed rule
+applicability retains each target's ID and redacted name; MCP continues to
+project the same name strings, including when names are duplicated.

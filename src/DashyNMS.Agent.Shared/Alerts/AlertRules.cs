@@ -17,11 +17,12 @@ public sealed record DetailRule(int RuleId, string Name, string Severity, string
 public sealed record TriggerValue(string Field, string Value);
 public sealed record DetailFault(string What, IReadOnlyList<TriggerValue> TriggerValues);
 public sealed record DetailWhy(int Matched, DateTime? RecordedAt, bool RuleConditionKnown, IReadOnlyList<DetailFault> Faults, int? FaultsOmitted);
-public sealed record DetailHistory([property: JsonPropertyName("fired_before_in_30_days")] int FiredBeforeIn30Days, bool? AtLeast, IReadOnlyList<DateTime> Recent);
+public sealed record DetailHistory([property: JsonPropertyName("fired_before_in_30_days")] int? FiredBeforeIn30Days, bool? AtLeast, IReadOnlyList<DateTime> Recent, [property: JsonIgnore] bool Available = true);
 public sealed record AlertDetailsData(DetailAlert Alert, AlertGroupSummary? Group, DeviceBrief? Device,
     DetailRule Rule, DetailWhy Why, DetailHistory History, IReadOnlyList<Unavailable>? Unavailable);
 public sealed record AlertDetailsResult(string Summary, AlertDetailsData Data, AlertKey Identity);
-public sealed record RuleTargets(bool? Except, IReadOnlyList<string>? Devices, IReadOnlyList<string>? Groups, IReadOnlyList<string>? Locations);
+public sealed record RuleTarget(int Id, string Name);
+public sealed record RuleTargets(bool? Except, IReadOnlyList<RuleTarget>? Devices, IReadOnlyList<RuleTarget>? Groups, IReadOnlyList<RuleTarget>? Locations);
 public sealed record RuleApplicability(bool AllDevices, RuleTargets? Targets);
 public sealed record RemovedRuleColumn(string Column, string RemovedIn, string? Replacement, string Advice);
 public sealed record AlertRuleRow(int RuleId, string Name, string Severity, bool Enabled, string? Condition,
@@ -111,6 +112,7 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         // Earlier occurrences of this rule on this device (#76): eight cores
         // going into alert together are one, and the newest is this alert's own
         // (as Core's AlertHistory counts them for the apps).
+        var historyFailed = history.Result.Error is not null;
         var log = history.Result.Value ?? [];
         var occurrences = AlertOccurrences.From(log, options)
             .Where(o => o.DeviceId == alert.DeviceId && o.RuleId == alert.RuleId)
@@ -142,10 +144,10 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
                 faults.Select(f => new DetailFault(redactor.Redact(f.Title), f.PrimaryFields.Take(MaxFaultFields)
                     .Select(x => new TriggerValue(redactor.Redact(x.Name), redactor.Redact(x.Value))).ToList())).ToList(),
                 omittedFaults > 0 ? omittedFaults : null),
-            new DetailHistory(firings.Count, historyIncomplete ? true : null, firings.Take(RecentFirings).ToList()),
+            new DetailHistory(historyFailed ? null : firings.Count, historyFailed ? null : historyIncomplete ? true : null, firings.Take(RecentFirings).ToList(), Available: !historyFailed),
             unavailable.Count > 0 ? unavailable : null);
 
-        var times = (firings.Count, historyIncomplete) switch
+        var times = historyFailed ? "the alert history couldn't be read, so previous firings are unknown" : (firings.Count, historyIncomplete) switch
         {
             (0, true) => "no earlier firing in the alert log LibreNMS returned, which doesn't cover the whole 30 days",
             (0, _) => "the first time this rule has fired on this device in 30 days",
@@ -250,9 +252,9 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
             return new AlertRuleRow(r.Id, redactor.Redact(r.Name ?? $"Rule {r.Id}"),
                 r.Severity.ToString().ToLowerInvariant(), !r.Disabled, Clean(Condition(r)),
                 new RuleApplicability(everywhere, everywhere ? null : new RuleTargets(r.InvertMap ? true : null,
-                    r.Devices.Count > 0 ? r.Devices.Select(id => redactor.Redact(hostnames.GetValueOrDefault(id) ?? $"device {id}")).ToList() : null,
-                    r.Groups.Count > 0 ? r.Groups.Select(id => redactor.Redact(groupNames.GetValueOrDefault(id) ?? $"group {id}")).ToList() : null,
-                    r.Locations.Count > 0 ? r.Locations.Select(id => redactor.Redact(locationNames.GetValueOrDefault(id) ?? $"location {id}")).ToList() : null)),
+                    r.Devices.Count > 0 ? r.Devices.Select(id => new RuleTarget(id, redactor.Redact(hostnames.GetValueOrDefault(id) ?? $"device {id}"))).ToList() : null,
+                    r.Groups.Count > 0 ? r.Groups.Select(id => new RuleTarget(id, redactor.Redact(groupNames.GetValueOrDefault(id) ?? $"group {id}"))).ToList() : null,
+                    r.Locations.Count > 0 ? r.Locations.Select(id => new RuleTarget(id, redactor.Redact(locationNames.GetValueOrDefault(id) ?? $"location {id}"))).ToList() : null)),
                 templateByRule is null ? null : Clean(templateByRule.GetValueOrDefault(r.Id) ?? "default"),
                 r.NotifyPerEntity, r.MaxEntities, r.NotifyPerEntity == true && r.MaxEntities is null ? true : null,
                 PerEntityNote(r), RemovedColumns(r, serverVersion), x.Open, x.Raised,
