@@ -557,3 +557,23 @@ when MCP's multi-MAC projection leaves them out. Host formatters must show
 those limitations and count their own presentation omissions. Synthetic
 `Fixtures/PortLookups` covers port rates, reverse neighbours and an edge-port
 trace over HTTP; existing MCP tests retain the broader ambiguity/cap cases.
+
+### Device detail sections for hosts
+
+`DeviceDetails` owns `device_details` execution and returns typed optional
+sections for inventory, VLANs, FDB, ARP, PoE, wireless, routing, availability
+and addresses. MCP uses the same operation and retains its section aliases,
+default selection, field names, ordering, per-section paging and notices.
+`ReturnedSections` and `SectionTotals` are host metadata outside MCP's data,
+so hosts can count rows omitted by presentation budgets without parsing JSON.
+A successful empty section stays distinct from a failed or unrequested one.
+
+`HostDeviceDetails` returns fixed failure codes and source notices. It owns
+no transport, cancels pending waits on disposal and refuses later cached
+reads. The reviewed routes are the device list and, only for requested
+sections, device ports, VLANs, inventory, FDB, ARP, sensor/health routes for
+PoE, wireless sensors, routing resources, availability and device IPs.
+Hosts must review those reads in their endpoint allowlist and discard replies
+from retired generations. All network-supplied display strings are redacted.
+`Fixtures/DeviceDetails` covers the sections over loopback HTTP; existing MCP
+field expectations remain, with additional host paging and refusal checks.
