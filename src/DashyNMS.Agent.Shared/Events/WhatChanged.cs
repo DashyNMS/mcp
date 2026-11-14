@@ -120,7 +120,7 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
             var changed = backups.FindIndex(b => b.ValidSinceUtc is { } began && window.Contains(began));
             if (changed < 0 || changed + 1 >= backups.Count)
             {
-                return (backups, -1, null);
+                return (backups, changed, null);
             }
 
             return (backups, changed, await unimus.GetDiffAsync(backups[changed + 1].Id, backups[changed].Id, cancellationToken).ConfigureAwait(false));
@@ -133,6 +133,20 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
 
         var (list, index, diff) = fetched.Value;
         var latest = list.FirstOrDefault();
+        if (diff is null && (index >= 0 || latest is null))
+        {
+            var reason = index >= 0
+                ? "A config version starts in this window, but no earlier backup is available to compare."
+                : "No config backups are available to compare.";
+            return (new ConfigChangeData
+            {
+                Configured = true,
+                DeviceFound = true,
+                LatestBackupSince = latest?.ValidSinceUtc,
+                LastBackedUp = latest?.ValidUntilUtc,
+                Warning = reason,
+            }, "Config change in Unimus is unknown. " + reason);
+        }
         if (diff is null)
         {
             return (new ConfigChangeData

@@ -2,6 +2,7 @@ using System.Text.Json;
 using DashyNMS.Agent.Events;
 using DashyNMS.Agent.Tools;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
@@ -157,6 +158,45 @@ public sealed class SharedEventLookupsTests
         Assert.Contains("coverage is unknown", changes.Summary);
         var mcp = FakeLibreNms.Parse(await ActivatorUtilities.CreateInstance<EventTools>(provider).DeviceEvents("1"));
         Assert.False(mcp.GetProperty("data").GetProperty("window").GetProperty("window_complete").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Config_change_without_a_comparable_baseline_is_unknown(bool hasInWindowBackup)
+    {
+        var nms = new FakeLibreNms();
+        var unimus = Substitute.For<IUnimusApi>();
+        var graylog = Substitute.For<IGraylogApi>();
+        unimus.IsConfigured.Returns(true);
+        unimus.ListAllDevicesAsync(Arg.Any<CancellationToken>()).Returns(new[] { new UnimusDevice { Id = 40, Address = "10.0.0.1" } });
+        unimus.GetBackupsAsync(40, 0, 10, Arg.Any<CancellationToken>()).Returns(new UnimusBackupPage
+        {
+            Backups = hasInWindowBackup
+                ? [new UnimusBackup { Id = 901, ValidSince = FakeLibreNms.Now.AddHours(-2).ToUnixTimeSeconds() }]
+                : [],
+        });
+        // The optional log source remains usable while the config comparison is unknown.
+        graylog.IsConfigured.Returns(true);
+        graylog.SearchAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(new GraylogSearchResult { TotalResults = 4 });
+        using var host = HostEventLookups.Create(nms.Client, unimus, graylog, nms.Time, nms.Options);
+        var result = (await host.ReadChangesAsync(new(1, Hours: 24))).Result!;
+        Assert.True(result.Data.Unimus.Configured);
+        Assert.True(result.Data.Unimus.DeviceFound);
+        Assert.Null(result.Data.Unimus.ConfigChanged);
+        Assert.Null(result.Data.Unimus.ChangedLines);
+        Assert.NotNull(result.Data.Unimus.Warning);
+        Assert.Contains("Config change in Unimus is unknown", result.Summary);
+        Assert.DoesNotContain("No config change", result.Summary);
+        Assert.Equal(4L, result.Data.Graylog.MessageCount);
+        Assert.NotEmpty(result.Data.Librenms.Entries);
+        var tools = new EventTools(nms.Client, unimus, graylog, new DashyNMS.Agent.Devices.UnimusDirectory(unimus, nms.Options, nms.Time),
+            nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
+        var mcp = FakeLibreNms.Parse(await tools.WhatChanged("1", hours: 24));
+        Assert.False(mcp.GetProperty("data").GetProperty("unimus").TryGetProperty("config_changed", out _));
+        Assert.Contains("Config change in Unimus is unknown", mcp.GetProperty("summary").GetString()!);
+        await unimus.DidNotReceive().GetDiffAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
