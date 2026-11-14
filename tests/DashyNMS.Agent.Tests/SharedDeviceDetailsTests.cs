@@ -59,6 +59,19 @@ public sealed class SharedDeviceDetailsTests
     }
 
     [Fact]
+    public async Task Routing_only_reads_keep_interface_names_for_both_OSPF_versions()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.On("ospf", """{"status":"ok","ospf_neighbours":[{"device_id":1,"port_id":101}]}""")
+            .On("ospfv3", """{"status":"ok","ospfv3_neighbours":[{"device_id":1,"port_id":101}]}""");
+        using var host = HostDeviceDetails.Create(nms.Client, nms.Transport, nms.Time);
+        var result = (await host.ReadAsync(new(1, ["routing"]))).Result!;
+        Assert.Equal(2, result.Data.Routing!.OspfNeighbours.Count);
+        Assert.All(result.Data.Routing.OspfNeighbours, n => Assert.Equal("1/1/1", n.Port));
+        Assert.Contains("devices/1/ports", nms.Transport.Requests);
+    }
+
+    [Fact]
     public async Task Refused_VLANs_are_unavailable_and_a_successful_empty_list_is_distinct()
     {
         var nms = new FakeLibreNms();
