@@ -39,3 +39,5 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.RuleOccurrence))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.TimeWindow))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.AlertLogKinds))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.UnimusDirectory))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.ConfigDiff))]

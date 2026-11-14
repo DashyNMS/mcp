@@ -600,3 +600,29 @@ Both adapters keep MCP's output and use host-owned connections and deadlines.
 `Fixtures/FleetRankings` covers HTTP parity, independent rankings and health
 counts. Shared-only tests cover changed thresholds for dBm, signal, temperature
 and fan speed, mutation after capture, and sensor-limit override on and off.
+
+### Historical events, changes and alerts for hosts
+
+`DeviceEventHistory`, `NetworkEventHistory`, `RaisedAlerts` and `WhatChanged`
+now own the historical operations MCP runs. They retain time-window parsing,
+filters, event/alert/outage merging, occurrence reconstruction, ordering, caps
+and paging. `EventWindowInfo` reports coverage; a log that reaches its read
+cap inside a requested window does not claim the whole window was read.
+Historical alerts include recovered occurrences, with nullable `StillOpen`.
+Typed results additionally expose rule-name and open-status source failures
+that MCP's existing projection leaves implicit. They must not be read as a
+known severity or a known empty open set by host formatters.
+
+`WhatChanged` accepts the host's Unimus and Graylog clients, which may be
+unconfigured. It preserves config text full/summary/off policy and private-key
+redaction, and its Graylog count retains the existing restriction to windows
+ending now. `HostEventLookups` maps errors to fixed codes or source notices,
+cancels pending waits on disposal and refuses later cached reads. No client,
+credential or environment configuration is created by the shared operations.
+
+The reviewed LibreNMS reads are devices, event and alert logs, outages, rules,
+open alerts, groups/membership and optional device IPs for Graylog matching.
+Optional reads are Unimus devices/backups/diffs and Graylog search. Hosts
+supply deadlines and immutable connection generations and discard old replies.
+`Fixtures/EventHistory` covers HTTP parity, recovered historical alerts and a
+busy incomplete window. MCP's independent existing expectations remain.

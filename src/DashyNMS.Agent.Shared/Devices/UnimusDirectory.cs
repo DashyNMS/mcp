@@ -35,6 +35,7 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
 
     public async Task<IReadOnlyList<UnimusDevice>> GetAllAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Fresh() is { } devices)
         {
             return devices;
@@ -43,12 +44,14 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
                 return fetched;
             }
 
             var list = await unimus.ListAllDevicesAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             _devices = list;
             _fetchedAt = time.GetUtcNow();
             return list;
@@ -151,7 +154,8 @@ public static class ConfigDiff
             }
         }
 
-        var shown = ToolResult.Take(lines, maxLines, out var omitted);
+        var omitted = Math.Max(0, lines.Count - maxLines);
+        var shown = lines.Take(maxLines).ToList();
         return (string.Join('\n', shown), lines.Count, removed, added, omitted);
     }
 }
