@@ -129,7 +129,7 @@ public sealed class EventToolsTests
     }
 
     [Fact]
-    public async Task Interface_addresses_that_cant_be_read_still_leave_a_search()
+    public async Task Interface_address_failure_marks_Graylog_unavailable_without_narrowing_the_search()
     {
         var nms = new FakeLibreNms(new AgentOptions { GraylogMatchAnyAddress = true });
         nms.Transport.Fails("devices/1/ip", System.Net.HttpStatusCode.Forbidden);
@@ -140,7 +140,11 @@ public sealed class EventToolsTests
 
         var root = FakeLibreNms.Parse(await tools.WhatChanged("core-sw1", 24, cancellationToken: CancellationToken.None));
 
-        Assert.Equal(3, root.GetProperty("data").GetProperty("graylog").GetProperty("message_count").GetInt64());
+        var graylog = root.GetProperty("data").GetProperty("graylog");
+        Assert.False(graylog.TryGetProperty("message_count", out _));
+        Assert.Contains("interface addresses couldn't be read", graylog.GetProperty("error").GetString()!);
+        await _graylog.DidNotReceive().SearchAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

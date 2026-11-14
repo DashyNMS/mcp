@@ -11,8 +11,8 @@ public static class GraylogDeviceAddresses
         IReadOnlyList<DeviceIpAddress>? interfaceAddresses = null;
         if (options.GraylogMatchAnyAddress)
         {
-            var fetched = await Sources.TryAsync(() => client.Ports.ListIpAddressesAsync(device.DeviceId, cancellationToken), cancellationToken).ConfigureAwait(false);
-            interfaceAddresses = fetched.Value;
+            // A caller asking for every address must not get a silently narrower search.
+            interfaceAddresses = await client.Ports.ListIpAddressesAsync(device.DeviceId, cancellationToken).ConfigureAwait(false);
         }
 
         return GraylogQuery.DeviceAddresses(device, resolvedHostname: null, interfaceAddresses);
