@@ -734,3 +734,7 @@ nested candidate API; a fresh source build against Shared would miss that failur
 A failed event log, alert log or outage read makes the common history window
 incomplete with unknown coverage (`CoveredSince = null`). Successful sources'
 entries remain available, and the summary explicitly reports unknown coverage.
+
+`what_changed` leaves `ConfigChanged` unknown when Unimus has no backups or a
+version began in the window without an earlier backup to compare. It reports
+the missing baseline while retaining usable LibreNMS and Graylog results.
