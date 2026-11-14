@@ -510,3 +510,26 @@ Filtering and ranking still use the original reported status before paging.
 Caller cancellation propagates; an individual failed maintenance check leaves
 that row's reported state intact. The shared search fixtures record the extra
 requests and distinguish failed checks from known inactive maintenance.
+
+### Alert details and rules for hosts
+
+`AlertRules` executes both `alert_details` and `alert_rules`; MCP keeps its
+schema and formatting, including the string or object `applies_to` field.
+The typed rule row uses `RuleApplicability`, with `AllDevices` and typed
+`Targets`, so app hosts never inspect anonymous JSON. The request's verbose
+flag controls notes and procedures as in MCP. Rules retain the existing
+name, open and raised sorts, paging and unavailable-source list.
+
+`HostAlertRules` returns fixed failure categories and fixed partial-source
+messages. Its detail request can require an `AlertSource`; a mismatched
+returned source or ID fails rather than opening another object with the
+same number. The result includes the source-qualified `Identity`. A failed
+history or rule read is marked unavailable and must not be presented as a
+complete history or a known absent rule. Dispose it when the captured
+connection retires. `Fixtures/AlertRules` contains the synthetic HTTP bundle.
+The existing MCP tests continue to hold independent expected fields.
+
+The shared dependency closure now includes the fleet cache, time window,
+timeline and alert occurrence helpers. Cached fleet reads check cancellation
+before returning cached data and before storing a completed fetch, so a late
+cancelled response cannot populate that cache.
