@@ -137,6 +137,34 @@ public sealed class SharedConfigLookupsTests
         Assert.Equal($"- {Redactor.Marker}\n+ {Redactor.Marker}\n+ vlan 120", rendered.Text);
     }
 
+    [Theory]
+    [InlineData("<secret\n>")]
+    [InlineData("<secret note=\"example\n</secret>\n>\"\n>")]
+    public void Split_opening_tags_and_quoted_attributes_keep_both_secret_bodies_hidden(string opening)
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = opening.Split('\n').Select(t => new UnimusDiffLine { Text = t }).ToList() },
+            new UnimusDiffLineGroup { Type = "CHANGED",
+                OriginalLines = [new() { Text = "SyntheticOldBody" }], RevisedLines = [new() { Text = "SyntheticNewBody" }] },
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "</secret>" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "vlan 120" }] },
+        ] };
+        var rendered = ConfigDiff.Render(diff);
+        Assert.Equal($"- {Redactor.Marker}\n+ {Redactor.Marker}\n+ vlan 120", rendered.Text);
+    }
+
+    [Fact]
+    public void Oversized_unfinished_XML_syntax_keeps_subsequent_text_hidden()
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "<secret note=\"" + new string('x', 4096) }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", RevisedLines = [new() { Text = "SyntheticSecretBody" }] },
+        ] };
+        Assert.Equal("+ " + Redactor.Marker, ConfigDiff.Render(diff).Text);
+    }
+
     [Fact]
     public void Xml_secret_context_is_independent_on_each_side()
     {

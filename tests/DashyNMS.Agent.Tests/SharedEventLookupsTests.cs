@@ -240,6 +240,35 @@ public sealed class SharedEventLookupsTests
     }
 
     [Fact]
+    public async Task Change_history_masks_secrets_inside_split_common_XML_tags()
+    {
+        var nms = new FakeLibreNms();
+        var unimus = Substitute.For<IUnimusApi>();
+        var graylog = Substitute.For<IGraylogApi>();
+        unimus.IsConfigured.Returns(true);
+        unimus.ListAllDevicesAsync(Arg.Any<CancellationToken>()).Returns(new[] { new UnimusDevice { Id = 40, Address = "10.0.0.1" } });
+        unimus.GetBackupsAsync(40, 0, 10, Arg.Any<CancellationToken>()).Returns(new UnimusBackupPage { Backups =
+        [new UnimusBackup { Id = 901, ValidSince = FakeLibreNms.Now.AddHours(-2).ToUnixTimeSeconds() },
+         new UnimusBackup { Id = 900, ValidSince = FakeLibreNms.Now.AddHours(-30).ToUnixTimeSeconds() }] });
+        unimus.GetDiffAsync(900, 901, Arg.Any<CancellationToken>()).Returns(new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "<secret" }, new() { Text = ">" }] },
+            new UnimusDiffLineGroup { Type = "CHANGED", OriginalLines = [new() { Text = "SyntheticOldBody" }],
+                RevisedLines = [new() { Text = "SyntheticNewBody" }] },
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "</secret>" }] },
+        ] });
+        using var host = HostEventLookups.Create(nms.Client, unimus, graylog, nms.Time, nms.Options);
+        var result = (await host.ReadChangesAsync(new(1, Hours: 24))).Result!;
+        var expected = $"- {DashyNMS.Agent.Redaction.Redactor.Marker}\n+ {DashyNMS.Agent.Redaction.Redactor.Marker}";
+        Assert.Equal(expected, result.Data.Unimus.ConfigDiff);
+        var tools = new EventTools(nms.Client, unimus, graylog, new DashyNMS.Agent.Devices.UnimusDirectory(unimus, nms.Options, nms.Time),
+            nms.Resolver, nms.Timeline, nms.Runner, nms.Options, nms.Time);
+        var mcp = FakeLibreNms.Parse(await tools.WhatChanged("1", hours: 24));
+        Assert.Equal(expected, mcp.GetProperty("data").GetProperty("unimus").GetProperty("config_diff").GetString());
+        Assert.DoesNotContain("Synthetic", mcp.GetRawText());
+    }
+
+    [Fact]
     public async Task A_busy_log_reports_an_incomplete_window_and_host_retirement_refuses_cached_reads()
     {
         var routes = Routes();

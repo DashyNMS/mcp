@@ -753,3 +753,7 @@ time before counting earlier firings. If it cannot identify that occurrence,
 the earlier count is unknown. `what_changed` reads up to 20 pages of 10 backup
 versions to cover the window and a preceding version. A capped search without
 a comparable change remains unknown instead of reporting no change.
+
+XML diff redaction carries unfinished tags and quoted attributes across lines.
+It bounds retained tag text and nesting depth, and masks all subsequent text
+when those bounds are exceeded rather than resuming with unknown context.

@@ -150,33 +150,99 @@ public sealed partial class Redactor
     {
         internal List<string> Elements { get; } = [];
         internal string? RegionEnd { get; set; }
+        internal System.Text.StringBuilder? Tag { get; set; }
+        internal char? Quote { get; set; }
+        internal bool FailClosed { get; set; }
     }
 
     /// <summary>Tracks XML syntax before a diff drops context or truncates lines.</summary>
     internal static string MaskSecretElementLine(string line, SecretElementContext context)
     {
         ArgumentNullException.ThrowIfNull(line);
-        var masked = context.Elements.Count > 0;
-        foreach (Match token in XmlDiffToken().Matches(line))
+        if (context.FailClosed) return Marker;
+        var masked = context.Elements.Count > 0 || context.Tag is not null;
+        var index = 0;
+        while (index < line.Length)
         {
             if (context.RegionEnd is { } end)
             {
-                if (token.Value == end) context.RegionEnd = null;
+                var close = line.IndexOf(end, index, StringComparison.Ordinal);
+                if (close < 0) break;
+                context.RegionEnd = null;
+                index = close + end.Length;
                 continue;
             }
-            if (token.Value is "<!--" or "<![CDATA[")
+            if (context.Tag is { } tag)
             {
-                context.RegionEnd = token.Value == "<!--" ? "-->" : "]]>";
+                var character = line[index++];
+                // Bound retained syntax, and keep all subsequent text hidden if it exceeds
+                // the bound. Never resume with an unknown element or quote context.
+                if (tag.Length >= 4096)
+                {
+                    context.FailClosed = true;
+                    context.Tag = null;
+                    return Marker;
+                }
+                tag.Append(character);
+                if (context.Quote is { } quote)
+                {
+                    if (character == quote) context.Quote = null;
+                    continue;
+                }
+                if (character is '\'' or '"')
+                {
+                    context.Quote = character;
+                    continue;
+                }
+                if (character != '>') continue;
+                var text = tag.ToString();
+                context.Tag = null;
+                var element = XmlDiffElementName().Match(text);
+                var name = element.Groups["name"].Value;
+                if (!element.Success || !SecretElements.Contains(name)) continue;
+                masked = true;
+                if (element.Groups["close"].Success)
+                {
+                    if (context.Elements.Count > 0 && string.Equals(name, context.Elements[^1], StringComparison.OrdinalIgnoreCase))
+                        context.Elements.RemoveAt(context.Elements.Count - 1);
+                }
+                else if (!text.EndsWith("/>", StringComparison.Ordinal))
+                {
+                    if (context.Elements.Count >= 64)
+                    {
+                        context.FailClosed = true;
+                        return Marker;
+                    }
+                    context.Elements.Add(name);
+                }
                 continue;
             }
-            var name = token.Groups["name"].Value;
-            if (!SecretElements.Contains(name)) continue;
-            if (token.Groups["close"].Success)
+            if (line[index] != '<') { index++; continue; }
+            if (line.AsSpan(index).StartsWith("<!--", StringComparison.Ordinal))
             {
-                if (context.Elements.Count > 0 && string.Equals(name, context.Elements[^1], StringComparison.OrdinalIgnoreCase))
-                    context.Elements.RemoveAt(context.Elements.Count - 1);
+                context.RegionEnd = "-->";
+                index += 4;
             }
-            else if (!token.Groups["self"].Success) context.Elements.Add(name);
+            else if (line.AsSpan(index).StartsWith("<![CDATA[", StringComparison.Ordinal))
+            {
+                context.RegionEnd = "]]>";
+                index += 9;
+            }
+            else
+            {
+                context.Tag = new System.Text.StringBuilder("<");
+                index++;
+            }
+        }
+        if (context.Tag is { } pending)
+        {
+            if (pending.Length >= 4096)
+            {
+                context.FailClosed = true;
+                context.Tag = null;
+                return Marker;
+            }
+            pending.Append('\n');
             masked = true;
         }
         return masked ? Marker : line;
@@ -186,10 +252,9 @@ public sealed partial class Redactor
 
     private static readonly HashSet<string> SecretElements = new(SecretElementNames.Split('|'), StringComparer.OrdinalIgnoreCase);
 
-    // Consume complete tags, including quoted attributes, so markup-like attribute text
-    // cannot close a secret element. Comments and CDATA have their own cross-line state.
-    [GeneratedRegex("""<!--|<!\[CDATA\[|-->|\]\]>|<(?<close>/)?(?<name>[A-Za-z_][\w.:-]*)(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*?)?\s*(?<self>/)?>""")]
-    private static partial Regex XmlDiffToken();
+    // The streaming scanner handles quotes and tag ends; this only identifies the name.
+    [GeneratedRegex(@"^<(?<close>/)?(?<name>[A-Za-z_][\w.:-]*)(?=[\s/>])")]
+    private static partial Regex XmlDiffElementName();
 
     [GeneratedRegex(@"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")]
     private static partial Regex PrivateKeyBegin();
