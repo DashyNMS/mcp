@@ -77,7 +77,7 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
         var id = device.DeviceId;
 
         bool Wants(string s) => sections.Contains(s);
-        var needsPorts = Wants("vlans") || Wants("fdb") || Wants("arp") || Wants("addresses");
+        var needsPorts = Wants("vlans") || Wants("fdb") || Wants("arp") || Wants("addresses") || Wants("routing");
 
         var ports = needsPorts ? Sources.TryAsync(() => client.Ports.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
         var vlans = Wants("vlans") || Wants("fdb") ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken) : null;
