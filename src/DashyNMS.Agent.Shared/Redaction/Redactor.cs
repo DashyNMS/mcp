@@ -228,6 +228,11 @@ public sealed partial class Redactor
                 context.RegionEnd = "]]>";
                 index += 9;
             }
+            else if (line.AsSpan(index).StartsWith("<?", StringComparison.Ordinal))
+            {
+                context.RegionEnd = "?>";
+                index += 2;
+            }
             else
             {
                 context.Tag = new System.Text.StringBuilder("<");

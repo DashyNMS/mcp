@@ -239,8 +239,11 @@ public sealed class SharedEventLookupsTests
         }
     }
 
-    [Fact]
-    public async Task Change_history_masks_secrets_inside_split_common_XML_tags()
+    [Theory]
+    [InlineData("<secret\n>")]
+    [InlineData("<secret>\n<?note > </secret> ?>")]
+    [InlineData("<secret>\n<?note >\n</secret>\n?>")]
+    public async Task Change_history_masks_secrets_with_common_XML_context(string opening)
     {
         var nms = new FakeLibreNms();
         var unimus = Substitute.For<IUnimusApi>();
@@ -252,7 +255,7 @@ public sealed class SharedEventLookupsTests
          new UnimusBackup { Id = 900, ValidSince = FakeLibreNms.Now.AddHours(-30).ToUnixTimeSeconds() }] });
         unimus.GetDiffAsync(900, 901, Arg.Any<CancellationToken>()).Returns(new UnimusBackupDiff { LineGroups =
         [
-            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "<secret" }, new() { Text = ">" }] },
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = opening.Split('\n').Select(t => new UnimusDiffLine { Text = t }).ToList() },
             new UnimusDiffLineGroup { Type = "CHANGED", OriginalLines = [new() { Text = "SyntheticOldBody" }],
                 RevisedLines = [new() { Text = "SyntheticNewBody" }] },
             new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = "</secret>" }] },

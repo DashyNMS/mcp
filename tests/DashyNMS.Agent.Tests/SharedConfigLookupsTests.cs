@@ -121,7 +121,9 @@ public sealed class SharedConfigLookupsTests
     [InlineData("<!-- example: </secret>\nstill a comment -->")]
     [InlineData("<![CDATA[example: </secret>]]>")]
     [InlineData("<![CDATA[example: </secret>\nstill data ]]>")]
-    public void Comment_and_CDATA_closing_tags_cannot_expose_changed_secret_bodies(string context)
+    [InlineData("<?note > </secret> ?>")]
+    [InlineData("<?note >\n</secret>\n?>")]
+    public void XML_region_closing_tags_cannot_expose_changed_secret_bodies(string context)
     {
         var common = new[] { "<secret>" }.Concat(context.Split('\n'));
         var diff = new UnimusBackupDiff { LineGroups =

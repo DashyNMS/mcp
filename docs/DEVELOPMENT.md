@@ -757,3 +757,6 @@ a comparable change remains unknown instead of reporting no change.
 XML diff redaction carries unfinished tags and quoted attributes across lines.
 It bounds retained tag text and nesting depth, and masks all subsequent text
 when those bounds are exceeded rather than resuming with unknown context.
+
+XML processing instructions remain opaque until `?>`, including across lines.
+Tag-like content inside them cannot alter the secret-element context.
