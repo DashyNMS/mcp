@@ -7,6 +7,19 @@ namespace DashyNMS.Agent.Shared.Tests;
 
 public sealed class HostHealthOverviewTests
 {
+    [Fact]
+    public async Task A_refused_fleet_list_is_not_an_invalid_host_request()
+    {
+        var client = Substitute.For<ILibreNmsClient>();
+        client.Devices.ListAsync(Arg.Any<CancellationToken>()).Returns(new[] { new Device { DeviceId = 1 } });
+        client.Sensors.ListAsync(Arg.Any<CancellationToken>()).Returns<Task<IReadOnlyList<Sensor>>>(
+            _ => throw new LibreNmsApiException("Refused", System.Net.HttpStatusCode.Forbidden));
+        using var host = HostHealthOverview.Create(client, Substitute.For<ILibreNmsTransport>(), TimeProvider.System, new());
+        Assert.Equal(HostFailure.Refused, (await host.ReadAsync(new())).Error);
+        Assert.Equal(HostFailure.Refused, (await host.ReadAsync(new())).Error);
+        Assert.Equal(HostFailure.InvalidRequest, (await host.ReadAsync(new(OnlyProblems: false))).Error);
+    }
+
     [Theory]
     [InlineData("temperature", 48)]
     [InlineData("fanspeed", 750)]
