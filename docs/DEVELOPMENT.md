@@ -484,3 +484,8 @@ processors, memory, storage and that device's ports. A failed individual read
 keeps the other sources, and a failed fresh device read uses the listed device.
 Disposing the host cancels pending waits and refuses subsequent reads. Hosts
 must discard results on connection-generation changes, as for device search.
+
+Device health rejects a fresh response with another device's ID and marks a
+missing fresh response unavailable before falling back to the listed device.
+Recovered alerts are excluded before grouping. This intentionally corrects
+MCP's previous edge case when an open-alert endpoint returned recovered rows.
