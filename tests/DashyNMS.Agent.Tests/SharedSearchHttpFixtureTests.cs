@@ -133,8 +133,8 @@ public sealed class SharedSearchHttpFixtureTests
         Assert.Equal(expected.GetProperty("total").GetInt32(), data.GetProperty("page").GetProperty("total").GetInt32());
         Assert.Equal(Ints(expected, "ids"), outcome.Result!.Matches.Select(m => m.Device.DeviceId));
         Assert.Equal(expected.GetProperty("total").GetInt32(), outcome.Result.Page.Total);
-        Assert.Equal(Strings(Basic, "requests"), mcpServer.Requests);
-        Assert.Equal(Strings(Basic, "requests"), hostServer.Requests);
+        Assert.Equal(Strings(expected, "requests"), mcpServer.Requests);
+        Assert.Equal(Strings(expected, "requests"), hostServer.Requests);
     }
 
     [Theory]

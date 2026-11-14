@@ -84,3 +84,12 @@ claimed from it:
   host side of these; the MCP side has its own tests against different inputs.
 - Faults (alerts) and other tools: `find_device` reads no alerts, so this
   fixture says nothing about fault identities, severity or grouping.
+
+Maintenance adds one `devices/{id}/maintenance` read for each returned row,
+never for matches outside the page. Each basic case now lists its complete
+`requests`; top-level `requests` remains the device-list-only failure path.
+`scopes.json` includes each successful page's maintenance requests.
+`maintenance.json` covers active, inactive, refused and missing maintenance
+reads over HTTP. Active maintenance changes the typed state and MCP status to
+maintenance. A failed check leaves the reported state and omits the nullable
+maintenance flag, so it never asserts that maintenance is off.

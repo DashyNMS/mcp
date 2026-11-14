@@ -95,7 +95,7 @@ public sealed partial class DeviceSearch
             .Select(d => new DeviceMatch(Safe(d), [])).ToList();
         var summary = page.Total == 0 ? "No devices visible to this account match." : Paging.Describe(page, "matching device", "matching devices");
         cancellationToken.ThrowIfCancellationRequested();
-        return new(matches, page, false, summary);
+        return new(await WithMaintenanceAsync(matches, cancellationToken).ConfigureAwait(false), page, false, summary);
     }
 
     private async Task<FindDevicesResult> FindByMacAsync(string mac, Func<Device, bool> wanted, int offset, int limit, CancellationToken cancellationToken)
@@ -120,8 +120,32 @@ public sealed partial class DeviceSearch
               (page.NextOffset is not null || page.Offset > 0 ? " " + Paging.Describe(page, "device", "devices") : string.Empty);
 
         cancellationToken.ThrowIfCancellationRequested();
-        return new(matches, page, true, summary);
+        return new(await WithMaintenanceAsync(matches, cancellationToken).ConfigureAwait(false), page, true, summary);
     }
+
+    private async Task<IReadOnlyList<DeviceMatch>> WithMaintenanceAsync(IReadOnlyList<DeviceMatch> matches, CancellationToken token)
+    {
+        var result = new List<DeviceMatch>(matches.Count);
+        // Only the returned page is checked. Sequential reads bound concurrency as well as count.
+        foreach (var match in matches)
+        {
+            token.ThrowIfCancellationRequested();
+            var (maintenance, failure) = await HostBoundary.RunAsync(
+                async ct => new MaintenanceState(await client.Devices.IsUnderMaintenanceAsync(match.Device.DeviceId, ct).ConfigureAwait(false)),
+                token, CancellationToken.None).ConfigureAwait(false);
+            var active = failure is null ? maintenance!.Active : (bool?)null;
+            result.Add(match with { Device = match.Device with
+            {
+                UnderMaintenance = active,
+                State = active == true ? DeviceState.Maintenance : match.Device.State,
+                Status = active == true ? "maintenance" : match.Device.Status,
+            } });
+        }
+        token.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    private sealed record MaintenanceState(bool Active);
 
     private static string? ParseStatus(string? status) => status?.Trim().ToLowerInvariant() switch
     {
