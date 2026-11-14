@@ -243,6 +243,8 @@ public sealed class SharedEventLookupsTests
     [InlineData("<secret\n>")]
     [InlineData("<secret>\n<?note > </secret> ?>")]
     [InlineData("<secret>\n<?note >\n</secret>\n?>")]
+    [InlineData("<b\n<secret>")]
+    [InlineData("<b note=\"unfinished\n<secret>")]
     public async Task Change_history_masks_secrets_with_common_XML_context(string opening)
     {
         var nms = new FakeLibreNms();

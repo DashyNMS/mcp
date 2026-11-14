@@ -141,7 +141,7 @@ public sealed class SharedConfigLookupsTests
 
     [Theory]
     [InlineData("<secret\n>")]
-    [InlineData("<secret note=\"example\n</secret>\n>\"\n>")]
+    [InlineData("<secret note=\"example\n>\ntext\"\n>")]
     public void Split_opening_tags_and_quoted_attributes_keep_both_secret_bodies_hidden(string opening)
     {
         var diff = new UnimusBackupDiff { LineGroups =
@@ -168,6 +168,24 @@ public sealed class SharedConfigLookupsTests
                 RevisedLines = [new() { Text = "hostname new-switch" }] },
         ] };
         Assert.Equal("- hostname old-switch\n+ hostname new-switch", ConfigDiff.Render(diff).Text);
+    }
+
+    [Theory]
+    [InlineData("<b")]
+    [InlineData("<b note=\"unfinished")]
+    public void Malformed_common_tags_cannot_consume_changed_secret_openers(string common)
+    {
+        var diff = new UnimusBackupDiff { LineGroups =
+        [
+            new UnimusDiffLineGroup { Type = "COMMON", OriginalLines = [new() { Text = common }] },
+            new UnimusDiffLineGroup { Type = "CHANGED",
+                OriginalLines = [new() { Text = "<secret>" }, new() { Text = "SyntheticOldBody" }, new() { Text = "</secret>" }],
+                RevisedLines = [new() { Text = "<secret>" }, new() { Text = "SyntheticNewBody" }, new() { Text = "</secret>" }] },
+        ] };
+        var rendered = ConfigDiff.Render(diff);
+        Assert.Equal(6, rendered.Lines);
+        Assert.All(rendered.Text.Split('\n'), line => Assert.EndsWith(Redactor.Marker, line));
+        Assert.DoesNotContain("Synthetic", rendered.Text);
     }
 
     [Fact]

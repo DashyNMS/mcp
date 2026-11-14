@@ -184,6 +184,14 @@ public sealed partial class Redactor
                     return Marker;
                 }
                 tag.Append(character);
+                // A second '<' cannot occur unescaped in a valid tag, including an
+                // attribute value. Do not consume a later secret opener as tag text.
+                if (character == '<')
+                {
+                    context.FailClosed = true;
+                    context.Tag = null;
+                    return Marker;
+                }
                 if (context.Quote is { } quote)
                 {
                     if (character == quote) context.Quote = null;
