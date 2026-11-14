@@ -87,6 +87,53 @@ public sealed class SharedEventLookupsTests
         Assert.Equal(mcpServer.Requests.Order(), hostServer.Requests.Order());
     }
 
+    [Theory]
+    [InlineData("critical")]
+    [InlineData("warning")]
+    public async Task Severity_filtered_history_fails_when_rules_are_unavailable(string severity)
+    {
+        var routes = Routes();
+        routes["rules"] = new(403, "{}");
+        using var server = new FixtureServer(path => routes.GetValueOrDefault(path));
+        using var provider = Connected(server.Root);
+        using var host = Host(provider);
+        var outcome = await host.ReadRaisedAlertsAsync(new(Severity: severity, Hours: 24));
+        Assert.Equal(HostFailure.Unavailable, outcome.Error);
+        Assert.Null(outcome.Result);
+        var mcp = FakeLibreNms.Parse(await ActivatorUtilities.CreateInstance<AlertTools>(provider).ActiveAlerts(severity: severity, hours: 24));
+        Assert.Equal("error", mcp.GetProperty("status").GetString());
+        Assert.Contains("severities couldn't be read", mcp.GetProperty("message").GetString()!);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Unavailable_history_enrichment_reports_unknown_counts(bool rulesFailed, bool openFailed)
+    {
+        var routes = Routes();
+        if (rulesFailed) routes["rules"] = new(403, "{}");
+        if (openFailed) routes["alerts"] = new(403, "{}");
+        using var server = new FixtureServer(path => routes.GetValueOrDefault(path));
+        using var provider = Connected(server.Root);
+        using var host = Host(provider);
+        var result = (await host.ReadRaisedAlertsAsync(new(Hours: 24))).Result!;
+        Assert.Equal(2, result.Data.Page.Total);
+        Assert.Equal(rulesFailed, result.RulesUnavailable);
+        Assert.Equal(openFailed, result.OpenStatusUnavailable);
+        if (rulesFailed)
+        {
+            Assert.Contains("severities unknown", result.Summary);
+            Assert.DoesNotContain("0 critical", result.Summary);
+        }
+        if (openFailed)
+        {
+            Assert.Contains("open status unknown", result.Summary);
+            Assert.DoesNotContain("0 still open", result.Summary);
+            Assert.All(result.Data.Devices.SelectMany(d => d.Alerts), a => Assert.Null(a.StillOpen));
+        }
+    }
+
     [Fact]
     public async Task A_busy_log_reports_an_incomplete_window_and_host_retirement_refuses_cached_reads()
     {

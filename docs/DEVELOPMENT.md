@@ -716,3 +716,7 @@ the available types as incomplete when an image was still found.
 With `GRAYLOG_MATCH_ANY_ADDRESS=true`, a failed interface-address read fails
 `search_logs` instead of searching fewer addresses. `what_changed` keeps its
 other sources and reports the Graylog section unavailable without a count.
+
+Severity-filtered historical alerts fail as unavailable when rule severities
+cannot be read. Unfiltered history retains occurrences and describes severity
+or open counts as unknown when the corresponding source failed.
