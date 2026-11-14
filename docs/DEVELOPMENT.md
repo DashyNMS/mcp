@@ -705,3 +705,7 @@ explicit availability flag when the log failed; its summary never calls that a
 first firing. These failure-case corrections also apply to MCP. Typed rule
 applicability retains each target's ID and redacted name; MCP continues to
 project the same name strings, including when names are duplicated.
+
+Config diffs track recognised XML secret elements on each side through common
+lines before selecting and capping changed lines. Bodies remain redacted when
+their tags are unchanged or outside the displayed diff.

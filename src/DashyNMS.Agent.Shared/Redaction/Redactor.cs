@@ -146,6 +146,40 @@ public sealed partial class Redactor
         return inKey ? Marker : line;
     }
 
+    /// <summary>Tracks recognised XML secrets before a diff drops context or truncates lines.</summary>
+    public static string MaskSecretElementLine(string line, ref string? secretElement)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var masked = secretElement is not null;
+        foreach (Match tag in SecretElementTag().Matches(line))
+        {
+            var name = tag.Groups["name"].Value;
+            if (tag.Groups["close"].Success)
+            {
+                if (secretElement is not null)
+                {
+                    var separator = secretElement.LastIndexOf('/');
+                    if (string.Equals(name, secretElement[(separator + 1)..], StringComparison.OrdinalIgnoreCase))
+                        secretElement = separator < 0 ? null : secretElement[..separator];
+                }
+            }
+            else if (!tag.Groups["self"].Success)
+            {
+                secretElement = secretElement is null ? name : secretElement + "/" + name;
+            }
+            masked = true;
+        }
+
+        // Mask the whole line, including any inline body or nested content. Each diff side
+        // owns its state: a changed closing tag must not affect the other side.
+        return masked ? Marker : line;
+    }
+
+    private const string SecretElementNames = "password|bcrypt-hash|sha512-hash|md5-hash|pwhash|pre-shared-key|apikey|prv|authkey|secret|rocommunity|trapstring|tls|shared_key|device_key|ldap_bindpw|radius_secret|radius_secret2|privatekey|presharedkey|auth_pass";
+
+    [GeneratedRegex(@"<(?<close>/)?(?<name>" + SecretElementNames + @")(?:\s+[^<>]*?)?\s*(?<self>/)?>", RegexOptions.IgnoreCase)]
+    private static partial Regex SecretElementTag();
+
     [GeneratedRegex(@"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")]
     private static partial Regex PrivateKeyBegin();
 
@@ -232,6 +266,6 @@ public sealed partial class Redactor
     /// certificate private keys (base64, not PEM), SNMP communities, OpenVPN
     /// TLS and shared keys, LDAP and RADIUS secrets, WireGuard keys.
     /// </summary>
-    [GeneratedRegex(@"<(password|bcrypt-hash|sha512-hash|md5-hash|pwhash|pre-shared-key|apikey|prv|authkey|secret|rocommunity|trapstring|tls|shared_key|device_key|ldap_bindpw|radius_secret|radius_secret2|privatekey|presharedkey|auth_pass)>.*?</\1>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"<(" + SecretElementNames + @")>.*?</\1>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex PfSenseSecretElement();
 }
