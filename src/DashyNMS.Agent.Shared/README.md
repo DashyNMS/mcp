@@ -1,8 +1,8 @@
 # DashyNMS.Agent.Shared
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
-by the DashyNMS MCP server and the DashyNMS apps. It holds device search and resolution, open alerts, network overview, device summaries, device sensors and the tool catalogue; other
-shared operations join it rather than shipping as separate packages. It replaces
+by the DashyNMS MCP server and the DashyNMS apps. It holds the typed operations behind every read-only MCP network tool and the
+shared tool catalogue. MCP retains protocol discovery, formatting and byte caps. It replaces
 `DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
 adapter). The direct dependency is Core; Core's own dependencies remain transitive.
@@ -47,8 +47,10 @@ Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
 (`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
 flags, so an omitted flag reads as down and an ignored device as up or down. `State`
 is Core's `ReportedState`: `Unknown` when LibreNMS left a flag out, and `Ignored`
-on its own. Show `State`. Maintenance needs a per-device call and is never set. `State`
-is left out of JSON.
+on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
+views to maintenance; a failed check preserves the reported state and leaves
+`UnderMaintenance` null, rather than claiming it is off. Other device summaries
+do not request maintenance. `State` is left out of JSON.
 
 Results are redacted but remain untrusted network data. Redaction does not hide
 network identity or topology. Hosts must apply their own authorisation, presentation
@@ -97,3 +99,19 @@ project-owned material; dependency licences and attribution remain applicable.
 counts, optional alert/port/system sources, fixed failure categories, and bounded
 redacted alert groups, down devices and down locations with explicit omitted counts.
 Dispose it on retirement and supply a host deadline, as for search and open alerts.
+
+Batch 5 host boundaries also cover complete device health, group/location names,
+alert details and rules, port status/neighbours/tracing, device detail sections,
+fleet rankings and health, historical events/changes/alerts, Graylog search,
+Unimus config tools and graphs. See the developer guide for the factory and
+request/result types and each operation's endpoint contract. Optional service
+clients, config-text policy, threshold choices and certificate trust come from
+the host. The shared package never reads an app's settings or environment.
+
+Host sensor options use Core's threshold evaluator. Factories capture mutable
+threshold choices before reads; create a new lookup set for a later question
+when settings change. The default settings preserve the earlier assessment.
+Graph results use Core's image byte limit and return PNG bytes separately from
+metadata. Image pixels are not redacted. Hosts must disclose source failures,
+coverage gaps, sampling and omissions when compacting results, and must decide
+whether their model can receive an image before passing it through.

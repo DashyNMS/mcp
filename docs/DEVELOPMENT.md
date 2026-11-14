@@ -95,8 +95,8 @@ docs: setting up Claude Desktop
 request/result records, directory/scope caches, device summaries, paging, redaction,
 options and argument exceptions. It references Core, with no MCP or Agent adapter
 reference. Existing namespaces remain unchanged; Agent forwards moved public types.
-Options remain together to preserve existing signatures; this does not expose any
-configuration, log, health or other tool through the Shared package. MCP discovery, JSON shaping,
+Options remain together to preserve existing signatures. The later Batch 5
+operations below extend the same boundary to every network tool. MCP discovery, JSON shaping,
 byte caps and ToolRunner remain in Agent. The solution and Docker restore include
 the Shared package. No Core pin or mobile code changes are part of this step for mobile #596.
 
@@ -261,7 +261,8 @@ compact formatting/evidence, matched cross-adapter fixtures, mobile session race
 Release iOS trimming/AOT, simulator/device execution, Android Release runtime and
 size/token/performance measurements remain unverified follow-ups. MCP-free source
 references alone do not prove the transitive graph or mobile runtime compatibility.
-The other tools, mobile's existing lookups and Diagnostics remain deferred.
+The shared Batch 5 operations are documented below. Mobile adapters and device
+acceptance remain separate consumer work; Diagnostics remains outside this migration.
 
 ### Shared package for mobile
 
@@ -438,9 +439,9 @@ byte cap. The result carries:
 - totals (critical, warning, ok, unknown) and counts by class;
 - whether the readings came device by device because the network-wide list was refused.
 
-The thresholds are Core's defaults, as MCP has always used: the server has no settings of its
-own, and desktop doesn't pass the person's thresholds, so a host's custom thresholds don't
-apply here. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
+Thresholds come from the host's AgentOptions, captured before reads; omitted choices
+use Core's defaults. The MCP host accepts the threshold environment settings listed below.
+App consumers must pass their settings when creating each lookup set. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
 open alerts it takes the host's transport as well as its client, both bound to the same
 connection, because the per-device health routes aren't in Core's client yet. It reads
 `devices`, `resources/sensors` and, only after that list is refused, the device's sensor
@@ -670,3 +671,23 @@ backups, latest backup and diffs. Host settings, credentials, certificate trust
 and deadlines remain host-owned. `Fixtures/ConfigLookups` exercises Core's
 real Unimus client over HTTP with full/summary modes, redaction and request
 parity. Existing MCP tests retain independent bounds and stale-data checks.
+
+### Graphs for hosts
+
+`GraphLookup` owns `graph` execution for device, port and sensor graphs. MCP
+keeps its schema, aliases, spans, selection rules, PNG request and separate
+image content block. The typed result returns Core's `IntelligenceImage`,
+redacted metadata, omitted type counts and failed listing names. A partial
+type listing must not be described as a complete inventory by host formatters.
+Pixels remain unredacted, including legends.
+
+`HostGraphLookup` returns fixed failures, treats LibreNMS's HTTP 200 denial
+image as refused, and retires pending and cached reads on disposal. Hosts
+supply the immutable client/transport, trust and deadline. Reviewed reads are
+devices, device ports, sensor/health reads for sensor selection, graph listings,
+and the selected graph's PNG or small-image SVG permission probe. Images are
+bounded by Core's `IntelligenceImage.MaxBytes`, including a bound before base64
+decoding. This intentionally rejects images MCP previously returned above the
+Core image limit. `Fixtures/Graphs` covers HTTP parity, image bytes and denial;
+CI also checks the encoded-size limit. Mobile separately decides whether its
+model accepts images and how to persist them with a chat.
