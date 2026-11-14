@@ -763,3 +763,8 @@ Tag-like content inside them cannot alter the secret-element context.
 
 Plain-text less-than operators followed by whitespace or a number do not open
 XML tag state, so common shell lines do not hide unrelated diff changes.
+
+A second unescaped `<` inside an unfinished tag is treated as unknown syntax.
+Diff masking then keeps subsequent text hidden, including when the first tag
+was a common non-secret line, so a later secret opener cannot be discarded
+while its body remains visible.
