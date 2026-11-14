@@ -469,3 +469,18 @@ The standalone server accepts finite invariant-culture numbers in:
 `MCP_OVERRIDE_SENSOR_LIMITS` is false by default. When true, app thresholds
 replace sensor limits for Core's supported classes. Invalid numbers and
 inconsistent bounds fail startup. No app settings file is read.
+
+### Complete device health for hosts
+
+`DeviceHealth` and `HostDeviceHealth` expose `device_health` as typed results.
+The MCP adapter uses that same operation and keeps its JSON fields, caps and
+source-specific failure wording. Hosts receive the summary, data, exact location
+filter and source-qualified alert groups separately. `HostDeviceHealth` replaces
+individual source errors with fixed messages; a failed source stays in
+`Unavailable` and must never be interpreted as an empty or healthy source.
+
+The operation reads the device list, `devices/{id}`, maintenance, open alerts,
+processors, memory, storage and that device's ports. A failed individual read
+keeps the other sources, and a failed fresh device read uses the listed device.
+Disposing the host cancels pending waits and refuses subsequent reads. Hosts
+must discard results on connection-generation changes, as for device search.

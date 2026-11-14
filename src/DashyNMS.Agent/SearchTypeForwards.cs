@@ -21,3 +21,13 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.SensorSource))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Devices.SensorRead))]
 [assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.SensorReading))]
+
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.ToolError))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.ToolErrors))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Sources))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Fetched<>))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Unavailable))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.FaultBrief))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.AlertGroupSummary))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.AlertSummary))]
+[assembly: TypeForwardedTo(typeof(DashyNMS.Agent.Summaries.PortProblem))]
