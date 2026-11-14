@@ -489,3 +489,13 @@ Device health rejects a fresh response with another device's ID and marks a
 missing fresh response unavailable before falling back to the listed device.
 Recovered alerts are excluded before grouping. This intentionally corrects
 MCP's previous edge case when an open-alert endpoint returned recovered rows.
+
+### Groups and locations for hosts
+
+`GroupsAndLocations` owns the existing MCP lookup's device-derived location
+counts and independent group read. `HostGroupsAndLocations` returns fixed
+failures and explicitly marks unreadable groups while keeping locations.
+Group and location records keep exact `FilterName` values as host metadata,
+excluded from serialised model data. Display names are redacted. The reviewed
+reads are the device list and device groups. Hosts retire the operation on
+connection changes, apply presentation budgets and count omitted rows.
