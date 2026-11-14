@@ -58,6 +58,7 @@ internal static class HostBoundary
 
     internal static HostFailure Classify(Exception error) => error switch
     {
+        Graphs.GraphDeniedException => HostFailure.Refused,
         ToolException => HostFailure.InvalidRequest,
         Devices.DeviceNotFoundException => HostFailure.NotFound,
         LibreNmsApiException api when api.IsAuthenticationFailure || api.IsPermissionDenied || api.IsAdminOnlyInApi => HostFailure.Refused,
