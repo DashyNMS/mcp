@@ -691,3 +691,10 @@ decoding. This intentionally rejects images MCP previously returned above the
 Core image limit. `Fixtures/Graphs` covers HTTP parity, image bytes and denial;
 CI also checks the encoded-size limit. Mobile separately decides whether its
 model accepts images and how to persist them with a chat.
+
+Graph listing failures remain distinct from absence. If a partial listing
+cannot establish whether the requested type exists, the result has no image,
+an explicit unknown notice and the failed listing names. A complete successful
+listing can establish absence. If every listing fails, the host gets a source
+failure, including refusal or timeout where established, rather than an invalid
+request. MCP uses the same uncertainty notices and source-failure messages.
