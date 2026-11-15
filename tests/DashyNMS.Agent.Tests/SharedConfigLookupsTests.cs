@@ -135,10 +135,12 @@ public sealed class SharedConfigLookupsTests
                 if (matched) Assert.Equal(1, Assert.Single(changes.Data.Changes).Device!.DeviceId);
                 break;
             default:
+            {
                 using var events = HostEventLookups.Create(nms.Client, api, graylog, nms.Time, nms.Options);
                 var context = (await events.ReadChangesAsync(new(1))).Result!;
                 Assert.Equal(matched, context.Data.Unimus.DeviceFound);
                 break;
+            }
         }
         Assert.Equal(matched, server.HttpRequests.Any(r => r.StartsWith("/api/v2/devices/40/backups", StringComparison.Ordinal)));
     }
