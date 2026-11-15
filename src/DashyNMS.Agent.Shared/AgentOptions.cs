@@ -46,6 +46,12 @@ public sealed class AgentOptions
     /// </summary>
     public bool GraylogMatchAnyAddress { get; init; }
 
+    /// <summary>
+    /// Optional discovery-domain suffix from the host's Unimus settings. Core
+    /// applies it in its existing candidate order; null preserves MCP's matching.
+    /// </summary>
+    public string? UnimusMyDomain { get; init; }
+
     /// <summary>How much of a device's configuration the tools may return (#16).</summary>
     public ConfigText ConfigText { get; init; } = ConfigText.Full;
 }

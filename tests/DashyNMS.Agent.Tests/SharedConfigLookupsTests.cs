@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Events;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Tools;
 using DashyNMS.Agent.Unimus;
@@ -12,10 +13,11 @@ namespace DashyNMS.Agent.Tests;
 public sealed class SharedConfigLookupsTests
 {
     private static readonly string Folder = Path.Combine(AppContext.BaseDirectory, "Fixtures", "ConfigLookups");
-    private static FixtureServer Server()
+    private static FixtureServer Server(bool requiresDomain = false)
     {
         using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(Folder, "routes.json")));
         var routes = json.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => new Answer(200, p.Value.GetRawText()));
+        if (requiresDomain) routes["/api/v2/devices"] = new(200, """{"data":[{"id":40,"address":"core-sw1.example.net","description":"Backed-up switch"}],"paginator":{"totalCount":1,"totalPages":1}}""");
         return new(_ => null, requestAnswer: request => routes.GetValueOrDefault(request.Url!.AbsolutePath),
             authenticated: request => request.Headers["Authorization"] == "Bearer synthetic-fixture-token");
     }
@@ -91,6 +93,54 @@ public sealed class SharedConfigLookupsTests
         Assert.DoesNotContain("synthetic-key-material", rendered);
         operation.Dispose();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation.ReadChangesAsync(new()));
+    }
+
+    [Theory]
+    [InlineData("backup", null)]
+    [InlineData("backup", "example.net")]
+    [InlineData("diff", null)]
+    [InlineData("diff", "example.net")]
+    [InlineData("changes", null)]
+    [InlineData("changes", "example.net")]
+    [InlineData("what_changed", null)]
+    [InlineData("what_changed", "example.net")]
+    public async Task Host_discovery_domain_matches_short_names_for_config_reads_and_scoped_changes(string mode, string? domain)
+    {
+        using var server = Server(requiresDomain: true);
+        using var api = Client(server.Root);
+        using var graylog = new GraylogApi(NullLogger<GraylogApi>.Instance);
+        var nms = new FakeLibreNms(new AgentOptions { ConfigText = ConfigText.Summary, UnimusMyDomain = domain });
+        nms.Transport.On("devices", """{"devices":[{"device_id":1,"hostname":"core-sw1","ip":"192.0.2.1","location":"Lab","status":1,"disabled":0}]}""");
+        using var host = HostConfigLookups.Create(nms.Client, api, nms.Time, nms.Options);
+        var matched = domain is not null;
+        switch (mode)
+        {
+            case "backup":
+                var backup = await host.ReadBackupAsync(new(1));
+                Assert.Equal(matched, backup.Result is not null);
+                if (matched) Assert.Equal(901, backup.Result!.Data.Backup.Id);
+                else Assert.Equal(HostFailure.InvalidRequest, backup.Error);
+                break;
+            case "diff":
+                var diff = await host.ReadDiffAsync(new(1));
+                Assert.Equal(matched, diff.Result is not null);
+                if (matched) Assert.Equal(901, diff.Result!.Data.To.Id);
+                else Assert.Equal(HostFailure.InvalidRequest, diff.Error);
+                break;
+            case "changes":
+                // A scope must correlate with LibreNMS before it checks Unimus backups.
+                var changes = (await host.ReadChangesAsync(new(Location: "Lab"))).Result!;
+                Assert.Equal(matched ? 1 : 0, changes.DevicesChecked);
+                Assert.Equal(matched ? 1 : 0, changes.Data.Changes.Count);
+                if (matched) Assert.Equal(1, Assert.Single(changes.Data.Changes).Device!.DeviceId);
+                break;
+            default:
+                using var events = HostEventLookups.Create(nms.Client, api, graylog, nms.Time, nms.Options);
+                var context = (await events.ReadChangesAsync(new(1))).Result!;
+                Assert.Equal(matched, context.Data.Unimus.DeviceFound);
+                break;
+        }
+        Assert.Equal(matched, server.HttpRequests.Any(r => r.StartsWith("/api/v2/devices/40/backups", StringComparison.Ordinal)));
     }
 
     [Theory]

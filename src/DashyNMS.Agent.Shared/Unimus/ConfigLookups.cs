@@ -222,7 +222,7 @@ public sealed class ConfigLookups(IUnimusApi unimus, UnimusDirectory unimusDevic
         var byUnimusId = new Dictionary<int, Device>();
         foreach (var d in librenmsTask.Result.Where(d => scope.Includes(d)))
         {
-            if (UnimusDeviceMatcher.Match(unimusTask.Result, UnimusAddressCandidates.ForDevice(d, myDomain: null)) is { } u)
+            if (UnimusDeviceMatcher.Match(unimusTask.Result, UnimusAddressCandidates.ForDevice(d, options.UnimusMyDomain)) is { } u)
             {
                 byUnimusId.TryAdd(u.Id, d);
             }
