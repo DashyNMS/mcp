@@ -28,9 +28,16 @@ updates:
   # and their tags when a new .NET version comes out. Grouped by name rather
   # than update type: update-types only knows major/minor/patch, and a
   # digest-only bump is none of those. The SDK and runtime images must move
-  # together anyway, majors included.
+  # together. A major framework migration is reviewed separately.
   - package-ecosystem: docker
     directory: /
+    ignore:
+      # global.json and the application target .NET 10; keep digest updates
+      # enabled without mixing a new SDK major with the current runtime.
+      - dependency-name: "dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet/runtime"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly
       day: monday
