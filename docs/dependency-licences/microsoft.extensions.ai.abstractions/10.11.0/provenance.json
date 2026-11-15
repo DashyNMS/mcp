@@ -1,0 +1,18 @@
+{
+  "package": "microsoft.extensions.ai.abstractions/10.11.0",
+  "packageSha256": "87e1367f89d8a4957ff281df09703c860a93786830930fb2ba1f5d0af3ad2245",
+  "upstreamRepository": "https://github.com/dotnet/extensions",
+  "upstreamRevision": "25f07afa51034e37b334210642d7dc5f191c142d",
+  "files": {
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/dotnet/extensions/25f07afa51034e37b334210642d7dc5f191c142d/LICENSE",
+      "sha256": "47f0ad8ba753eae5de6178291cd8f38bbb42d2368b177f8e11714ad17c701275",
+      "role": "licence"
+    },
+    "THIRD-PARTY-NOTICES.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/extensions/25f07afa51034e37b334210642d7dc5f191c142d/THIRD-PARTY-NOTICES.TXT",
+      "sha256": "07f3e74329ed32ac9229a75ae994b98b30aadb1d9947eee926eed3d3fc4cf0c6",
+      "role": "notice"
+    }
+  }
+}
