@@ -95,8 +95,8 @@ docs: setting up Claude Desktop
 request/result records, directory/scope caches, device summaries, paging, redaction,
 options and argument exceptions. It references Core, with no MCP or Agent adapter
 reference. Existing namespaces remain unchanged; Agent forwards moved public types.
-Options remain together to preserve existing signatures; this does not expose any
-configuration, log, health or other tool through the Shared package. MCP discovery, JSON shaping,
+Options remain together to preserve existing signatures. The later Batch 5
+operations below extend the same boundary to every network tool. MCP discovery, JSON shaping,
 byte caps and ToolRunner remain in Agent. The solution and Docker restore include
 the Shared package. No Core pin or mobile code changes are part of this step for mobile #596.
 
@@ -194,6 +194,43 @@ cache. `Fixtures/DeviceSummary` holds the shared synthetic fixture, and
 `SharedDeviceSummaryHttpFixtureTests` serves it over loopback HTTP to both adapters. Mobile's
 Intelligence `device_summary` is a reviewed narrower profile of `device_health` built on it.
 
+### Device resolution for host-owned clients
+
+`DeviceResolver` (namespace `DashyNMS.Agent.Devices`) is in the shared package. It turns the
+`device` a model gives (ID, hostname, display name, sysName or IP address) into one device, in the
+same tiers for every tool: ID, then an exact name or address, then the short hostname, then part of
+a name, stopping at the first tier that finds anything. Several matches in a tier is ambiguous,
+never a guess. MCP's tools call `ResolveAsync`, whose `ToolException` sentences and candidate list
+are unchanged. `FindAsync` returns the same tiers as a `DeviceResolution`: `Found` with the redacted
+`DeviceSummary`, `Ambiguous` with up to five redacted `DeviceCandidate`s and the rest counted, or
+`NoMatch`.
+
+`HostDeviceResolver` is the safe boundary, through `HostBoundary` like the others. An empty phrase
+is `InvalidRequest`, and a device list that can't be read fails the call with its category; it's
+never reported as no match. Each instance caches the device list for a minute, so one per captured
+connection, disposed on a switch. `Fixtures/DeviceResolution` holds the shared synthetic fixture,
+and `SharedDeviceResolutionHttpFixtureTests` serves it over loopback HTTP to both.
+
+### Tool catalogue for hosts
+
+`ToolText` and `ToolCatalogue` (namespace `DashyNMS.Agent.Catalogue`) hold every tool's name,
+title, description and parameters. `ToolText` is constants because attributes take nothing else;
+each tool's `[McpServerTool]` and `[Description]` attributes read them, so there is one copy of each
+description. `ToolCatalogue` gives hosts the same as records: each parameter's type (string,
+integer, boolean or string list), whether it's required, its default, its documented values or
+range, and its description, plus the other tools each description names (`NamedTools`).
+
+A host that describes tools to a model without MCP reads the catalogue and never rewords it. It
+may leave out a tool or parameter it doesn't support yet. Text written for one host, such as a
+shorter description for a phone, doesn't go in the catalogue.
+
+`Fixtures/tools-list.json` in `DashyNMS.Mcp.Tests` records each tool's raw `tools/list` JSON, and
+the stdio smoke test holds the running server to it byte for byte. The tools are sorted by name
+because the SDK lists them in no fixed order. The same test, and `ToolCatalogueTests` against the
+recording, hold the listed names, descriptions and schemas equal to the catalogue. When a tool's
+text changes on purpose, change `ToolText`, then replace the recording with the list the failing
+test prints (base64) and review the diff.
+
 ### Verification and publication follow-up
 
 No builds/tests were run locally for this step, as requested. CI must run the whole
@@ -224,7 +261,8 @@ compact formatting/evidence, matched cross-adapter fixtures, mobile session race
 Release iOS trimming/AOT, simulator/device execution, Android Release runtime and
 size/token/performance measurements remain unverified follow-ups. MCP-free source
 references alone do not prove the transitive graph or mobile runtime compatibility.
-The other tools, mobile's existing lookups and Diagnostics remain deferred.
+The shared Batch 5 operations are documented below. Mobile adapters and device
+acceptance remain separate consumer work; Diagnostics remains outside this migration.
 
 ### Shared package for mobile
 
@@ -401,9 +439,9 @@ byte cap. The result carries:
 - totals (critical, warning, ok, unknown) and counts by class;
 - whether the readings came device by device because the network-wide list was refused.
 
-The thresholds are Core's defaults, as MCP has always used: the server has no settings of its
-own, and desktop doesn't pass the person's thresholds, so a host's custom thresholds don't
-apply here. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
+Thresholds come from the host's AgentOptions, captured before reads; omitted choices
+use Core's defaults. The MCP host accepts the threshold environment settings listed below.
+App consumers must pass their settings when creating each lookup set. `HostDeviceSensors` is the safe boundary through `HostBoundary`. Unlike search and
 open alerts it takes the host's transport as well as its client, both bound to the same
 connection, because the per-device health routes aren't in Core's client yet. It reads
 `devices`, `resources/sensors` and, only after that list is refused, the device's sensor
@@ -411,3 +449,327 @@ health routes (never processors, memory pools or storage). A device the list doe
 is `InvalidRequest`; there is no partial success. Optional sensor definitions should be a
 read-only store, as desktop gives MCP. `Fixtures/DeviceSensors` holds the shared synthetic
 fixture, and `SharedDeviceSensorsHttpFixtureTests` serves it over loopback HTTP to both adapters.
+
+## Host sensor thresholds
+
+`AgentOptions` accepts Core's `DbmThresholds`, `SignalThresholds`,
+`TemperatureThresholds`, `FanSpeedThresholds` and
+`OverrideSensorLimitsWithAppThresholds`. `HostDeviceSensors.Create` has an
+options overload. Both MCP sensor tools use Core's `SensorCategoryRegistry`
+with these settings. Omitted settings preserve the previous defaults.
+
+The standalone server accepts finite invariant-culture numbers in:
+
+- `MCP_DBM_WARNING_THRESHOLD`, `MCP_DBM_CRITICAL_THRESHOLD`,
+  `MCP_DBM_IGNORE_AT_OR_ABOVE`, `MCP_DBM_IGNORE_AT_OR_BELOW`.
+- The same suffixes under `MCP_SIGNAL_`.
+- `MCP_TEMPERATURE_LOW_CRITICAL`, `MCP_TEMPERATURE_LOW_WARNING`,
+  `MCP_TEMPERATURE_HIGH_WARNING`, `MCP_TEMPERATURE_HIGH_CRITICAL`.
+- The same suffixes under `MCP_FAN_SPEED_`.
+
+`MCP_OVERRIDE_SENSOR_LIMITS` is false by default. When true, app thresholds
+replace sensor limits for Core's supported classes. Invalid numbers and
+inconsistent bounds fail startup. No app settings file is read.
+
+### Complete device health for hosts
+
+`DeviceHealth` and `HostDeviceHealth` expose `device_health` as typed results.
+The MCP adapter uses that same operation and keeps its JSON fields, caps and
+source-specific failure wording. Hosts receive the summary, data, exact location
+filter and source-qualified alert groups separately. `HostDeviceHealth` replaces
+individual source errors with fixed messages; a failed source stays in
+`Unavailable` and must never be interpreted as an empty or healthy source.
+
+The operation reads the device list, `devices/{id}`, maintenance, open alerts,
+processors, memory, storage and that device's ports. A failed individual read
+keeps the other sources, and a failed fresh device read uses the listed device.
+Disposing the host cancels pending waits and refuses subsequent reads. Hosts
+must discard results on connection-generation changes, as for device search.
+
+Device health rejects a fresh response with another device's ID and marks a
+missing fresh response unavailable before falling back to the listed device.
+Recovered alerts are excluded before grouping. This intentionally corrects
+MCP's previous edge case when an open-alert endpoint returned recovered rows.
+
+### Groups and locations for hosts
+
+`GroupsAndLocations` owns the existing MCP lookup's device-derived location
+counts and independent group read. `HostGroupsAndLocations` returns fixed
+failures and explicitly marks unreadable groups while keeping locations.
+Group and location records keep exact `FilterName` values as host metadata,
+excluded from serialised model data. Display names are redacted. The reviewed
+reads are the device list and device groups. Hosts retire the operation on
+connection changes, apply presentation budgets and count omitted rows.
+
+### Maintenance in device search
+
+Search checks maintenance sequentially for the returned page only, at most
+`DeviceSearch.MaxMatches` requests. `UnderMaintenance` is true or false when
+read successfully and null when the read fails. Active maintenance takes
+precedence in the typed state and MCP's status word, including brief rows.
+Filtering and ranking still use the original reported status before paging.
+Caller cancellation propagates; an individual failed maintenance check leaves
+that row's reported state intact. The shared search fixtures record the extra
+requests and distinguish failed checks from known inactive maintenance.
+
+### Alert details and rules for hosts
+
+`AlertRules` executes both `alert_details` and `alert_rules`; MCP keeps its
+schema and formatting, including the string or object `applies_to` field.
+The typed rule row uses `RuleApplicability`, with `AllDevices` and typed
+`Targets`, so app hosts never inspect anonymous JSON. The request's verbose
+flag controls notes and procedures as in MCP. Rules retain the existing
+name, open and raised sorts, paging and unavailable-source list.
+
+`HostAlertRules` returns fixed failure categories and fixed partial-source
+messages. Its detail request can require an `AlertSource`; a mismatched
+returned source or ID fails rather than opening another object with the
+same number. The result includes the source-qualified `Identity`. A failed
+history or rule read is marked unavailable and must not be presented as a
+complete history or a known absent rule. Dispose it when the captured
+connection retires. `Fixtures/AlertRules` contains the synthetic HTTP bundle.
+The existing MCP tests continue to hold independent expected fields.
+
+The shared dependency closure now includes the fleet cache, time window,
+timeline and alert occurrence helpers. Cached fleet reads check cancellation
+before returning cached data and before storing a completed fetch, so a late
+cancelled response cannot populate that cache.
+
+### Ports and topology for hosts
+
+`PortStatus`, `DeviceNeighbours` and `TraceEndpoint` now own the execution
+behind the corresponding MCP tools. MCP keeps its schemas, field names,
+ordering and caps. Host requests use a visible device ID rather than a name;
+hosts resolve names with the shared resolver. Port matching retains its ID,
+exact-text and partial-text tiers, refusing ambiguity. Neighbours include
+reverse-only links and distinguish a known remote device from an unmonitored
+hostname. All network-supplied display strings are redacted.
+
+`HostPortLookups` owns one connection's directory and fleet caches. It returns
+fixed failure codes and partial-source notices, cancels waits when disposed,
+and refuses later cached reads. Its reads are the device list, that device's
+ports and links, fleet links and VLANs, ARP lookups, FDB lookups by a validated
+MAC or IPv4 address, and bounded per-device FDB/port reads. Raw writes are
+never required. Mobile must review these paths in its transport allowlist.
+
+Endpoint tracing reports stored observations, never ownership. The typed
+result retains per-MAC omissions and source notices in `Observations`, even
+when MCP's multi-MAC projection leaves them out. Host formatters must show
+those limitations and count their own presentation omissions. Synthetic
+`Fixtures/PortLookups` covers port rates, reverse neighbours and an edge-port
+trace over HTTP; existing MCP tests retain the broader ambiguity/cap cases.
+
+### Device detail sections for hosts
+
+`DeviceDetails` owns `device_details` execution and returns typed optional
+sections for inventory, VLANs, FDB, ARP, PoE, wireless, routing, availability
+and addresses. MCP uses the same operation and retains its section aliases,
+default selection, field names, ordering, per-section paging and notices.
+`ReturnedSections` and `SectionTotals` are host metadata outside MCP's data,
+so hosts can count rows omitted by presentation budgets without parsing JSON.
+A successful empty section stays distinct from a failed or unrequested one.
+
+`HostDeviceDetails` returns fixed failure codes and source notices. It owns
+no transport, cancels pending waits on disposal and refuses later cached
+reads. The reviewed routes are the device list and, only for requested
+sections, device ports, VLANs, inventory, FDB, ARP, sensor/health routes for
+PoE, wireless sensors, routing resources, availability and device IPs.
+Hosts must review those reads in their endpoint allowlist and discard replies
+from retired generations. All network-supplied display strings are redacted.
+`Fixtures/DeviceDetails` covers the sections over loopback HTTP; existing MCP
+field expectations remain, with additional host paging and refusal checks.
+
+### Fleet rankings and health for hosts
+
+`FleetRankings` owns `top_interfaces`, `top_errors` and `top_devices`, using
+Core's ranking functions over the same filtered port snapshot as MCP. Typed
+results retain `CandidatesTotal` and `PortsChecked` outside MCP's data, so a
+compact formatter can count matches left out of the requested top list.
+`HostFleetRankings` has fixed failures and retires all cached reads on disposal.
+Its reads are devices, fleet port status, device groups and group membership.
+
+`HealthOverview` owns `health_overview`, including scope, paging, problem-first
+ordering, class totals and bounded per-device fallback. Its host factory
+captures thresholds before any asynchronous read, through Core's own evaluator.
+`HostHealthOverview` returns fixed failures and includes full sensor totals and
+`DeniedDevices` outside MCP's data. Hosts must show denied-device counts rather
+than presenting partial coverage as all devices. Reads are devices, groups and
+memberships, fleet sensors, or the existing restricted per-device sensor health
+routes after fleet access is refused. Definitions may be supplied read-only.
+
+Both adapters keep MCP's output and use host-owned connections and deadlines.
+`Fixtures/FleetRankings` covers HTTP parity, independent rankings and health
+counts. Shared-only tests cover changed thresholds for dBm, signal, temperature
+and fan speed, mutation after capture, and sensor-limit override on and off.
+
+### Historical events, changes and alerts for hosts
+
+`DeviceEventHistory`, `NetworkEventHistory`, `RaisedAlerts` and `WhatChanged`
+now own the historical operations MCP runs. They retain time-window parsing,
+filters, event/alert/outage merging, occurrence reconstruction, ordering, caps
+and paging. `EventWindowInfo` reports coverage; a log that reaches its read
+cap inside a requested window does not claim the whole window was read.
+Historical alerts include recovered occurrences, with nullable `StillOpen`.
+Typed results additionally expose rule-name and open-status source failures
+that MCP's existing projection leaves implicit. They must not be read as a
+known severity or a known empty open set by host formatters.
+
+`WhatChanged` accepts the host's Unimus and Graylog clients, which may be
+unconfigured. It preserves config text full/summary/off policy and private-key
+redaction, and its Graylog count retains the existing restriction to windows
+ending now. `HostEventLookups` maps errors to fixed codes or source notices,
+cancels pending waits on disposal and refuses later cached reads. No client,
+credential or environment configuration is created by the shared operations.
+
+The reviewed LibreNMS reads are devices, event and alert logs, outages, rules,
+open alerts, groups/membership and optional device IPs for Graylog matching.
+Optional reads are Unimus devices/backups/diffs and Graylog search. Hosts
+supply deadlines and immutable connection generations and discard old replies.
+`Fixtures/EventHistory` covers HTTP parity, recovered historical alerts and a
+busy incomplete window. MCP's independent existing expectations remain.
+
+### Graylog search for hosts
+
+`LogSearch` now owns `search_logs` execution over the host's Graylog API.
+MCP retains its schema, window-edge counts, phrase/level/stream filtering,
+device address matching, ordering, top values and deep-paging sample notices.
+Typed results additionally report `SampledMessages`, `NewestRead` and
+`LinesOmitted` for compact formatters. Counts and top values must be described
+with the sample coverage rather than as an exhaustive set of messages.
+
+`HostLogSearch` returns fixed failures and retires pending and cached reads
+on disposal. Hosts control configuration, credentials and certificate trust;
+no environment variables are read. The reviewed routes are Graylog streams
+and relative search, plus LibreNMS devices and optional device IPs for matching.
+The host must offer this tool only when its own Graylog connection is ready.
+`Fixtures/LogSearch` exercises Core's real Graylog client over loopback HTTP.
+
+Log text is redacted before line shortening as well as MCP's final rendering.
+This intentionally strengthens the previous cut-before-redaction path when a
+secret spans the line limit. Ordinary output and caps are unchanged. Optional
+service exceptions map to fixed refusal, not-found, timeout or unavailable
+categories without returning their server text.
+
+### Unimus config tools for hosts
+
+`ConfigLookups` owns `config_backup`, `config_diff` and `recent_config_changes`
+execution. MCP keeps its schemas, device matching, bounded backup lookup,
+page sizes, stale notices, diff cap, scope filters and concurrency limit.
+Typed results include backup and line totals. Recent changes additionally
+report checked and unreadable device counts, including unreadable notices
+left outside MCP's five-notice cap, for compact formatters to state coverage.
+
+`HostConfigLookups` accepts the host's Unimus client and config-text policy,
+returns fixed failure codes and unreadable-device notices, and retires pending
+and cached reads on disposal. Full mode returns redacted text, summary mode
+returns counts without config text, and off mode refuses all reads before
+accessing either service. Redaction runs before config pagination; diff private
+key bodies are masked before trimming and all diff text is then redacted.
+
+Reviewed reads are LibreNMS devices/groups/memberships and Unimus devices,
+backups, latest backup and diffs. Host settings, credentials, certificate trust
+and deadlines remain host-owned. `AgentOptions.UnimusMyDomain` accepts the
+host's optional discovery domain for Core's existing address candidates. It
+applies to individual backups/diffs, WhatChanged and scoped recent-change
+correlation. The null default preserves standalone MCP matching, with no new
+environment variable. HTTP regressions use a short LibreNMS hostname whose
+Unimus address needs that suffix, with and without the host setting. `Fixtures/ConfigLookups` exercises Core's
+real Unimus client over HTTP with full/summary modes, redaction and request
+parity. Existing MCP tests retain independent bounds and stale-data checks.
+
+### Graphs for hosts
+
+`GraphLookup` owns `graph` execution for device, port and sensor graphs. MCP
+keeps its schema, aliases, spans, selection rules, PNG request and separate
+image content block. The typed result returns Core's `IntelligenceImage`,
+redacted metadata, omitted type counts and failed listing names. A partial
+type listing must not be described as a complete inventory by host formatters.
+Pixels remain unredacted, including legends.
+
+`HostGraphLookup` returns fixed failures, treats LibreNMS's HTTP 200 denial
+image as refused, and retires pending and cached reads on disposal. Hosts
+supply the immutable client/transport, trust and deadline. Reviewed reads are
+devices, device ports, sensor/health reads for sensor selection, graph listings,
+and the selected graph's PNG or small-image SVG permission probe. Images are
+bounded by Core's `IntelligenceImage.MaxBytes`, including a bound before base64
+decoding. This intentionally rejects images MCP previously returned above the
+Core image limit. `Fixtures/Graphs` covers HTTP parity, image bytes and denial;
+CI also checks the encoded-size limit. Mobile separately decides whether its
+model accepts images and how to persist them with a chat.
+
+Graph listing failures remain distinct from absence. If a partial listing
+cannot establish whether the requested type exists, the result has no image,
+an explicit unknown notice and the failed listing names. A complete successful
+listing can establish absence. If every listing fails, the host gets a source
+failure, including refusal or timeout where established, rather than an invalid
+request. MCP uses the same uncertainty notices and source-failure messages.
+
+Typed VLAN sections are absent when their source failed, rather than empty with
+a zero total. Alert detail history has an unknown previous-firing count and an
+explicit availability flag when the log failed; its summary never calls that a
+first firing. These failure-case corrections also apply to MCP. Typed rule
+applicability retains each target's ID and redacted name; MCP continues to
+project the same name strings, including when names are duplicated.
+
+Config diffs track recognised XML secret elements on each side through common
+lines before selecting and capping changed lines. Bodies remain redacted when
+their tags are unchanged or outside the displayed diff.
+
+MCP image responses retain failed graph-listing names and explicitly describe
+the available types as incomplete when an image was still found.
+
+With `GRAYLOG_MATCH_ANY_ADDRESS=true`, a failed interface-address read fails
+`search_logs` instead of searching fewer addresses. `what_changed` keeps its
+other sources and reports the Graylog section unavailable without a count.
+
+Severity-filtered historical alerts fail as unavailable when rule severities
+cannot be read. Unfiltered history retains occurrences and describes severity
+or open counts as unknown when the corresponding source failed.
+
+Sensor assessment metadata distinguishes sensor limits, host thresholds and a
+mix of both. Partial device limits can use host fallback bounds. dBm and signal
+always use host sentinel bands, so their sensor limits yield a mixed assessment.
+Core still evaluates severity; MCP's serialised readings remain unchanged.
+
+Shared-package CI also compiles a small consumer against the pinned Agent revision
+before `DeviceResolver` moved, then runs that unchanged consumer with the current
+Agent and Shared DLLs. This checks binary type forwarding for the resolver and its
+nested candidate API; a fresh source build against Shared would miss that failure.
+
+A failed event log, alert log or outage read makes the common history window
+incomplete with unknown coverage (`CoveredSince = null`). Successful sources'
+entries remain available, and the summary explicitly reports unknown coverage.
+
+`what_changed` leaves `ConfigChanged` unknown when Unimus has no backups or a
+version began in the window without an earlier backup to compare. It reports
+the missing baseline while retaining usable LibreNMS and Graylog results.
+
+Config-diff XML context tracks comments and CDATA independently on both sides.
+A tag shown as comment or CDATA text cannot terminate secret-body redaction.
+
+Review corrections preserve source uncertainty in additional host and MCP paths:
+maintenance failures leave the flag unknown; endpoint traces retain ARP, VLAN
+and link failures, including multi-MAC projections; fleet-sensor refusal is a
+refusal rather than invalid input. Routing-only device details resolve interface
+names, and continuation instructions use unfinished sections' next offsets.
+
+Alert detail history locates the requested occurrence from its state-change
+time before counting earlier firings. If it cannot identify that occurrence,
+the earlier count is unknown. `what_changed` reads up to 20 pages of 10 backup
+versions to cover the window and a preceding version. A capped search without
+a comparable change remains unknown instead of reporting no change.
+
+XML diff redaction carries unfinished tags and quoted attributes across lines.
+It bounds retained tag text and nesting depth, and masks all subsequent text
+when those bounds are exceeded rather than resuming with unknown context.
+
+XML processing instructions remain opaque until `?>`, including across lines.
+Tag-like content inside them cannot alter the secret-element context.
+
+Plain-text less-than operators followed by whitespace or a number do not open
+XML tag state, so common shell lines do not hide unrelated diff changes.
+
+A second unescaped `<` inside an unfinished tag is treated as unknown syntax.
+Diff masking then keeps subsequent text hidden, including when the first tag
+was a common non-secret line, so a later secret opener cannot be discarded
+while its body remains visible.

@@ -20,7 +20,8 @@ public sealed record TimelineEntry(
 /// <summary>A device's timeline for a window, newest first, with how much of the window it really covers.</summary>
 /// <param name="CoveredSince">
 /// The oldest time every log was read back to. Earlier than the window's
-/// start when the window is complete; later when a log ran out first.
+/// start when the window is complete; later when a log ran out first. Null when
+/// any history source failed, because common coverage cannot be established.
 /// </param>
 public sealed record Timeline(
     IReadOnlyList<TimelineEntry> Entries,
@@ -125,8 +126,8 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options)
             entries.Count(e => e.Source == "eventlog"),
             entries.Count(e => e.Source == "alertlog"),
             outageCount,
-            covered <= window.Since,
-            covered,
+            unavailable.Count == 0 && covered <= window.Since,
+            unavailable.Count == 0 ? covered : null,
             unavailable);
     }
 

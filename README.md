@@ -164,6 +164,11 @@ All settings are environment variables.
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
+Sensor thresholds can also be set by this host, including whether they override
+LibreNMS sensor limits. See [Host sensor thresholds](docs/DEVELOPMENT.md#host-sensor-thresholds)
+for the `MCP_DBM_*`, `MCP_SIGNAL_*`, `MCP_TEMPERATURE_*`, `MCP_FAN_SPEED_*` and
+`MCP_OVERRIDE_SENSOR_LIMITS` settings. Unset, assessment uses the existing defaults.
+
 Unimus and Graylog aren't tested at startup. If one can't be reached, the tools that use it say so, and `what_changed` still returns everything else.
 
 **Self-signed or internal CA certificates:** the server can't ask whether to trust a certificate, so if yours doesn't pass the normal checks, startup stops. It prints the certificate's subject, issuer, dates and fingerprint. Check the fingerprint against your server's own certificate, then add it to `LIBRENMS_TRUSTED_CERTS`. Only that exact certificate is trusted, so when it's renewed you add the new one. There's no setting that trusts every certificate.
