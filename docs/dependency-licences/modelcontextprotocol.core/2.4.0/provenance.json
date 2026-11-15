@@ -1,0 +1,18 @@
+{
+  "package": "modelcontextprotocol.core/2.4.0",
+  "packageSha256": "3b600797816a51297df17869249f7c710f24b7cc7e6434371d838863415d5986",
+  "upstreamRepository": "https://github.com/modelcontextprotocol/csharp-sdk",
+  "upstreamRevision": "4cbf42ef107763f0bc75c358af8cb2dfe47a769a",
+  "files": {
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/4cbf42ef107763f0bc75c358af8cb2dfe47a769a/LICENSE",
+      "sha256": "7c6a686d2b34b86ad8c726e0ac4d76903b525f251d73e617f8db3879fa8f11fc",
+      "role": "licence"
+    },
+    "THIRD-PARTY-NOTICES.txt": {
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/4cbf42ef107763f0bc75c358af8cb2dfe47a769a/THIRD-PARTY-NOTICES.txt",
+      "sha256": "b9c35f6ab075077d5c2b644fdc58eb5696b8b70f539947f9e1e57331599fc5ce",
+      "role": "notice"
+    }
+  }
+}
