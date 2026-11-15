@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.hosting/10.0.15",
+  "packageSha256": "66ac14c505e612f376a2fe5fcfec992588b6a4c1ce82c64a427fe24aa447502c",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "8e0f8ed2312954727f8919d7d1c2f78b483b4ee7",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/8e0f8ed2312954727f8919d7d1c2f78b483b4ee7/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

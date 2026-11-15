@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.primitives/10.0.15",
+  "packageSha256": "5be133916801ba62ce03dde9367b7a88e0bebf99f844b598fd22b4f6f360f6c5",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "8e0f8ed2312954727f8919d7d1c2f78b483b4ee7",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/8e0f8ed2312954727f8919d7d1c2f78b483b4ee7/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

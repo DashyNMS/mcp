@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.logging.eventsource/10.0.15",
+  "packageSha256": "96146654e87f31e0f236ef562aee3e075952dbe4fc86c3100101e62906dcd777",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "8e0f8ed2312954727f8919d7d1c2f78b483b4ee7",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/8e0f8ed2312954727f8919d7d1c2f78b483b4ee7/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}
