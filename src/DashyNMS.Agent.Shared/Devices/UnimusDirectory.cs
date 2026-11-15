@@ -35,6 +35,7 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
 
     public async Task<IReadOnlyList<UnimusDevice>> GetAllAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Fresh() is { } devices)
         {
             return devices;
@@ -43,12 +44,14 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
                 return fetched;
             }
 
             var list = await unimus.ListAllDevicesAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             _devices = list;
             _fetchedAt = time.GetUtcNow();
             return list;
@@ -64,7 +67,7 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
     {
         ArgumentNullException.ThrowIfNull(device);
         var all = await GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return UnimusDeviceMatcher.Match(all, UnimusAddressCandidates.ForDevice(device, myDomain: null));
+        return UnimusDeviceMatcher.Match(all, UnimusAddressCandidates.ForDevice(device, options.UnimusMyDomain));
     }
 
     /// <summary>Like <see cref="MatchAsync"/>, but an error naming the problem when there's no match.</summary>
@@ -104,7 +107,7 @@ public static class ConfigDiff
 
     /// <summary>The changed lines as a unified-style diff: "- old", "+ new", common lines left out.</summary>
     /// <remarks>
-    /// Private keys are blanked line by line here, before anything is cut,
+    /// Private keys and recognised XML secret elements are blanked line by line here, before anything is cut,
     /// following each side of the diff through the unchanged lines too: a
     /// rotated key's diff holds only its body lines (BEGIN and END are
     /// unchanged), and a long one can be cut between BEGIN and END - either
@@ -121,18 +124,20 @@ public static class ConfigDiff
         var lines = new List<string>();
         int removed = 0, added = 0;
         bool originalInKey = false, revisedInKey = false;
+        var originalSecret = new Redactor.SecretElementContext();
+        var revisedSecret = new Redactor.SecretElementContext();
         foreach (var group in diff.LineGroups)
         {
             if (group.IsCommon)
             {
                 foreach (var line in group.OriginalLines)
                 {
-                    Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey);
+                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), originalSecret);
                 }
 
                 foreach (var line in group.RevisedLines.Count > 0 ? group.RevisedLines : group.OriginalLines)
                 {
-                    Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey);
+                    Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), revisedSecret);
                 }
 
                 continue;
@@ -140,18 +145,19 @@ public static class ConfigDiff
 
             foreach (var line in group.OriginalLines)
             {
-                lines.Add("- " + Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey));
+                lines.Add("- " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref originalInKey), originalSecret));
                 removed++;
             }
 
             foreach (var line in group.RevisedLines)
             {
-                lines.Add("+ " + Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey));
+                lines.Add("+ " + Redactor.MaskSecretElementLine(Redactor.MaskPrivateKeyLine(line.Text ?? string.Empty, ref revisedInKey), revisedSecret));
                 added++;
             }
         }
 
-        var shown = ToolResult.Take(lines, maxLines, out var omitted);
+        var omitted = Math.Max(0, lines.Count - maxLines);
+        var shown = lines.Take(maxLines).ToList();
         return (string.Join('\n', shown), lines.Count, removed, added, omitted);
     }
 }

@@ -23,4 +23,9 @@
     <ProjectReference Include="../../src/DashyNMS.Mcp/DashyNMS.Mcp.csproj" />
   </ItemGroup>
 
+  <!-- The tool list MCP clients receive, held byte for byte (DashyNMS/mcp#130). -->
+  <ItemGroup>
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

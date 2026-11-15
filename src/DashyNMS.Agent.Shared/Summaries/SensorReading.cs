@@ -21,21 +21,23 @@ public enum SensorAssessment
     SensorLimits,
 
     /// <summary>
-    /// Core's default thresholds for dBm, signal, temperature or fan speed, with the sensor's own
-    /// limits winning for any bound they set. A reading in the class's "nothing plugged in" band
-    /// stays unknown.
+    /// Core's host thresholds, including the dBm/signal "nothing plugged in" bands.
+    /// No effective limit comes from the sensor.
     /// </summary>
     Thresholds,
 
     /// <summary>An installed state definition's severity, whatever the number.</summary>
     StateDefinition,
+
+    /// <summary>Sensor limits combined with host fallback limits or host ignore bands.</summary>
+    MixedLimits,
 }
 
 /// <summary>
 /// One sensor's reading, judged the way desktop's Health tab judges it
 /// (#24): against the sensor's own LibreNMS limits where it has them, and
-/// desktop's default thresholds for dBm, signal, temperature and fans where
-/// it doesn't (Core's <see cref="SensorCategoryRegistry"/>).
+/// the host's thresholds for dBm, signal, temperature and fans according to
+/// its sensor-limit override choice (Core's <see cref="SensorCategoryRegistry"/>).
 /// </summary>
 /// <param name="State">ok, warning, critical, or unknown (no limits to judge by, or a "nothing plugged in" reading).</param>
 public sealed record SensorReading(
@@ -56,7 +58,7 @@ public sealed record SensorReading(
 
     /// <summary>
     /// What <see cref="State"/> was judged against. Left out of JSON so MCP's output stays
-    /// unchanged; MCP's limits and state label already say as much to a model.
+    /// unchanged. The four limit fields retain the original LibreNMS limits.
     /// </summary>
     [JsonIgnore]
     public SensorAssessment Assessment { get; init; }
@@ -83,12 +85,16 @@ public sealed record SensorReading(
         ["pressure"] = "kPa",
     };
 
-    public static SensorReading From(Sensor sensor)
+    public static SensorReading From(Sensor sensor) => From(sensor, Defaults);
+
+    /// <summary>Uses the host's captured settings through Core's own evaluator.</summary>
+    public static SensorReading From(Sensor sensor, AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(sensor);
         var bounds = new ThresholdBounds(sensor.LimitLow, sensor.LimitLowWarn, sensor.LimitHighWarn, sensor.LimitHigh);
         IThresholdEvaluator evaluator = SensorCategoryRegistry.Resolve(sensor.SensorClass) is { } entry
-            ? entry.Thresholds(Defaults, sensor)
+            ? entry.Thresholds(settings, sensor)
             : new HybridThresholdEvaluator(default, bounds, overrideSensorLimitsWithAppThresholds: false);
 
         var hasLimits = SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null
@@ -96,7 +102,7 @@ public sealed record SensorReading(
         var severity = sensor.StateDefinition?.Severity ?? (sensor.HasReading && hasLimits ? evaluator.Evaluate(sensor.Current) : AlertSeverity.Unknown);
         var assessment = sensor.StateDefinition is not null ? SensorAssessment.StateDefinition
             : !sensor.HasReading ? SensorAssessment.NoReading
-            : SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null ? SensorAssessment.Thresholds
+            : SensorCategoryRegistry.Resolve(sensor.SensorClass) is not null ? LimitAssessment(sensor, settings, bounds)
             : hasLimits ? SensorAssessment.SensorLimits
             : SensorAssessment.NoLimits;
 
@@ -119,6 +125,33 @@ public sealed record SensorReading(
             sensor.LimitHigh)
         { StateLabel = sensor.StateDefinition?.Label, StateDefinitionVersion = sensor.StateDefinition?.CatalogueVersion,
           StateDefinitionOutcome = sensor.StateDefinition?.Outcome.ToString(), Assessment = assessment };
+    }
+
+    /// <summary>Describes Core's bound selection without reimplementing its severity evaluation.</summary>
+    private static SensorAssessment LimitAssessment(Sensor sensor, AppSettings settings, ThresholdBounds sensorBounds)
+    {
+        var type = sensor.SensorClass?.ToLowerInvariant();
+        var appBounds = type switch
+        {
+            "dbm" => settings.DbmThresholds.ToBounds(),
+            "signal" => settings.SignalThresholds.ToBounds(),
+            "temperature" => settings.TemperatureThresholds.ToBounds(),
+            "fanspeed" => settings.FanSpeedThresholds.ToBounds(),
+            _ => default,
+        };
+        var sensorValues = new[] { sensorBounds.LowCritical, sensorBounds.LowWarning, sensorBounds.HighWarning, sensorBounds.HighCritical };
+        var appValues = new[] { appBounds.LowCritical, appBounds.LowWarning, appBounds.HighWarning, appBounds.HighCritical };
+        var usesSensor = false;
+        // Core always takes these sentinel bands from the host, even with full sensor limits.
+        var usesHost = type is "dbm" or "signal";
+        for (var i = 0; i < sensorValues.Length; i++)
+        {
+            if (!settings.OverrideSensorLimitsWithAppThresholds && sensorValues[i].HasValue) usesSensor = true;
+            else if (appValues[i].HasValue) usesHost = true;
+        }
+        return usesSensor && usesHost ? SensorAssessment.MixedLimits
+            : usesSensor ? SensorAssessment.SensorLimits
+            : usesHost ? SensorAssessment.Thresholds : SensorAssessment.NoLimits;
     }
 
     /// <summary>Critical first, then warning, then the rest - the order a problem list wants.</summary>

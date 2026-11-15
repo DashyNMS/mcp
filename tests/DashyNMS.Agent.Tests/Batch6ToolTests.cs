@@ -46,7 +46,8 @@ public sealed class Batch6ToolTests
 
         var root = Text(result);
         Assert.Equal("ok", root.GetProperty("status").GetString());
-        Assert.Equal("Traffic graph for the device over the last day, shown as an image.", root.GetProperty("summary").GetString());
+        Assert.Equal("Traffic graph for the device over the last day, shown as an image. Some graph listings couldn't be read, so the available types are incomplete.", root.GetProperty("summary").GetString());
+        Assert.Equal("wireless graphs", Assert.Single(root.GetProperty("data").GetProperty("unavailable").EnumerateArray()).GetString());
         Assert.Equal("device_bits", root.GetProperty("data").GetProperty("graph").GetProperty("type").GetString());
 
         // All three listings, the wireless one failing without costing the rest.
@@ -79,7 +80,10 @@ public sealed class Batch6ToolTests
     [Fact]
     public async Task Unknown_type_is_an_error_listing_the_real_ones_and_no_image()
     {
-        var result = await Graphs(WithGraphs()).Graph("core-sw1", type: "device_toasters");
+        // A definitive unknown-type error requires every listing to have succeeded.
+        var nms = WithGraphs();
+        nms.Transport.On("devices/1/wireless", """{"status":"ok","graphs":[]}""");
+        var result = await Graphs(nms).Graph("core-sw1", type: "device_toasters");
 
         var root = Text(result);
         Assert.Equal("error", root.GetProperty("status").GetString());
@@ -93,6 +97,7 @@ public sealed class Batch6ToolTests
         var nms = WithGraphs();
         nms.Transport.On("devices/1/graphs", """{"status":"ok","graphs":[{"desc":"Ping Response","name":"device_icmp_perf"}]}""");
 
+        nms.Transport.On("devices/1/wireless", """{"status":"ok","graphs":[]}""");
         var result = await Graphs(nms).Graph("core-sw1");
 
         Assert.StartsWith("This device has no traffic graph", Text(result).GetProperty("summary").GetString(), StringComparison.Ordinal);

@@ -1,8 +1,27 @@
+using DesktopNMS.Core.Configuration;
+
 namespace DashyNMS.Agent;
 
 /// <summary>Settings the tool layer applies to everything it reads and returns.</summary>
 public sealed class AgentOptions
 {
+    /// <summary>Host thresholds, using Core's Health-page evaluation and defaults when omitted.</summary>
+    public DbmThresholdSettings DbmThresholds { get; init; } = new();
+    public SignalThresholdSettings SignalThresholds { get; init; } = new();
+    public BandThresholdSettings TemperatureThresholds { get; init; } = BandThresholdSettings.TemperatureDefaults();
+    public BandThresholdSettings FanSpeedThresholds { get; init; } = BandThresholdSettings.FanSpeedDefaults();
+    public bool OverrideSensorLimitsWithAppThresholds { get; init; }
+
+    /// <summary>A copy prevents a host changing mutable settings during evaluation.</summary>
+    internal AppSettings SensorSettings() => new()
+    {
+        DbmThresholds = DbmThresholds.Clone(),
+        SignalThresholds = SignalThresholds.Clone(),
+        TemperatureThresholds = TemperatureThresholds.Clone(),
+        FanSpeedThresholds = FanSpeedThresholds.Clone(),
+        OverrideSensorLimitsWithAppThresholds = OverrideSensorLimitsWithAppThresholds,
+    };
+
     public const int DefaultMaxResultBytes = 16 * 1024;
 
     /// <summary>
@@ -26,6 +45,12 @@ public sealed class AgentOptions
     /// desktop's and LibreNMS's "match any address" (graylog.match_any_address).
     /// </summary>
     public bool GraylogMatchAnyAddress { get; init; }
+
+    /// <summary>
+    /// Optional discovery-domain suffix from the host's Unimus settings. Core
+    /// applies it in its existing candidate order; null preserves MCP's matching.
+    /// </summary>
+    public string? UnimusMyDomain { get; init; }
 
     /// <summary>How much of a device's configuration the tools may return (#16).</summary>
     public ConfigText ConfigText { get; init; } = ConfigText.Full;

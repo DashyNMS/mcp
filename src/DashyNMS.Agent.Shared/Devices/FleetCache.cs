@@ -50,6 +50,7 @@ public sealed class FleetCache(ILibreNmsClient client, TimeProvider time)
 
         public async Task<IReadOnlyList<T>> GetAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } items)
             {
                 return items;
@@ -58,12 +59,14 @@ public sealed class FleetCache(ILibreNmsClient client, TimeProvider time)
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (Fresh() is { } fetched)
                 {
                     return fetched;
                 }
 
                 var list = await fetch(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 _items = list;
                 _fetchedAt = time.GetUtcNow();
                 return list;
