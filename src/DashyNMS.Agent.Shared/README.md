@@ -115,3 +115,20 @@ Graph results use Core's image byte limit and return PNG bytes separately from
 metadata. Image pixels are not redacted. Hosts must disclose source failures,
 coverage gaps, sampling and omissions when compacting results, and must decide
 whether their model can receive an image before passing it through.
+
+## Exact Spotlight identities
+
+`HostObjectResolver.Create(client)` revalidates a Core
+`IntelligenceObjectReference` on the host-owned immutable connection before a
+chat changes scope. Device, group and location IDs are exact; sensor and port
+IDs also require their device, and alerts/faults require the source and any
+supplied rule ID. Alerts are checked in every state, including recovered.
+No name matching, parent-device fallback, cache or model-facing tool is added.
+
+A successful outcome contains the original identity and a redacted display
+name; missing or mismatched identities return `HostFailure.NotFound`. Source
+failures have fixed categories without exception text. Hosts provide a deadline,
+retire the resolver on connection/account changes, and recheck connection and
+chat ownership after awaiting before applying a result. IDs do not carry a
+server/account identity, so callers must never submit references from another
+connection. Retirement and caller cancellation propagate as cancellation.
