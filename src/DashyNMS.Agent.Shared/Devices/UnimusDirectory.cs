@@ -67,7 +67,7 @@ public sealed class UnimusDirectory(IUnimusApi unimus, AgentOptions options, Tim
     {
         ArgumentNullException.ThrowIfNull(device);
         var all = await GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return UnimusDeviceMatcher.Match(all, UnimusAddressCandidates.ForDevice(device, myDomain: null));
+        return UnimusDeviceMatcher.Match(all, UnimusAddressCandidates.ForDevice(device, options.UnimusMyDomain));
     }
 
     /// <summary>Like <see cref="MatchAsync"/>, but an error naming the problem when there's no match.</summary>

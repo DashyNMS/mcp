@@ -668,7 +668,12 @@ key bodies are masked before trimming and all diff text is then redacted.
 
 Reviewed reads are LibreNMS devices/groups/memberships and Unimus devices,
 backups, latest backup and diffs. Host settings, credentials, certificate trust
-and deadlines remain host-owned. `Fixtures/ConfigLookups` exercises Core's
+and deadlines remain host-owned. `AgentOptions.UnimusMyDomain` accepts the
+host's optional discovery domain for Core's existing address candidates. It
+applies to individual backups/diffs, WhatChanged and scoped recent-change
+correlation. The null default preserves standalone MCP matching, with no new
+environment variable. HTTP regressions use a short LibreNMS hostname whose
+Unimus address needs that suffix, with and without the host setting. `Fixtures/ConfigLookups` exercises Core's
 real Unimus client over HTTP with full/summary modes, redaction and request
 parity. Existing MCP tests retain independent bounds and stale-data checks.
 
