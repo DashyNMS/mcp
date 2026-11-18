@@ -260,6 +260,25 @@ public sealed class Batch6ToolTests
     }
 
     [Fact]
+    public async Task Vlans_on_libre_nms_26_11_are_the_numbers_it_sends()
+    {
+        // 26.11 sends the VLAN number; 10 is also an internal id (VLAN 1) and must not be read as one.
+        var nms = WithMac("""
+            {"status":"ok","ports_fdb":[
+              {"ports_fdb_id":1,"port_id":101,"device_id":1,"mac_address":"aabbcc000005","vlan":10,"updated_at":"2026-11-17 09:50:00"},
+              {"ports_fdb_id":2,"port_id":205,"device_id":2,"mac_address":"aabbcc000005","vlan":120,"updated_at":"2026-11-17 09:50:00"},
+              {"ports_fdb_id":3,"port_id":205,"device_id":2,"mac_address":"aabbcc000005","vlan":null,"updated_at":"2026-11-17 09:50:00"}
+            ]}
+            """);
+
+        var data = FakeLibreNms.Parse(await Trace(nms).TraceEndpoint("aabbcc000005")).GetProperty("data");
+
+        Assert.Equal([120], data.GetProperty("edge").GetProperty("vlans").EnumerateArray().Select(v => v.GetInt32()).ToArray());
+        var uplink = data.GetProperty("seen_on").EnumerateArray().Single(s => s.GetProperty("role").GetString() == "uplink");
+        Assert.Equal([10], uplink.GetProperty("vlans").EnumerateArray().Select(v => v.GetInt32()).ToArray());
+    }
+
+    [Fact]
     public async Task Ip_is_turned_into_its_mac_first()
     {
         var nms = WithMac(CoreAndEdge);

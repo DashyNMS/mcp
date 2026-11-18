@@ -146,10 +146,13 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
                 portList.Where(p => p.Vlans.Any(m => m.Vlan == v.VlanNumber && !m.Untagged)).Select(p => Clean(portName[p.PortId])).ToList())).ToList()) };
         if (Use(fdb, "fdb") is { } macs)
         {
-            var vlanNumber = vlanList.ToDictionary(v => v.VlanId, v => v.VlanNumber);
+            // 26.11 sends the VLAN number itself; older servers an internal id
+            // resolved through the VLAN table (core#86). A failed VLAN read
+            // still leaves 26.11's numbers.
+            var vlanResolver = new FdbVlanResolver(vlanList);
             data = data with { Fdb = Paged("fdb", macs.OrderBy(m => portName.GetValueOrDefault(m.PortId), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(m => m.MacAddress, StringComparer.OrdinalIgnoreCase).Select(m => new FdbDetail(Clean(portName.GetValueOrDefault(m.PortId)), m.PortId,
-                    Clean(MacText(m.MacAddress)), m.VlanId is { } v && vlanNumber.TryGetValue(v, out var n) ? n : null, m.UpdatedAt)).ToList()) };
+                    Clean(MacText(m.MacAddress)), vlanResolver.NumberOf(m), m.UpdatedAt)).ToList()) };
         }
         if (Use(arp, "arp") is { } arpEntries)
             data = data with { Arp = Paged("arp", arpEntries.OrderBy(a => a.Ipv4Address, StringComparer.Ordinal)

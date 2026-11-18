@@ -4,6 +4,7 @@ using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Devices;
 using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Ports;
@@ -142,7 +143,8 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
 
         var devices = devicesTask.Result.ToDictionary(d => d.DeviceId);
         var links = linksTask.Result.Value ?? [];
-        var vlanNumber = (vlansTask.Result.Value ?? []).ToDictionary(v => v.VlanId, v => v.VlanNumber);
+        // Direct numbers on 26.11, the VLAN table for older servers' internal ids (core#86).
+        var vlanResolver = new FdbVlanResolver(vlansTask.Result.Value ?? []);
 
         // The most recently updated switches first, so a cap drops the stalest.
         var switches = rows
@@ -173,7 +175,7 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
         var vlansOnPort = rows
             .GroupBy(r => r.PortId)
             .ToDictionary(g => g.Key, g => g
-                .Select(r => r.VlanId is { } v && vlanNumber.TryGetValue(v, out var number) ? number : (int?)null)
+                .Select(vlanResolver.NumberOf)
                 .OfType<int>()
                 .Distinct()
                 .Order()
