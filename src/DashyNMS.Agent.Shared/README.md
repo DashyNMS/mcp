@@ -2,8 +2,7 @@
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
 by the DashyNMS MCP server and the DashyNMS apps. It holds the typed operations behind every read-only MCP network tool and the
-shared tool catalogue. MCP retains protocol discovery, formatting and byte caps. It replaces
-`DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
+shared tool catalogue. MCP retains protocol discovery, formatting and byte caps.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
 adapter). The direct dependency is Core; Core's own dependencies remain transitive.
 Namespaces retain the `DashyNMS.Agent` prefix for source compatibility.
