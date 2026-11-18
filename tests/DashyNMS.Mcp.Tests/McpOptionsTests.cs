@@ -168,6 +168,75 @@ public sealed class McpOptionsTests
         Assert.StartsWith(McpOptions.GraylogMatchAnyAddressKey, Assert.Single(errors), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("   ", null)]
+    [InlineData("example.net", "example.net")]
+    [InlineData(" corp.example.net ", "corp.example.net")]
+    [InlineData("lan", "lan")]
+    [InlineData("site-1.example.net", "site-1.example.net")]
+    [InlineData("_internal.example.net", "_internal.example.net")]
+    [InlineData(".example.net", "example.net")]
+    [InlineData("example.net.", "example.net")]
+    [InlineData(" .corp.example.net. ", "corp.example.net")]
+    public void Discovery_domain_setting(string? value, string? expected)
+    {
+        var values = Minimal();
+        values[McpOptions.UnimusMyDomainKey] = value;
+
+        var options = Load(values, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.UnimusMyDomain);
+    }
+
+    [Fact]
+    public void Discovery_domain_is_accepted_without_Unimus_so_a_host_can_always_pass_it()
+    {
+        var values = Minimal();
+        values[McpOptions.UnimusMyDomainKey] = "example.net";
+
+        var options = Load(values, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Null(options!.Unimus);
+        Assert.Equal("example.net", options.UnimusMyDomain);
+    }
+
+    [Theory]
+    [InlineData("..")]
+    [InlineData("example.org..")]
+    [InlineData("example..org")]
+    [InlineData("-example.org")]
+    [InlineData("example-.org")]
+    [InlineData("example org")]
+    [InlineData("https://example.org")]
+    [InlineData("example.org/path")]
+    [InlineData("exämple.org")]
+    [InlineData("synthetic-secret-token=abc")]
+    public void Malformed_discovery_domain_is_a_fixed_problem_that_doesnt_echo_the_value(string value)
+    {
+        var values = Minimal();
+        values[McpOptions.UnimusMyDomainKey] = value;
+
+        Assert.Null(Load(values, out var errors));
+        var error = Assert.Single(errors);
+        Assert.StartsWith(McpOptions.UnimusMyDomainKey + " ", error, StringComparison.Ordinal);
+        Assert.DoesNotContain(value.Trim(), error, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Overlong_discovery_domains_and_labels_are_refused()
+    {
+        Assert.True(McpOptions.IsDiscoveryDomain(new string('a', 63) + ".example.net"));
+        Assert.False(McpOptions.IsDiscoveryDomain(new string('a', 64) + ".example.net"));
+        var longest = string.Join('.', Enumerable.Repeat(new string('a', 63), 3)) + "." + new string('b', 61);
+        Assert.Equal(253, longest.Length);
+        Assert.True(McpOptions.IsDiscoveryDomain(longest));
+        Assert.False(McpOptions.IsDiscoveryDomain(longest + "b"));
+    }
+
     [Fact]
     public void Unknown_config_text_setting_is_an_error()
     {

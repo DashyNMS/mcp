@@ -671,11 +671,21 @@ backups, latest backup and diffs. Host settings, credentials, certificate trust
 and deadlines remain host-owned. `AgentOptions.UnimusMyDomain` accepts the
 host's optional discovery domain for Core's existing address candidates. It
 applies to individual backups/diffs, WhatChanged and scoped recent-change
-correlation. The null default preserves standalone MCP matching, with no new
-environment variable. HTTP regressions use a short LibreNMS hostname whose
-Unimus address needs that suffix, with and without the host setting. `Fixtures/ConfigLookups` exercises Core's
-real Unimus client over HTTP with full/summary modes, redaction and request
-parity. Existing MCP tests retain independent bounds and stale-data checks.
+correlation. The standalone server sets it from `UNIMUS_MY_DOMAIN` (#157), so a
+host such as desktop can pass its saved Unimus discovery domain. Unset or blank
+leaves it null, preserving the earlier matching exactly. Leading dots and one
+trailing dot are dropped, as mobile does. Any other value that isn't a DNS name
+(dot-separated letters, digits, hyphens and underscores) stops startup with a
+fixed line that doesn't quote it, in case a token was pasted into the wrong
+variable. It's accepted without Unimus configured, so a host can pass its
+setting unconditionally. HTTP regressions use a short LibreNMS hostname whose
+Unimus address needs that suffix, with and without the host setting;
+`UnimusDiscoveryDomainStdioTests` repeats them through the real server over
+stdio for backups, diffs, scoped recent changes and `what_changed`, in full,
+summary and off modes, and checks a malformed value stops startup.
+`Fixtures/ConfigLookups` exercises Core's real Unimus client over HTTP with
+full/summary modes, redaction and request parity. Existing MCP tests retain
+independent bounds and stale-data checks.
 
 ### Graphs for hosts
 

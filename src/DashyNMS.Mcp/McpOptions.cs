@@ -25,6 +25,8 @@ public sealed class McpOptions
     public const string UnimusUrl = "UNIMUS_URL";
     public const string UnimusToken = "UNIMUS_TOKEN";
     public const string UnimusTrustedCerts = "UNIMUS_TRUSTED_CERTS";
+    /// <summary>LibreNMS's discovery domain, for matching short hostnames to Unimus devices - see <see cref="UnimusMyDomain"/>.</summary>
+    public const string UnimusMyDomainKey = "UNIMUS_MY_DOMAIN";
     public const string GraylogUrl = "GRAYLOG_URL";
     public const string GraylogUsername = "GRAYLOG_USERNAME";
     public const string GraylogPassword = "GRAYLOG_PASSWORD";
@@ -45,6 +47,7 @@ public sealed class McpOptions
         LibreNmsConnection connection,
         bool timestampsAreUtc,
         UnimusConnection? unimus,
+        string? unimusMyDomain,
         GraylogConnection? graylog,
         string graylogQueryField,
         bool graylogMatchAnyAddress,
@@ -54,6 +57,7 @@ public sealed class McpOptions
         Connection = connection;
         TimestampsAreUtc = timestampsAreUtc;
         Unimus = unimus;
+        UnimusMyDomain = unimusMyDomain;
         Graylog = graylog;
         GraylogField = graylogQueryField;
         GraylogMatchAnyAddress = graylogMatchAnyAddress;
@@ -86,6 +90,17 @@ public sealed class McpOptions
 
     /// <summary>Unimus, when both its variables are set; null leaves it out of <c>what_changed</c>.</summary>
     public UnimusConnection? Unimus { get; }
+
+    /// <summary>
+    /// LibreNMS's discovery domain (its <c>mydomain</c> setting), as desktop's
+    /// Unimus "discovery domain" setting. LibreNMS's API doesn't expose it, so
+    /// a device LibreNMS knows as <c>core-sw1</c> only matches a Unimus device
+    /// at <c>core-sw1.example.net</c> when the host says what the suffix is.
+    /// Null, the default, leaves matching exactly as it was before the setting
+    /// existed. Accepted without Unimus configured, as <see cref="GraylogField"/>
+    /// is without Graylog, so a host can pass its saved value unconditionally.
+    /// </summary>
+    public string? UnimusMyDomain { get; }
 
     /// <summary>Graylog, when its address, username and password are set; null leaves it out of <c>what_changed</c>.</summary>
     public GraylogConnection? Graylog { get; }
@@ -167,6 +182,7 @@ public sealed class McpOptions
         var timeout = ParseInt(lookup, LibreNmsTimeout, DefaultTimeoutSeconds, minimum: 1, problems);
         var timestampsAreUtc = ParseBool(lookup, LibreNmsTimestampsUtc, fallback: true, problems);
         var unimus = LoadUnimus(lookup, timeout, problems);
+        var unimusMyDomain = ParseDiscoveryDomain(lookup, problems);
         var graylog = LoadGraylog(lookup, timeout, problems);
         var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
         var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
@@ -188,7 +204,7 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings);
+        return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings);
     }
 
     private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)
@@ -253,6 +269,71 @@ public sealed class McpOptions
         }
 
         return new UnimusConnection(webRoot, token, allowUntrustedCertificate: true, timeoutSeconds: timeout, trustedCertificates: trusted);
+    }
+
+    /// <summary>
+    /// Leading dots (<c>.example.net</c>, a common way to write a suffix) are
+    /// dropped as DashyNMS mobile does, and so is one trailing dot (the
+    /// fully qualified <c>example.net.</c>): both mean the same domain, and
+    /// desktop saves the value as typed, so refusing them would stop the whole
+    /// server over punctuation. Anything else that isn't a domain name is a
+    /// problem. The problem line is fixed rather than quoting the value: a
+    /// token pasted into the wrong variable would otherwise end up on stderr,
+    /// and from there in the MCP client's log.
+    /// </summary>
+    private static string? ParseDiscoveryDomain(Func<string, string?> lookup, List<string> problems)
+    {
+        var value = Value(lookup, UnimusMyDomainKey);
+        if (value is null)
+        {
+            return null;
+        }
+
+        var domain = value.TrimStart('.');
+        if (domain.EndsWith('.'))
+        {
+            domain = domain[..^1];
+        }
+
+        if (IsDiscoveryDomain(domain))
+        {
+            return domain;
+        }
+
+        problems.Add($"{UnimusMyDomainKey} isn't a domain name. Set it to LibreNMS's discovery domain (its mydomain setting), such as example.net, or leave it unset.");
+        return null;
+    }
+
+    /// <summary>
+    /// A DNS name: dot-separated labels of 1 to 63 letters, digits, hyphens or
+    /// underscores, no label starting or ending with a hyphen, 253 characters
+    /// at most. Core appends it verbatim after a dot, so an empty label, a
+    /// space or a scheme would build an address Unimus can never match;
+    /// refusing it at startup says so instead of quietly matching nothing.
+    /// Underscores are allowed because some internal zones use them and
+    /// refusing a working value would stop the server for no gain.
+    /// </summary>
+    internal static bool IsDiscoveryDomain(string text)
+    {
+        if (text.Length is 0 or > 253)
+        {
+            return false;
+        }
+
+        foreach (var label in text.Split('.'))
+        {
+            if (label.Length is 0 or > 63 || label[0] == '-' || label[^1] == '-')
+            {
+                return false;
+            }
+
+            if (!label.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static GraylogConnection? LoadGraylog(Func<string, string?> lookup, int timeout, List<string> problems)

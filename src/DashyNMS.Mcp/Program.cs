@@ -48,6 +48,7 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     GraylogQueryField = options.GraylogField,
     GraylogMatchAnyAddress = options.GraylogMatchAnyAddress,
     ConfigText = options.ConfigText,
+    UnimusMyDomain = options.UnimusMyDomain,
     DbmThresholds = options.SensorSettings.DbmThresholds,
     SignalThresholds = options.SensorSettings.SignalThresholds,
     TemperatureThresholds = options.SensorSettings.TemperatureThresholds,

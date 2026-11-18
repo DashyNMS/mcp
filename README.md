@@ -157,6 +157,7 @@ All settings are environment variables.
 | `UNIMUS_URL`, `UNIMUS_TOKEN` | No | | Turn on the config tools and config diffs in `what_changed`. Set both or neither. |
 | `MCP_CONFIG_TEXT` | No | `full` | How much config the tools return: `full` (redacted text), `summary` (when it changed and how many lines, no text), or `off` (nothing from Unimus) |
 | `UNIMUS_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Unimus |
+| `UNIMUS_MY_DOMAIN` | No | | LibreNMS's discovery domain (its `mydomain` setting), such as `example.net`. Set it when LibreNMS knows devices by short names like `core-sw1` and Unimus knows them as `core-sw1.example.net`, so the config tools and `what_changed` can match them. Unset, matching is unchanged. A value that isn't a domain name stops the server at startup. |
 | `GRAYLOG_URL`, `GRAYLOG_USERNAME`, `GRAYLOG_PASSWORD` | No | | Turn on `search_logs` and Graylog messages in `what_changed`. With an access token, the token is the username and the password is `token`. |
 | `GRAYLOG_VERSION` | No | `2.1` | `2.1` for Graylog 2.1 and newer, including 6.x and 7.x (tested on 7.2). `2.0` only for Graylog 2.0. |
 | `GRAYLOG_QUERY_FIELD` | No | `source` | The Graylog field matched against a device's addresses, as LibreNMS's `graylog.query_field` |
