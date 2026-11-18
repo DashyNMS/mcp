@@ -64,7 +64,7 @@ public sealed class StdioSmokeTests
         Assert.Equal("core-sw1.example.com", result.GetProperty("data").GetProperty("devices")[0].GetProperty("hostname").GetString());
 
         Assert.Contains("X-Auth-Token: smoke-test-token", librenms.Headers, StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain("smoke-test-token", server.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("smoke-test-token", await server.StopAsync(cts.Token), StringComparison.Ordinal);
     }
 
     /// <summary>Just enough HTTP for the server's startup check and a device list.</summary>

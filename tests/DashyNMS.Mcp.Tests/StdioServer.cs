@@ -34,7 +34,11 @@ internal sealed class StdioServer : IDisposable
         _process.BeginErrorReadLine();
     }
 
-    /// <summary>Everything the server has written to stderr so far.</summary>
+    /// <summary>
+    /// Everything the server has written to stderr so far, for diagnostics
+    /// while it runs. Lines arrive asynchronously, so a check that nothing was
+    /// written uses <see cref="StopAsync"/> instead.
+    /// </summary>
     public string Stderr
     {
         get
@@ -118,6 +122,30 @@ internal sealed class StdioServer : IDisposable
         var stdout = await _process.StandardOutput.ReadToEndAsync(cancellationToken);
         await _process.WaitForExitAsync(cancellationToken);
         return (_process.ExitCode, stdout);
+    }
+
+    /// <summary>
+    /// Ends the session as a client does, by closing stdin, and waits for the
+    /// process to exit, which also waits for the last stderr line to be read.
+    /// A server that doesn't exit within ten seconds is killed, then drained
+    /// the same way. Returns the complete stderr.
+    /// </summary>
+    public async Task<string> StopAsync(CancellationToken cancellationToken)
+    {
+        _process.StandardInput.Close();
+        using var grace = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        grace.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            await _process.WaitForExitAsync(grace.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _process.Kill(entireProcessTree: true);
+            await _process.WaitForExitAsync(cancellationToken);
+        }
+
+        return Stderr;
     }
 
     public void Dispose()

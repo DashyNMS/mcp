@@ -112,8 +112,9 @@ public sealed class UnimusDiscoveryDomainStdioTests
         Assert.DoesNotContain("synthetic-key-material", everything, StringComparison.Ordinal);
         if (configText != "full") Assert.DoesNotContain("vlan 120", everything, StringComparison.Ordinal);
 
-        Assert.DoesNotContain(FixtureServer.Token, server.Stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain(UnimusToken, server.Stderr, StringComparison.Ordinal);
+        var stderr = await server.StopAsync(cts.Token);
+        Assert.DoesNotContain(FixtureServer.Token, stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain(UnimusToken, stderr, StringComparison.Ordinal);
     }
 
     [Fact]
