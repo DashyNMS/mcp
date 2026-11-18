@@ -276,13 +276,6 @@ and records the complete resolved library list and package SHA-256 in
 `shared-provenance.json`. This is an inventory and direct boundary check, not
 proof of mobile runtime compatibility or of the absence of dynamic loading.
 
-The package was published as `DashyNMS.Agent.Search` (`0.1.0-ci.*`) until it was
-renamed so every shared host operation, not only device search, ships in one
-package that hosts pin and verify once. Those versions stay on the feed for pins
-that still name them; nothing new is published under the old ID. The new ID
-starts at 2.0.0, in line with Core 2.0. Its first publish fails the visibility
-check until an organisation owner makes it public (see Publication).
-
 Package identity is `DashyNMS.Agent.Shared`, independently versioned from the MCP
 host, `2.0.0-ci.<GitHub run ID>.<run attempt>`. `2.0.0-dev` is for local
 packs only. The Shared package's Version and PackageVersion share the same value; the SDK derives
