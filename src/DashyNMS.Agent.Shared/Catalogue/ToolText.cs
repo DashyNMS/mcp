@@ -213,7 +213,7 @@ public static class ToolText
             "\"why didn't X alert?\" or \"which rules are noisiest?\". Filter by part of the name or by severity; sort by name, open or raised. " +
             "On LibreNMS 26.10 and later each rule also says whether it notifies per entity (notify_per_entity, max_entities - null max_entities " +
             "inherits the server's default, 20 unless changed), which decides whether acknowledging one fault acknowledges the device's others, and " +
-            "flags conditions using device columns 26.10 removed (removed_columns; latency is now device_stats.ping_rtt_last). " +
+            "flags conditions using columns the server's LibreNMS version removed (removed_columns, each with advice; for example latency is now device_stats.ping_rtt_last, and 26.11's ports_fdb.vlan holds the VLAN number where ports_fdb.vlan_id held an internal id). " +
             "Paged: 50 by default, up to 100. Read-only: rules can only be changed in LibreNMS.";
 
         /// <summary>Each parameter's description, named after the parameter.</summary>
