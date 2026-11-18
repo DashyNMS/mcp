@@ -64,9 +64,14 @@ public sealed class UnimusDiscoveryDomainStdioTests
         }
         else if (domain is null)
         {
-            // Today's behaviour, unchanged: the short name doesn't match the full one.
-            Assert.Equal("error", backup.GetProperty("status").GetString());
-            Assert.Equal("error", diff.GetProperty("status").GetString());
+            // Today's behaviour, unchanged: Unimus is asked, but the short name doesn't match the full one.
+            foreach (var unmatched in new[] { backup, diff })
+            {
+                Assert.Equal("error", unmatched.GetProperty("status").GetString());
+                Assert.Contains("Unimus doesn't back up this device", unmatched.GetProperty("message").GetString(), StringComparison.Ordinal);
+            }
+
+            Assert.Contains("/api/v2/devices", unimus.HttpRequests.Select(r => r.Split('?')[0]));
             Assert.Equal("ok", changes.GetProperty("status").GetString());
             Assert.Equal(0, changes.GetProperty("data").GetProperty("changes").GetArrayLength());
             Assert.Equal("ok", changed.GetProperty("status").GetString());
@@ -109,6 +114,28 @@ public sealed class UnimusDiscoveryDomainStdioTests
 
         Assert.DoesNotContain(FixtureServer.Token, server.Stderr, StringComparison.Ordinal);
         Assert.DoesNotContain(UnimusToken, server.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Malformed_discovery_domain_stops_startup_without_echoing_the_value()
+    {
+        const string value = "synthetic-secret-value=abc";
+        using var librenms = new FixtureServer(LibreNms);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var server = StdioServer.Start(new Dictionary<string, string?>
+        {
+            [McpOptions.LibreNmsUrl] = librenms.Root.ToString(),
+            [McpOptions.LibreNmsToken] = FixtureServer.Token,
+            [McpOptions.UnimusMyDomainKey] = value,
+        });
+
+        var (exitCode, stdout) = await server.WaitForExitAsync(cts.Token);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(stdout);
+        Assert.Contains(McpOptions.UnimusMyDomainKey + " isn't a domain name.", server.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("synthetic-secret-value", server.Stderr, StringComparison.Ordinal);
+        Assert.Empty(librenms.Requests);
     }
 
     private static JsonElement ConfigPart(JsonElement whatChanged) => whatChanged.GetProperty("data").GetProperty("unimus");

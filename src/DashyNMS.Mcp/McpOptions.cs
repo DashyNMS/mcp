@@ -25,6 +25,7 @@ public sealed class McpOptions
     public const string UnimusUrl = "UNIMUS_URL";
     public const string UnimusToken = "UNIMUS_TOKEN";
     public const string UnimusTrustedCerts = "UNIMUS_TRUSTED_CERTS";
+    /// <summary>LibreNMS's discovery domain, for matching short hostnames to Unimus devices - see <see cref="UnimusMyDomain"/>.</summary>
     public const string UnimusMyDomainKey = "UNIMUS_MY_DOMAIN";
     public const string GraylogUrl = "GRAYLOG_URL";
     public const string GraylogUsername = "GRAYLOG_USERNAME";
@@ -271,27 +272,43 @@ public sealed class McpOptions
     }
 
     /// <summary>
-    /// The problem line is fixed rather than quoting the value: a token pasted
-    /// into the wrong variable would otherwise end up on stderr, and from there
-    /// in the MCP client's log.
+    /// Leading dots (<c>.example.net</c>, a common way to write a suffix) are
+    /// dropped as DashyNMS mobile does, and so is one trailing dot (the
+    /// fully qualified <c>example.net.</c>): both mean the same domain, and
+    /// desktop saves the value as typed, so refusing them would stop the whole
+    /// server over punctuation. Anything else that isn't a domain name is a
+    /// problem. The problem line is fixed rather than quoting the value: a
+    /// token pasted into the wrong variable would otherwise end up on stderr,
+    /// and from there in the MCP client's log.
     /// </summary>
     private static string? ParseDiscoveryDomain(Func<string, string?> lookup, List<string> problems)
     {
-        var domain = Value(lookup, UnimusMyDomainKey);
-        if (domain is null || IsDiscoveryDomain(domain))
+        var value = Value(lookup, UnimusMyDomainKey);
+        if (value is null)
+        {
+            return null;
+        }
+
+        var domain = value.TrimStart('.');
+        if (domain.EndsWith('.'))
+        {
+            domain = domain[..^1];
+        }
+
+        if (IsDiscoveryDomain(domain))
         {
             return domain;
         }
 
-        problems.Add($"{UnimusMyDomainKey} isn't a domain name. Set it to LibreNMS's discovery domain (its mydomain setting), such as example.net, with no leading or trailing dot, or leave it unset.");
+        problems.Add($"{UnimusMyDomainKey} isn't a domain name. Set it to LibreNMS's discovery domain (its mydomain setting), such as example.net, or leave it unset.");
         return null;
     }
 
     /// <summary>
     /// A DNS name: dot-separated labels of 1 to 63 letters, digits, hyphens or
     /// underscores, no label starting or ending with a hyphen, 253 characters
-    /// at most. Core appends it verbatim after a dot, so a leading or trailing
-    /// dot, a space or a scheme would build an address Unimus can never match;
+    /// at most. Core appends it verbatim after a dot, so an empty label, a
+    /// space or a scheme would build an address Unimus can never match;
     /// refusing it at startup says so instead of quietly matching nothing.
     /// Underscores are allowed because some internal zones use them and
     /// refusing a working value would stop the server for no gain.

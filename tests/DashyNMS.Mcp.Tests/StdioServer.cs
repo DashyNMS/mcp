@@ -108,6 +108,18 @@ internal sealed class StdioServer : IDisposable
         return JsonDocument.Parse(text).RootElement;
     }
 
+    /// <summary>
+    /// Waits for a server that refused to start to exit, returning its exit
+    /// code and whatever it wrote to stdout, which must stay empty: an MCP
+    /// client would read anything there as protocol.
+    /// </summary>
+    public async Task<(int ExitCode, string Stdout)> WaitForExitAsync(CancellationToken cancellationToken)
+    {
+        var stdout = await _process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await _process.WaitForExitAsync(cancellationToken);
+        return (_process.ExitCode, stdout);
+    }
+
     public void Dispose()
     {
         if (!_process.HasExited)

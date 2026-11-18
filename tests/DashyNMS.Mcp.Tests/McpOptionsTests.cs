@@ -176,6 +176,9 @@ public sealed class McpOptionsTests
     [InlineData("lan", "lan")]
     [InlineData("site-1.example.net", "site-1.example.net")]
     [InlineData("_internal.example.net", "_internal.example.net")]
+    [InlineData(".example.net", "example.net")]
+    [InlineData("example.net.", "example.net")]
+    [InlineData(" .corp.example.net. ", "corp.example.net")]
     public void Discovery_domain_setting(string? value, string? expected)
     {
         var values = Minimal();
@@ -201,11 +204,11 @@ public sealed class McpOptionsTests
     }
 
     [Theory]
-    [InlineData(".example.org")]
-    [InlineData("example.org.")]
-    [InlineData("example..net")]
+    [InlineData("..")]
+    [InlineData("example.org..")]
+    [InlineData("example..org")]
     [InlineData("-example.org")]
-    [InlineData("example-.net")]
+    [InlineData("example-.org")]
     [InlineData("example org")]
     [InlineData("https://example.org")]
     [InlineData("example.org/path")]
