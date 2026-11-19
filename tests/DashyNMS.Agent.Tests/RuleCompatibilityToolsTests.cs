@@ -51,7 +51,7 @@ public sealed class RuleCompatibilityToolsTests
         Assert.Equal("devices.last_ping_timetaken", removed.GetProperty("column").GetString());
         Assert.Equal("device_stats.ping_rtt_last", removed.GetProperty("replacement").GetString());
         Assert.False(rules[3].TryGetProperty("removed_columns", out _));
-        Assert.Contains("1 rule uses device columns LibreNMS 26.10 removed", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Contains("1 rule uses columns this LibreNMS version removed", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -62,6 +62,62 @@ public sealed class RuleCompatibilityToolsTests
         var rules = await RulesAsync();
 
         Assert.False(rules[7].TryGetProperty("removed_columns", out _));
+    }
+
+    [Fact]
+    public async Task On_26_11_the_fdb_vlan_change_and_snmp_columns_are_flagged()
+    {
+        _nms.Transport.On("system", """{"status":"ok","system":[{"local_ver":"26.11.0"}]}""");
+        _nms.Transport.On("rules", """
+            {"status":"ok","rules":[
+              {"id":9,"name":"Camera VLAN","severity":"warning","query":"SELECT * FROM devices,ports_fdb WHERE (devices.device_id = ? AND ports_fdb.vlan_id = 50)","devices":[],"groups":[],"locations":[],"disabled":0},
+              {"id":10,"name":"SNMP v1","severity":"warning","query":"SELECT * FROM devices WHERE devices.snmpver = 'v1'","devices":[],"groups":[],"locations":[],"disabled":0},
+              {"id":11,"name":"VLAN table","severity":"warning","query":"SELECT * FROM devices,vlans WHERE vlans.vlan_id = 50","devices":[],"groups":[],"locations":[],"disabled":0}
+            ]}
+            """);
+
+        var rules = await RulesAsync();
+
+        var vlan = Assert.Single(rules[9].GetProperty("removed_columns").EnumerateArray());
+        Assert.Equal("ports_fdb.vlan_id", vlan.GetProperty("column").GetString());
+        Assert.Equal("ports_fdb.vlan", vlan.GetProperty("replacement").GetString());
+        Assert.Contains("VLAN number", vlan.GetProperty("advice").GetString(), StringComparison.Ordinal);
+        Assert.Equal("devices.snmpver", Assert.Single(rules[10].GetProperty("removed_columns").EnumerateArray()).GetProperty("column").GetString());
+        Assert.False(rules[11].TryGetProperty("removed_columns", out _)); // another table's vlan_id
+    }
+
+    [Fact]
+    public async Task On_26_10_the_26_11_removals_are_not_flagged_yet()
+    {
+        _nms.Transport.On("system", """{"status":"ok","system":[{"local_ver":"26.10.1"}]}""");
+        _nms.Transport.On("rules", """
+            {"status":"ok","rules":[
+              {"id":9,"name":"Camera VLAN","severity":"warning","query":"SELECT * FROM devices,ports_fdb WHERE ports_fdb.vlan_id = 50","devices":[],"groups":[],"locations":[],"disabled":0}
+            ]}
+            """);
+
+        Assert.False((await RulesAsync())[9].TryGetProperty("removed_columns", out _));
+    }
+
+    [Fact]
+    public async Task An_unreadable_version_flags_what_may_be_removed_and_says_so()
+    {
+        _nms.Transport.On("system", """{"status":"ok","system":[{"local_ver":"master"}]}""");
+        _nms.Transport.On("rules", """
+            {"status":"ok","rules":[
+              {"id":9,"name":"Camera VLAN","severity":"warning","query":"SELECT * FROM devices,ports_fdb WHERE ports_fdb.vlan_id = 50","devices":[],"groups":[],"locations":[],"disabled":0},
+              {"id":10,"name":"SNMP v1","severity":"warning","query":"SELECT * FROM devices WHERE devices.snmpver = 'v1'","devices":[],"groups":[],"locations":[],"disabled":0},
+              {"id":11,"name":"VLAN table","severity":"warning","query":"SELECT * FROM devices,vlans WHERE vlans.vlan_id = 50","devices":[],"groups":[],"locations":[],"disabled":0}
+            ]}
+            """);
+
+        var root = FakeLibreNms.Parse(await Rules().AlertRules(cancellationToken: CancellationToken.None));
+        var rules = ById(root);
+
+        Assert.True(rules[9].TryGetProperty("removed_columns", out _));
+        Assert.True(rules[10].TryGetProperty("removed_columns", out _));
+        Assert.False(rules[11].TryGetProperty("removed_columns", out _));
+        Assert.Contains("version couldn't be read", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
     }
 
     private async Task<Dictionary<int, JsonElement>> RulesAsync()

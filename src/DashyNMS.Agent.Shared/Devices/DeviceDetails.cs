@@ -80,7 +80,7 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
         var needsPorts = Wants("vlans") || Wants("fdb") || Wants("arp") || Wants("addresses") || Wants("routing");
 
         var ports = needsPorts ? Sources.TryAsync(() => client.Ports.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
-        var vlans = Wants("vlans") || Wants("fdb") ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken) : null;
+        var vlans = Wants("vlans") ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken) : null;
         var inventory = Wants("inventory") ? Sources.TryAsync(() => client.Devices.GetInventoryAsync(id, cancellationToken), cancellationToken) : null;
         var fdb = Wants("fdb") ? Sources.TryAsync(() => client.Fdb.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
         var arp = Wants("arp") ? Sources.TryAsync(() => client.Arp.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
@@ -96,6 +96,15 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
         await Task.WhenAll(new Task?[] { ports, vlans, inventory, fdb, arp, sensors, wireless, bgp, ospf, ospf3, vrfs, availability, addresses }.Where(t => t is not null)!).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        // LibreNMS 26.11 sends FDB VLAN numbers itself; only an older server's
+        // internal ids need the fleet-wide VLAN table (core#86).
+        if (vlans is null && fdb?.Result.Value is { } fdbRows && FdbVlanResolver.NeedsVlanTable(fdbRows))
+        {
+            vlans = Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken);
+            await vlans.ConfigureAwait(false);
+        }
+
         var unavailable = new List<Unavailable>();
         T? Use<T>(Task<Fetched<T>>? task, string source)
         {
@@ -146,10 +155,13 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
                 portList.Where(p => p.Vlans.Any(m => m.Vlan == v.VlanNumber && !m.Untagged)).Select(p => Clean(portName[p.PortId])).ToList())).ToList()) };
         if (Use(fdb, "fdb") is { } macs)
         {
-            var vlanNumber = vlanList.ToDictionary(v => v.VlanId, v => v.VlanNumber);
+            // 26.11 sends the VLAN number itself; older servers an internal id
+            // resolved through the VLAN table (core#86). A failed VLAN read
+            // still leaves 26.11's numbers.
+            var vlanResolver = new FdbVlanResolver(vlanList);
             data = data with { Fdb = Paged("fdb", macs.OrderBy(m => portName.GetValueOrDefault(m.PortId), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(m => m.MacAddress, StringComparer.OrdinalIgnoreCase).Select(m => new FdbDetail(Clean(portName.GetValueOrDefault(m.PortId)), m.PortId,
-                    Clean(MacText(m.MacAddress)), m.VlanId is { } v && vlanNumber.TryGetValue(v, out var n) ? n : null, m.UpdatedAt)).ToList()) };
+                    Clean(MacText(m.MacAddress)), vlanResolver.NumberOf(m), m.UpdatedAt)).ToList()) };
         }
         if (Use(arp, "arp") is { } arpEntries)
             data = data with { Arp = Paged("arp", arpEntries.OrderBy(a => a.Ipv4Address, StringComparer.Ordinal)

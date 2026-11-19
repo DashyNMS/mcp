@@ -162,6 +162,29 @@ public sealed class Batch2ToolTests
         Assert.Equal("1/1/1", data.GetProperty("arp")[0].GetProperty("port").GetString());
     }
 
+    [Theory]
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan":120}""", 120)] // LibreNMS 26.11's direct number
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan":11}""", 11)] // a number that is also an internal id stays the number
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan":null}""", null)] // the switch didn't say
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan_id":99}""", null)] // a legacy id with no VLAN row
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan_id":11}""", 120)] // a legacy id resolved through the VLAN table
+    public async Task Fdb_vlans_read_both_response_shapes_and_keep_unknowns_unknown(string row, int? vlan)
+    {
+        _nms.Transport.On("devices/1/fdb", $$"""{"status":"ok","ports_fdb":[{{row}}]}""");
+
+        var mac = FakeLibreNms.Parse(await Details().DeviceDetails("core-sw1", ["fdb"], cancellationToken: CancellationToken.None))
+            .GetProperty("data").GetProperty("fdb")[0];
+
+        if (vlan is null)
+        {
+            Assert.True(!mac.TryGetProperty("vlan", out var value) || value.ValueKind == System.Text.Json.JsonValueKind.Null);
+        }
+        else
+        {
+            Assert.Equal(vlan, mac.GetProperty("vlan").GetInt32());
+        }
+    }
+
     [Fact]
     public async Task Poe_routing_availability_and_addresses()
     {
