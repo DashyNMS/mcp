@@ -206,7 +206,7 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var serverVersion = LibreNmsVersion.Parse(system.Result.Value?.LocalVersion);
 
         var unavailable = new List<Unavailable>();
-        foreach (var (source, error) in new[] { ("templates", templates.Result.Error), ("open alerts", open.Result.Error), ("alert log", raisedLog.Result.Error), ("device groups", groups.Result.Error), ("locations", locations.Result.Error) })
+        foreach (var (source, error) in new[] { ("templates", templates.Result.Error), ("open alerts", open.Result.Error), ("alert log", raisedLog.Result.Error), ("device groups", groups.Result.Error), ("locations", locations.Result.Error), ("system", system.Result.Error) })
         {
             if (error is not null)
             {
@@ -272,7 +272,10 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var needReview = sorted.Count(x => RemovedColumns(x.Rule, serverVersion) is not null);
         var summary = $"{Devices.DeviceHealth.Count(rules.Count, "rule")}" + (includeDisabled ? string.Empty : " enabled") +
             (name is null && severity is null ? "." : " match.") +
-            (needReview == 0 ? string.Empty : $" {(needReview == 1 ? "1 rule uses" : $"{needReview} rules use")} columns this LibreNMS version removed, so won't match as before - see removed_columns.") +
+            (needReview == 0 ? string.Empty
+                : serverVersion is null
+                    ? $" LibreNMS's version couldn't be read, so {(needReview == 1 ? "1 rule uses columns that" : $"{needReview} rules use columns that")} may have been removed - see removed_columns and each one's removed_in."
+                    : $" {(needReview == 1 ? "1 rule uses" : $"{needReview} rules use")} columns this LibreNMS version removed, so won't match as before - see removed_columns.") +
             (raisedComplete || raisedByRule is null ? string.Empty : " The 7-day raised counts only cover as far back as LibreNMS's alert log reaches.") +
             (info.NextOffset is not null || info.Offset > 0 ? " " + Paging.Describe(info, "rule", "rules") : string.Empty);
 
