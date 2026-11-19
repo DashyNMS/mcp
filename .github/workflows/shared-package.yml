@@ -65,11 +65,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # MCP's own pin (Directory.Build.props) and mobile's, in DashyNMS/mobile's
-          # DashyNMS.Mobile.Shared.csproj, are the same build. When either moves,
-          # give it its own entry here, and update mobile's before it pins a new Shared package.
+          # MCP's own pin (Directory.Build.props). This Shared needs Core 2.0.0-ci.74
+          # or later (FdbVlanResolver, mcp#156), so mobile - still on ci.64 in
+          # DashyNMS/mobile's DashyNMS.Mobile.Shared.csproj - moves to ci.74 before it
+          # pins this Shared (mobile#665). Give mobile its own entry when its pin differs.
           - consumer: mcp and mobile
-            core: 2.0.0-ci.64
+            core: 2.0.0-ci.74
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

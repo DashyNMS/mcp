@@ -297,8 +297,9 @@ the image build does (see `docs/dependency-licences`).
 The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
-and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) are both
-`2.0.0-ci.64`, so there is one entry. For each it:
+and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
+`2.0.0-ci.74`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
+before pinning this Shared (DashyNMS/mobile#665). For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -318,6 +319,14 @@ read an omitted value as false. The ranking tests in
 `DeviceSearchTests` live in the Agent test project and run against MCP's pin only;
 the Shared-only tests cover the host boundary, failures and cancellation. This is
 plain .NET evidence, not mobile trimming/AOT, Android runtime or device behaviour.
+
+The move from `2.0.0-ci.64` to `2.0.0-ci.74` (#156, for LibreNMS 26.11) was reviewed
+the same way. `DeviceDetails` and `TraceEndpoint` now read FDB VLANs through
+`FdbVlanResolver`, and `alert_rules` reports Core's 26.11 removed columns, flagging any
+removal when the server version is unknown. The other changes in the range don't reach
+MCP's output: Spotlight's typed references (MCP doesn't call `AskAsync`), settings
+fields, the Network Search lookup and the new API members (all additive, none called
+by a tool).
 
 #### Publication
 
