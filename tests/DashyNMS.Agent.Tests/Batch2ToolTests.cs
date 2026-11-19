@@ -167,6 +167,7 @@ public sealed class Batch2ToolTests
     [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan":11}""", 11)] // a number that is also an internal id stays the number
     [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan":null}""", null)] // the switch didn't say
     [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan_id":99}""", null)] // a legacy id with no VLAN row
+    [InlineData("""{"port_id":107,"device_id":1,"mac_address":"aabbccdd0107","vlan_id":11}""", 120)] // a legacy id resolved through the VLAN table
     public async Task Fdb_vlans_read_both_response_shapes_and_keep_unknowns_unknown(string row, int? vlan)
     {
         _nms.Transport.On("devices/1/fdb", $$"""{"status":"ok","ports_fdb":[{{row}}]}""");

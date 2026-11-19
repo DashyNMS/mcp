@@ -124,9 +124,14 @@ public sealed class TraceEndpoint(ILibreNmsClient client, ILibreNmsTransport tra
         var fdbTask = NotFoundIsEmpty(transport.GetCollectionAsync<FdbEntry>("resources/fdb/" + stored, "ports_fdb", cancellationToken));
         var devicesTask = directory.GetAllAsync(cancellationToken);
         var linksTask = Sources.TryAsync(() => fleet.GetLinksAsync(cancellationToken), cancellationToken);
-        var vlansTask = Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken);
-        await Task.WhenAll(fdbTask, devicesTask, linksTask, vlansTask).ConfigureAwait(false);
+        await Task.WhenAll(fdbTask, devicesTask, linksTask).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // LibreNMS 26.11 sends the VLAN numbers; only older servers' internal ids need the table (core#86).
+        var vlansTask = FdbVlanResolver.NeedsVlanTable(fdbTask.Result)
+            ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken)
+            : Task.FromResult(new Fetched<IReadOnlyList<Vlan>>(Array.Empty<Vlan>(), null));
+        await vlansTask.ConfigureAwait(false);
 
         var rows = fdbTask.Result;
         var unavailable = new List<Unavailable>();

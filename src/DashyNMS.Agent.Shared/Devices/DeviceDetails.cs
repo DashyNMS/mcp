@@ -80,7 +80,7 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
         var needsPorts = Wants("vlans") || Wants("fdb") || Wants("arp") || Wants("addresses") || Wants("routing");
 
         var ports = needsPorts ? Sources.TryAsync(() => client.Ports.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
-        var vlans = Wants("vlans") || Wants("fdb") ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken) : null;
+        var vlans = Wants("vlans") ? Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken) : null;
         var inventory = Wants("inventory") ? Sources.TryAsync(() => client.Devices.GetInventoryAsync(id, cancellationToken), cancellationToken) : null;
         var fdb = Wants("fdb") ? Sources.TryAsync(() => client.Fdb.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
         var arp = Wants("arp") ? Sources.TryAsync(() => client.Arp.ListForDeviceAsync(id, cancellationToken), cancellationToken) : null;
@@ -96,6 +96,15 @@ public sealed class DeviceDetails(ILibreNmsClient client, SensorSource sensorSou
         await Task.WhenAll(new Task?[] { ports, vlans, inventory, fdb, arp, sensors, wireless, bgp, ospf, ospf3, vrfs, availability, addresses }.Where(t => t is not null)!).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        // LibreNMS 26.11 sends FDB VLAN numbers itself; only an older server's
+        // internal ids need the fleet-wide VLAN table (core#86).
+        if (vlans is null && fdb?.Result.Value is { } fdbRows && FdbVlanResolver.NeedsVlanTable(fdbRows))
+        {
+            vlans = Sources.TryAsync(() => client.Vlans.ListAsync(cancellationToken), cancellationToken);
+            await vlans.ConfigureAwait(false);
+        }
+
         var unavailable = new List<Unavailable>();
         T? Use<T>(Task<Fetched<T>>? task, string source)
         {
