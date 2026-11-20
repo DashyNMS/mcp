@@ -53,8 +53,7 @@ public sealed class SharedGroupsAndLocationsTests
     [Fact]
     public async Task Location_counts_keep_ignored_and_unknown_devices_out_of_down()
     {
-        var nms = new FakeLibreNms();
-        nms.Transport.On("devices", """
+        const string devices = """
             {"status":"ok","devices":[
               {"device_id":1,"hostname":"down.example.net","location":"Lab","status":0,"disabled":0,"ignore":0},
               {"device_id":2,"hostname":"ignored-down.example.net","location":"Lab","status":0,"disabled":0,"ignore":1},
@@ -62,9 +61,17 @@ public sealed class SharedGroupsAndLocationsTests
               {"device_id":4,"hostname":"no-flags.example.net","location":"Lab"},
               {"device_id":5,"hostname":"up.example.net","location":"Lab","status":1,"disabled":0,"ignore":0}
             ]}
-            """);
+            """;
+        var nms = new FakeLibreNms();
+        nms.Transport.On("devices", devices);
         var root = FakeLibreNms.Parse(await new ScopeTools(nms.Directory, nms.Scope, nms.Runner).ListGroupsAndLocations());
         var lab = Assert.Single(root.GetProperty("data").GetProperty("locations").EnumerateArray());
+        var hostNms = new FakeLibreNms();
+        hostNms.Transport.On("devices", devices);
+        using var host = HostGroupsAndLocations.Create(hostNms.Client, hostNms.Time);
+        var location = Assert.Single((await host.ReadAsync()).Result!.Data.Locations);
+
+        Assert.Equal((5, 1, 1, 2), (location.Devices, location.Down, location.Ignored, location.Unknown));
 
         Assert.Equal(5, lab.GetProperty("devices").GetInt32());
         Assert.Equal(1, lab.GetProperty("down").GetInt32());

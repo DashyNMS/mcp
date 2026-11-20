@@ -78,7 +78,7 @@ public sealed class DeviceToolsTests
             """);
         var root = FakeLibreNms.Parse(await Tools().DeviceHealth("core-sw1", cancellationToken: CancellationToken.None));
 
-        Assert.StartsWith(start + ",", root.GetProperty("summary").GetString());
+        Assert.StartsWith(start + ",", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -155,7 +155,7 @@ public sealed class HostDeviceSearchTests
         Assert.Equal(state, device.State);
         Assert.Equal(word, device.Status);
         // The typed state stays out of JSON: the status word already carries it.
-        Assert.DoesNotContain("\"State\"", System.Text.Json.JsonSerializer.Serialize(device), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("State", System.Text.Json.JsonSerializer.Serialize(device), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
