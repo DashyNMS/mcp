@@ -298,7 +298,7 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.74`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
+`2.0.0-ci.76`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
 before pinning this Shared (DashyNMS/mobile#665). For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -327,6 +327,11 @@ removal when the server version is unknown. The other changes in the range don't
 MCP's output: Spotlight's typed references (MCP doesn't call `AskAsync`), settings
 fields, the Network Search lookup and the new API members (all additive, none called
 by a tool).
+
+The move from `2.0.0-ci.74` to `2.0.0-ci.76` (#121, core#90 Batch 3) holds one Core
+change, core#75: request measurements count LibreNMS 26.10 `faults` polls as alert
+requests. MCP attaches no `RequestObserver`, so its output is unchanged; the move keeps
+MCP, the Shared package and mobile on one Core. The licence is unchanged.
 
 #### Publication
 
@@ -513,6 +518,37 @@ Filtering and ranking still use the original reported status before paging.
 Caller cancellation propagates; an individual failed maintenance check leaves
 that row's reported state intact. The shared search fixtures record the extra
 requests and distinguish failed checks from known inactive maintenance.
+
+### Device status words
+
+Every tool's device `status` comes from Core's `ReportedState` through
+`DeviceSummary.StatusOf` (#121): `up`, `down`, `disabled`, `ignored` or
+`unknown`, plus `maintenance` on search rows whose maintenance read says so.
+Before, it came from Core's compatibility flags, which read an omitted flag as
+false and know nothing about ignoring. A device whose response left out
+`status`, `disabled` or `ignore` was called `down` (or `up`), and an ignored
+device read as `up` or `down`. Core decides precedence: disabled, then a missing
+`disabled` flag (unknown), then ignored, then a missing `ignore` or `status`
+flag (unknown), then up or down.
+
+- `find_device`: brief and verbose records, and the `status` filter, which now
+  also takes `ignored` and `unknown`.
+- `network_overview`: each device is counted once (`up`, `down`, `disabled`,
+  `ignored` and the new `unknown` add up to `total`). Only devices reported down
+  reach `down_devices` and `most_down_by_location`.
+- `list_groups_and_locations`: each location's `down` counts only devices
+  reported down; the new `ignored` and `unknown` counts sit beside it.
+- `active_alerts` and `alert_details`: `device_status`.
+- `device_health`: the summary says "Device state wasn't reported" rather than
+  calling such a device up or down.
+
+**Breaking change.** MCP clients that expect only `up`, `down`, `disabled` or
+`maintenance` in `status` must accept `ignored` and `unknown`. For Shared hosts,
+`OverviewDeviceCounts` and `ScopeLocation` gain positional parameters
+(`Unknown`; `Ignored` and `Unknown`), and `OverviewDeviceCounts.Disabled` and
+`Ignored` no longer overlap `Up` and `Down`. `DeviceSummary.Status` now agrees
+with `DeviceSummary.State`; hosts that read `State` need no change. Maintenance
+still needs a call per device, so overview and location counts don't include it.
 
 ### Alert details and rules for hosts
 

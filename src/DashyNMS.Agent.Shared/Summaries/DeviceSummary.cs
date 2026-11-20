@@ -18,12 +18,11 @@ public sealed record DeviceSummary(
     DateTime? LastPolled)
 {
     /// <summary>
-    /// The state LibreNMS actually reported, from Core's <see cref="Device.ReportedState"/>.
-    /// <see cref="Status"/> reads Core's compatibility flags, so a device whose response
-    /// omits a flag says "down" and an ignored one says "up" or "down"; hosts that show a
-    /// state need Unknown and Ignored kept apart. Maintenance needs a per-device call and is
-    /// never set here. Left out of JSON so MCP's output and status filter stay unchanged.
-    /// Unknown unless set, since the enum's default value is Up.
+    /// The state LibreNMS actually reported, from Core's <see cref="Device.ReportedState"/>,
+    /// typed for hosts. <see cref="Status"/> is the same state as MCP's lower-case word.
+    /// Maintenance needs a per-device call and is only set by search's maintenance reads.
+    /// Left out of JSON because <see cref="Status"/> already carries it. Unknown unless set,
+    /// since the enum's default value is Up.
     /// </summary>
     [JsonIgnore]
     public DeviceState State { get; init; } = DeviceState.Unknown;
@@ -115,11 +114,33 @@ public sealed record DeviceSummary(
     /// <summary>The name a person would use: the display name, or the hostname.</summary>
     public static string? NameOf(Device? device) => DisplayOf(device) ?? device?.Hostname;
 
-    public static string StatusOf(Device device) => device switch
+    /// <summary>
+    /// The device's state as MCP's status word: "up", "down", "disabled", "ignored" or
+    /// "unknown", from Core's <see cref="Device.ReportedState"/>. Core's compatibility
+    /// flags read an omitted flag as false, which called such a device "down", and they
+    /// say nothing about ignoring, so an ignored device read as "up" or "down" (#121).
+    /// A model told a device is down acts on it; one LibreNMS didn't report is unknown.
+    /// </summary>
+    public static string StatusOf(Device device)
     {
-        { Disabled: true } => "disabled",
-        { Status: true } => "up",
-        _ => "down",
+        ArgumentNullException.ThrowIfNull(device);
+        return StatusWord(device.ReportedState);
+    }
+
+    /// <summary>
+    /// A state as MCP's lower-case status word. Core's reported state is never
+    /// Maintenance, so <see cref="StatusOf"/> never says "maintenance"; search's
+    /// maintenance reads set that word themselves, and it maps here for any caller
+    /// holding the typed state.
+    /// </summary>
+    public static string StatusWord(DeviceState state) => state switch
+    {
+        DeviceState.Up => "up",
+        DeviceState.Down => "down",
+        DeviceState.Disabled => "disabled",
+        DeviceState.Ignored => "ignored",
+        DeviceState.Maintenance => "maintenance",
+        _ => "unknown",
     };
 }
 

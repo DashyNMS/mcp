@@ -138,7 +138,9 @@ public sealed class DeviceHealth
 
         // An alert list that couldn't be read is unknown, never "0 open alerts" (#79).
         var alertsText = alerts.Result.Error is null ? Count(openAlerts.Count, "open alert") : "open alerts unknown";
-        var summary = $"Device is {status}, {alertsText}, {Count(downPorts.Count, "port")} down while enabled" +
+        // "Device is unknown" would read as an unknown device; say the state is what's missing (#121).
+        var stateText = status == "unknown" ? "Device state wasn't reported" : $"Device is {status}";
+        var summary = $"{stateText}, {alertsText}, {Count(downPorts.Count, "port")} down while enabled" +
             (unavailable.Count > 0 ? $"; {Count(unavailable.Count, "part")} couldn't be fetched." : ".");
 
         var hostAlerts = OpenAlerts.Create(client, TimeProvider.System, options, redactor);

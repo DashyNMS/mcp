@@ -49,7 +49,7 @@ public static class ToolText
                 "Part of a hostname, display name or sysName, an IP address, or a MAC address (any common format). Can be left out when status, group or location is given.";
 
             public const string Status =
-                "Only devices with this status: up, down or disabled.";
+                "Only devices with this status: up, down, disabled, ignored (polled, but left out of alerting) or unknown (LibreNMS didn't report it).";
 
             public const string Group =
                 "Only devices in this LibreNMS device group (by name; list_groups_and_locations shows them).";
@@ -74,7 +74,7 @@ public static class ToolText
         public const string Name = "network_overview";
         public const string Title = "Network overview";
         public const string Description =
-            "The whole network in one call, as the dashboard's counts: how many devices are up, down, disabled or ignored, which locations have the most " +
+            "The whole network in one call, as the dashboard's counts: how many devices are up, down, disabled, ignored or have no reported state (each counted once), which locations have the most " +
             "devices down, open alerts by severity and how many are acknowledged, how many ports are down while enabled or counting errors, and the LibreNMS " +
             "version. A cheap first call for \"how's the network?\" before drilling in with find_device, active_alerts or the top_ tools.";
     }
@@ -136,7 +136,7 @@ public static class ToolText
         public const string Name = "device_health";
         public const string Title = "Device health";
         public const string Description =
-            "How one device is doing now: up or down, uptime, whether it's in a maintenance window, its open alerts, " +
+            "How one device is doing now: up, down, disabled, ignored or not reported, uptime, whether it's in a maintenance window, its open alerts, " +
             "peak CPU, memory and fullest storage, and the ports that are down while enabled or are counting errors (top 5). " +
             "Use it for \"is X OK?\" questions. It doesn't cover history; use device_events or what_changed for that, and port_status for one port in detail.";
 
@@ -177,7 +177,7 @@ public static class ToolText
         public const string Name = "list_groups_and_locations";
         public const string Title = "Device groups and locations";
         public const string Description =
-            "The device groups defined in LibreNMS and the locations devices are at, with how many devices are at each location and how many of those are down. " +
+            "The device groups defined in LibreNMS and the locations devices are at, with how many devices are at each location and how many of those are down, ignored or have no reported state. " +
             "Use it to find the names the group and location filters of find_device and active_alerts accept, or for \"which sites are there?\". " +
             "To list a group's devices, call find_device with that group.";
     }

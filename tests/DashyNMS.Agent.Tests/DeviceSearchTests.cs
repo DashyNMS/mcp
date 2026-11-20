@@ -197,7 +197,7 @@ public sealed class DeviceSearchTests
         var nms = new FakeLibreNms();
         nms.Transport.On("devices", """
             {"devices":[{"device_id":7,"hostname":"sw.example.net","display":"password=synthetic-secret",
-            "sysName":"switch","ip":"192.0.2.7","os":"test-os","hardware":"test-model","location":"Lab","status":1}]}
+            "sysName":"switch","ip":"192.0.2.7","os":"test-os","hardware":"test-model","location":"Lab","status":1,"disabled":0,"ignore":0}]}
             """);
         var tools = new DeviceTools(nms.Client, nms.Directory, nms.Resolver, nms.Scope, nms.Runner, nms.Options);
         var raw = await tools.FindDevice("sw", verbose: verbose);
