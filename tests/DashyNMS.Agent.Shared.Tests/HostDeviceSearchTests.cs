@@ -130,19 +130,19 @@ public sealed class HostDeviceSearchTests
     }
 
     /// <summary>
-    /// The typed state keeps what the shared status word can't: an omitted flag stays
-    /// Unknown rather than down, and ignored is its own state. The word is unchanged.
+    /// The typed state and the shared status word agree: an omitted flag is unknown,
+    /// never down or up, and ignored is its own state (#121).
     /// </summary>
     [Theory]
     [InlineData(true, false, false, DeviceState.Up, "up")]
     [InlineData(false, false, false, DeviceState.Down, "down")]
     [InlineData(false, true, false, DeviceState.Disabled, "disabled")]
-    [InlineData(true, false, true, DeviceState.Ignored, "up")]
-    [InlineData(false, false, true, DeviceState.Ignored, "down")]
-    [InlineData(null, false, false, DeviceState.Unknown, "down")]
-    [InlineData(true, null, false, DeviceState.Unknown, "up")]
-    [InlineData(true, false, null, DeviceState.Unknown, "up")]
-    [InlineData(null, null, null, DeviceState.Unknown, "down")]
+    [InlineData(true, false, true, DeviceState.Ignored, "ignored")]
+    [InlineData(false, false, true, DeviceState.Ignored, "ignored")]
+    [InlineData(null, false, false, DeviceState.Unknown, "unknown")]
+    [InlineData(true, null, false, DeviceState.Unknown, "unknown")]
+    [InlineData(true, false, null, DeviceState.Unknown, "unknown")]
+    [InlineData(null, null, null, DeviceState.Unknown, "unknown")]
     public async Task Host_results_carry_the_reported_state_beside_the_shared_status(bool? status, bool? disabled, bool? ignore, DeviceState state, string word)
     {
         var client = Substitute.For<ILibreNmsClient>();
@@ -154,8 +154,8 @@ public sealed class HostDeviceSearchTests
         var device = Assert.Single((await search.FindDevicesAsync(new("sw"))).Result!.Matches).Device;
         Assert.Equal(state, device.State);
         Assert.Equal(word, device.Status);
-        // The typed state stays out of JSON, so serialised summaries are unchanged.
-        Assert.DoesNotContain("State", System.Text.Json.JsonSerializer.Serialize(device), StringComparison.OrdinalIgnoreCase);
+        // The typed state stays out of JSON: the status word already carries it.
+        Assert.DoesNotContain("\"State\"", System.Text.Json.JsonSerializer.Serialize(device), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -27,7 +27,7 @@ public sealed class SharedGroupsAndLocationsTests
         var client = Substitute.For<ILibreNmsClient>();
         client.Devices.ListAsync(Arg.Any<CancellationToken>()).Returns(new[]
         {
-            new Device { DeviceId = 1, LocationId = 3, Location = "  Site A  ", Status = false },
+            new Device { DeviceId = 1, LocationId = 3, Location = "  Site A  ", Status = false, Disabled = false, Ignore = false },
         });
         client.DeviceGroups.ListAsync(Arg.Any<CancellationToken>()).Returns(new[]
         {

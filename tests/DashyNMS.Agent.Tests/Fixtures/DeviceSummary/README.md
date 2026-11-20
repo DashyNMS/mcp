@@ -12,9 +12,9 @@ client: MCP to `device_health` and `HostDeviceSummary`, mobile to Intelligence's
     as `devices/{id}` can send it. Only the name is shown.
   - 2: down, a display name that repeats the hostname (dropped) and zero uptime
     (reported as unknown, not as just rebooted).
-  - 3: no `ignore` flag, so its state is Unknown although MCP's status word says up;
+  - 3: no `ignore` flag, so its state is Unknown and MCP's status word is `unknown`;
     no location.
-  - 4: ignored, a secret in the hardware text (redacted) and a location name with
+  - 4: ignored (status word `ignored`), a secret in the hardware text (redacted) and a location name with
     spaces around it: the shown name is trimmed, the filter name is exact.
   - 5: disabled, its location id only inside the location record.
   - 6: an empty device list: not found.

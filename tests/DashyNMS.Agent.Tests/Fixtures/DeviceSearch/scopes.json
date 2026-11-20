@@ -88,14 +88,12 @@
     {
       "status": "down",
       "ids": [
-        8,
-        11
+        8
       ],
-      "total": 2,
+      "total": 1,
       "requests": [
         "devices",
-        "devices/8/maintenance",
-        "devices/11/maintenance"
+        "devices/8/maintenance"
       ]
     },
     {
