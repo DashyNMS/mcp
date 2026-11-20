@@ -42,11 +42,10 @@ tools each description names. MCP's own attributes read the same text, so a host
 from the catalogue tells its model exactly what MCP tells a client. Leave out what a host doesn't
 support; don't reword it.
 
-Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
-(`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
-flags, so an omitted flag reads as down and an ignored device as up or down. `State`
-is Core's `ReportedState`: `Unknown` when LibreNMS left a flag out, and `Ignored`
-on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
+Each `DeviceSummary` gives a device's state two ways, both from Core's
+`ReportedState`. `Status` is MCP's word (`up`, `down`, `disabled`, `ignored` or
+`unknown`, also the status filter). `State` is the typed value: `Unknown` when
+LibreNMS left a flag out, and `Ignored` on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
 views to maintenance; a failed check preserves the reported state and leaves
 `UnderMaintenance` null, rather than claiming it is off. Other device summaries
 do not request maintenance. `State` is left out of JSON.
