@@ -67,8 +67,7 @@ public sealed class NetworkOverview
         cancellationToken.ThrowIfCancellationRequested();
         var devices = devicesTask.Result;
         var byId = devices.ToDictionary(d => d.DeviceId);
-        var states = devices.CountBy(d => d.ReportedState).ToDictionary(c => c.Key, c => c.Value);
-        int Counted(DeviceState state) => states.GetValueOrDefault(state);
+        int Counted(DeviceState state) => devices.Count(d => d.ReportedState == state);
         var down = devices.Where(d => d.ReportedState == DeviceState.Down).OrderBy(d => d.DeviceId).ToList();
         var locations = down.GroupBy(d => DeviceSummary.LocationName(d.Location) ?? "(no location)", StringComparer.OrdinalIgnoreCase)
             .Select(g => new DownLocation(redactor.Redact(g.Key), g.Count()))
