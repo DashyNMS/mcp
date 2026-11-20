@@ -127,7 +127,12 @@ public sealed record DeviceSummary(
         return StatusWord(device.ReportedState);
     }
 
-    /// <summary>A reported state as MCP's lower-case status word.</summary>
+    /// <summary>
+    /// A state as MCP's lower-case status word. Core's reported state is never
+    /// Maintenance, so <see cref="StatusOf"/> never says "maintenance"; search's
+    /// maintenance reads set that word themselves, and it maps here for any caller
+    /// holding the typed state.
+    /// </summary>
     public static string StatusWord(DeviceState state) => state switch
     {
         DeviceState.Up => "up",
