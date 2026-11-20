@@ -49,7 +49,7 @@ public static class ToolText
                 "Part of a hostname, display name or sysName, an IP address, or a MAC address (any common format). Can be left out when status, group or location is given.";
 
             public const string Status =
-                "Only devices with this status: up, down or disabled.";
+                "Only devices with this status: up, down, disabled, ignored (polled, but left out of alerting) or unknown (LibreNMS didn't report it).";
 
             public const string Group =
                 "Only devices in this LibreNMS device group (by name; list_groups_and_locations shows them).";

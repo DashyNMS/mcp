@@ -82,7 +82,7 @@ public static class ToolCatalogue
         new(ToolText.FindDevice.Name, ToolText.FindDevice.Title, ToolText.FindDevice.Description,
             [
                 new("query", ToolParameterType.String, ToolText.FindDevice.Args.Query),
-                new("status", ToolParameterType.String, ToolText.FindDevice.Args.Status) { AllowedValues = ["up", "down", "disabled"] },
+                new("status", ToolParameterType.String, ToolText.FindDevice.Args.Status) { AllowedValues = ["up", "down", "disabled", "ignored", "unknown"] },
                 new("group", ToolParameterType.String, ToolText.FindDevice.Args.Group),
                 new("location", ToolParameterType.String, ToolText.FindDevice.Args.Location),
                 new("offset", ToolParameterType.Integer, ToolText.FindDevice.Args.Offset) { Default = 0, Minimum = 0 },
