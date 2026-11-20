@@ -177,7 +177,7 @@ public static class ToolText
         public const string Name = "list_groups_and_locations";
         public const string Title = "Device groups and locations";
         public const string Description =
-            "The device groups defined in LibreNMS and the locations devices are at, with how many devices are at each location and how many of those are down. " +
+            "The device groups defined in LibreNMS and the locations devices are at, with how many devices are at each location and how many of those are down, ignored or have no reported state. " +
             "Use it to find the names the group and location filters of find_device and active_alerts accept, or for \"which sites are there?\". " +
             "To list a group's devices, call find_device with that group.";
     }

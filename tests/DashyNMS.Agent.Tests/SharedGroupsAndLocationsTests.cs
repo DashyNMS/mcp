@@ -45,4 +45,30 @@ public sealed class SharedGroupsAndLocationsTests
         host.Dispose();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ReadAsync());
     }
+
+    /// <summary>
+    /// A location's down count holds only devices LibreNMS reported down; ignored devices and
+    /// those with no reported state are counted apart, in MCP's JSON as well (#121).
+    /// </summary>
+    [Fact]
+    public async Task Location_counts_keep_ignored_and_unknown_devices_out_of_down()
+    {
+        var nms = new FakeLibreNms();
+        nms.Transport.On("devices", """
+            {"status":"ok","devices":[
+              {"device_id":1,"hostname":"down.example.net","location":"Lab","status":0,"disabled":0,"ignore":0},
+              {"device_id":2,"hostname":"ignored-down.example.net","location":"Lab","status":0,"disabled":0,"ignore":1},
+              {"device_id":3,"hostname":"no-status.example.net","location":"Lab","disabled":0,"ignore":0},
+              {"device_id":4,"hostname":"no-flags.example.net","location":"Lab"},
+              {"device_id":5,"hostname":"up.example.net","location":"Lab","status":1,"disabled":0,"ignore":0}
+            ]}
+            """);
+        var root = FakeLibreNms.Parse(await new ScopeTools(nms.Directory, nms.Scope, nms.Runner).ListGroupsAndLocations());
+        var lab = Assert.Single(root.GetProperty("data").GetProperty("locations").EnumerateArray());
+
+        Assert.Equal(5, lab.GetProperty("devices").GetInt32());
+        Assert.Equal(1, lab.GetProperty("down").GetInt32());
+        Assert.Equal(1, lab.GetProperty("ignored").GetInt32());
+        Assert.Equal(2, lab.GetProperty("unknown").GetInt32());
+    }
 }
