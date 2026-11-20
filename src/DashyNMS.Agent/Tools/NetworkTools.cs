@@ -92,10 +92,13 @@ public sealed class NetworkTools(
         var p = result.Ports;
         var summary = $"{d.Total} devices visible to this account: {d.Up} up, {d.Down} down" +
             (d.Disabled > 0 ? $", {d.Disabled} disabled" : string.Empty) +
+            (d.Ignored > 0 ? $", {d.Ignored} ignored" : string.Empty) +
+            // LibreNMS left these devices' state out: they're neither up nor down (#121).
+            (d.Unknown > 0 ? $", {d.Unknown} with no reported state" : string.Empty) +
             (a is null ? "; open alerts couldn't be read." : $"; {a.Describe()} ({a.Critical} critical, {a.Warning} warning).");
         return ToolResult.Ok(summary, new
         {
-            devices = new { total = d.Total, up = d.Up, down = d.Down, disabled = d.Disabled, ignored = d.Ignored },
+            devices = new { total = d.Total, up = d.Up, down = d.Down, disabled = d.Disabled, ignored = d.Ignored, unknown = d.Unknown },
             most_down_by_location = result.DownLocations.Select(l => new { location = l.Location, down = l.Down }),
             alerts = a is null ? null : new { open = a.AlertGroups, faults = a.Faults, critical = a.Critical, warning = a.Warning,
                 acknowledged = a.Acknowledged, partly_acknowledged = a.PartlyAcknowledged, devices_alerting = a.Devices },

@@ -8,7 +8,13 @@ using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Overview;
 
-public sealed record OverviewDeviceCounts(int Total, int Up, int Down, int Disabled, int Ignored);
+/// <summary>
+/// Devices by the state LibreNMS reported, each in exactly one count, so the counts add up
+/// to <paramref name="Total"/>. A device LibreNMS didn't report a state for is
+/// <paramref name="Unknown"/>, never up or down, and an ignored one is only
+/// <paramref name="Ignored"/> (#121).
+/// </summary>
+public sealed record OverviewDeviceCounts(int Total, int Up, int Down, int Disabled, int Ignored, int Unknown);
 public sealed record OverviewPortCounts(int Total, int DownWhileEnabled, int CountingErrors);
 public sealed record DownLocation(string Location, int Down);
 /// <summary>Fixed categories only; no server bodies, exception text or URLs.</summary>
@@ -61,7 +67,9 @@ public sealed class NetworkOverview
         cancellationToken.ThrowIfCancellationRequested();
         var devices = devicesTask.Result;
         var byId = devices.ToDictionary(d => d.DeviceId);
-        var down = devices.Where(d => DeviceSummary.StatusOf(d) == "down").OrderBy(d => d.DeviceId).ToList();
+        var states = devices.CountBy(d => d.ReportedState).ToDictionary(c => c.Key, c => c.Value);
+        int Counted(DeviceState state) => states.GetValueOrDefault(state);
+        var down = devices.Where(d => d.ReportedState == DeviceState.Down).OrderBy(d => d.DeviceId).ToList();
         var locations = down.GroupBy(d => DeviceSummary.LocationName(d.Location) ?? "(no location)", StringComparer.OrdinalIgnoreCase)
             .Select(g => new DownLocation(redactor.Redact(g.Key), g.Count()))
             .OrderByDescending(g => g.Down).ThenBy(g => g.Location, StringComparer.Ordinal).ToList();
@@ -71,8 +79,8 @@ public sealed class NetworkOverview
         var unavailable = new List<OverviewUnavailable>();
         foreach (var (source, failure) in new[] { ("alerts", alertTask.Result.Failure), ("ports", portTask.Result.Failure), ("system", systemTask.Result.Failure) })
             if (failure is { } code) unavailable.Add(new(source, code));
-        return new(new(devices.Count, devices.Count(d => DeviceSummary.StatusOf(d) == "up"), down.Count,
-                devices.Count(d => d.Disabled), devices.Count(d => d.Ignore)),
+        return new(new(devices.Count, Counted(DeviceState.Up), down.Count,
+                Counted(DeviceState.Disabled), Counted(DeviceState.Ignored), Counted(DeviceState.Unknown)),
             groups is null ? null : OpenAlertTotals.From(groups),
             livePorts is null ? null : new(livePorts.Count,
                 livePorts.Count(p => string.Equals(p.IfAdminStatus, "up", StringComparison.OrdinalIgnoreCase) && !p.IsUp),

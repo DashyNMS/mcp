@@ -74,7 +74,7 @@ public static class ToolText
         public const string Name = "network_overview";
         public const string Title = "Network overview";
         public const string Description =
-            "The whole network in one call, as the dashboard's counts: how many devices are up, down, disabled or ignored, which locations have the most " +
+            "The whole network in one call, as the dashboard's counts: how many devices are up, down, disabled, ignored or have no reported state (each counted once), which locations have the most " +
             "devices down, open alerts by severity and how many are acknowledged, how many ports are down while enabled or counting errors, and the LibreNMS " +
             "version. A cheap first call for \"how's the network?\" before drilling in with find_device, active_alerts or the top_ tools.";
     }
