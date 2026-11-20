@@ -136,7 +136,7 @@ public static class ToolText
         public const string Name = "device_health";
         public const string Title = "Device health";
         public const string Description =
-            "How one device is doing now: up or down, uptime, whether it's in a maintenance window, its open alerts, " +
+            "How one device is doing now: up, down, disabled, ignored or not reported, uptime, whether it's in a maintenance window, its open alerts, " +
             "peak CPU, memory and fullest storage, and the ports that are down while enabled or are counting errors (top 5). " +
             "Use it for \"is X OK?\" questions. It doesn't cover history; use device_events or what_changed for that, and port_status for one port in detail.";
 
