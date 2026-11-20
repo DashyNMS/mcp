@@ -298,7 +298,7 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.74`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
+`2.0.0-ci.76`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
 before pinning this Shared (DashyNMS/mobile#665). For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -327,6 +327,11 @@ removal when the server version is unknown. The other changes in the range don't
 MCP's output: Spotlight's typed references (MCP doesn't call `AskAsync`), settings
 fields, the Network Search lookup and the new API members (all additive, none called
 by a tool).
+
+The move from `2.0.0-ci.74` to `2.0.0-ci.76` (#121, core#90 Batch 3) holds one Core
+change, core#75: request measurements count LibreNMS 26.10 `faults` polls as alert
+requests. MCP attaches no `RequestObserver`, so its output is unchanged; the move keeps
+MCP, the Shared package and mobile on one Core. The licence is unchanged.
 
 #### Publication
 
