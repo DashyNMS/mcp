@@ -30,7 +30,7 @@ Its features match DashyNMS desktop and mobile 1.1, and later versions follow th
 By part of a name, an IP address, or a MAC address, or list devices by status, device group or location: "which devices are down at the north site?". A MAC is looked up in LibreNMS's ARP tables, so you find the router or switch that saw it. *(`find_device`, `list_groups_and_locations`)*
 
 **Is it OK?**
-One answer per device: up or down, uptime, maintenance, open alerts, CPU, memory, the fullest storage, and the ports that are down or counting errors. *(`device_health`)*
+One answer per device: up, down, disabled, ignored or not reported, uptime, maintenance, open alerts, CPU, memory, the fullest storage, and the ports that are down or counting errors. *(`device_health`)*
 
 **What's on that port?**
 State, speed, VLANs, traffic, errors, its description, and the neighbour LibreNMS sees on it over LLDP or CDP. *(`port_status`)*
