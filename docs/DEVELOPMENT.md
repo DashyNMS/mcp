@@ -298,7 +298,7 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.76`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
+`2.0.0-ci.79`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
 before pinning this Shared (DashyNMS/mobile#665). For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -332,6 +332,14 @@ The move from `2.0.0-ci.74` to `2.0.0-ci.76` (#121, core#90 Batch 3) holds one C
 change, core#75: request measurements count LibreNMS 26.10 `faults` polls as alert
 requests. MCP attaches no `RequestObserver`, so its output is unchanged; the move keeps
 MCP, the Shared package and mobile on one Core. The licence is unchanged.
+
+The move from `2.0.0-ci.76` to `2.0.0-ci.79` (core#90 Batch 4) holds two Core changes.
+core#95 names ignored and unreported devices in Intelligence status cards, which MCP
+doesn't build. core#98 shares the ChatGPT route's instructions and tool running with
+Desktop's agent providers and adds provider, handoff and personality settings: all
+additive, and none called by a tool (MCP doesn't call `AskAsync` or build instructions).
+MCP's output is unchanged; the move keeps MCP, the Shared package, mobile and Desktop on
+one Core. The licence is unchanged.
 
 #### Publication
 
