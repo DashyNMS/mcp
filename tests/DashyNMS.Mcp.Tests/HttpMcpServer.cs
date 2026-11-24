@@ -51,7 +51,21 @@ internal sealed class HttpMcpServer : IDisposable
     /// <summary>Starts the server against <paramref name="librenms"/> and waits until it's listening.</summary>
     public static async Task<HttpMcpServer> StartAsync(FixtureServer librenms, CancellationToken cancellationToken, params (string Key, string Value)[] settings)
     {
-        // The port was free a moment ago. Should something take it first, the server says so and the test fails.
+        // The port was free a moment ago, but another test can take it first, so try again elsewhere.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await StartOnceAsync(librenms, cancellationToken, settings);
+            }
+            catch (InvalidOperationException taken) when (attempt < 5 && taken.Message.Contains("Couldn't listen on", StringComparison.Ordinal))
+            {
+            }
+        }
+    }
+
+    private static async Task<HttpMcpServer> StartOnceAsync(FixtureServer librenms, CancellationToken cancellationToken, (string Key, string Value)[] settings)
+    {
         var root = FixtureServer.NothingListening();
         var start = StdioServer.StartInfo(new Dictionary<string, string?>
         {
@@ -73,6 +87,8 @@ internal sealed class HttpMcpServer : IDisposable
             {
                 if (server._process.HasExited)
                 {
+                    // Waiting reads the last of stderr, which says why.
+                    await server._process.WaitForExitAsync(cancellationToken);
                     throw new InvalidOperationException($"Server exited. stderr:\n{server.Stderr}");
                 }
 

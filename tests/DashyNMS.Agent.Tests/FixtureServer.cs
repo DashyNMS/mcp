@@ -20,7 +20,7 @@ internal sealed class FixtureServer : IDisposable
     /// <summary>The token every fixture connection uses; any other is refused.</summary>
     internal const string Token = "test-token";
 
-    private readonly HttpListener listener = new();
+    private readonly HttpListener listener;
     private readonly ConcurrentQueue<string> requests = new();
     private readonly Func<string, Answer?> answer;
     private readonly Func<HttpListenerRequest, Answer?>? requestAnswer;
@@ -33,19 +33,35 @@ internal sealed class FixtureServer : IDisposable
         this.answer = answer;
         this.requestAnswer = requestAnswer;
         this.authenticated = authenticated;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0))
-        {
-            probe.Start();
-            Root = new Uri($"http://127.0.0.1:{((IPEndPoint)probe.LocalEndpoint).Port}/");
-            probe.Stop();
-        }
-
-        listener.Prefixes.Add(Root.ToString());
-        listener.Start();
+        (listener, Root) = Listen();
         _ = Task.Run(ServeAsync);
     }
 
     public Uri Root { get; }
+
+    /// <summary>
+    /// A listener on a loopback port. HttpListener can't choose one itself, so a
+    /// free one is picked first; tests run in parallel, and another can take it
+    /// in between, so it's tried again elsewhere.
+    /// </summary>
+    internal static (HttpListener Listener, Uri Root) Listen()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var root = NothingListening();
+            var candidate = new HttpListener();
+            candidate.Prefixes.Add(root.ToString());
+            try
+            {
+                candidate.Start();
+                return (candidate, root);
+            }
+            catch (HttpListenerException) when (attempt < 10)
+            {
+                candidate.Close();
+            }
+        }
+    }
 
     /// <summary>A loopback address that was free a moment ago, so a connection is refused.</summary>
     internal static Uri NothingListening()

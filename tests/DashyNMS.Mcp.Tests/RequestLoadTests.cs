@@ -50,7 +50,7 @@ public sealed class RequestLoadTests
     /// <summary>A LibreNMS of <see cref="Calls"/> devices that takes a while over each request and counts how many it's holding.</summary>
     private sealed class SlowLibreNms : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly TimeSpan _delay;
         private readonly object _sync = new();
         private int _atOnce;
@@ -58,9 +58,7 @@ public sealed class RequestLoadTests
         public SlowLibreNms(TimeSpan delay)
         {
             _delay = delay;
-            Root = FixtureServer.NothingListening();
-            _listener.Prefixes.Add(Root.ToString());
-            _listener.Start();
+            (_listener, Root) = FixtureServer.Listen();
             _ = Task.Run(ServeAsync);
         }
 
