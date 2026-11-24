@@ -394,7 +394,7 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (`DashyNMSCoreVersion` in mobile's `Directory.Build.props`) share one entry,
-`2.0.0-edge.1`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
+`2.0.0-nightly.1`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
 before pinning this Shared. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -450,6 +450,9 @@ The move from `2.0.0-ci.84` to `2.0.0-edge.1` (core#90 Batch 7) holds core#104, 
 channels Desktop offers, and core#103, how the package is built and published. No tool
 checks for updates or reads those settings, so MCP's output is unchanged. The licence is
 unchanged.
+
+The move to `2.0.0-nightly.1` uses Core's first nightly for 2.0.0.
+MCP and the Shared package use the same pin, with updated licence evidence.
 
 #### Publication
 
