@@ -16,12 +16,12 @@
     <NeutralLanguage>en-GB</NeutralLanguage>
     <!--
       DesktopNMS.Core lives in DashyNMS/core and comes in as the DashyNMS.Core
-      package from GitHub Packages (see nuget.config), pinned to a development
-      build of core's main (x.y.z-ci.N) between Core releases - the same Core
+      package from GitHub Packages (see nuget.config), pinned to an edge
+      package of core's main (x.y.z-edge.N) between Core releases - the same Core
       the desktop app pins. Set DASHYNMS_LOCAL_CORE to a checkout of
       DashyNMS/core to build against that instead.
     -->
-    <DashyNMSCoreVersion>2.0.0-ci.84</DashyNMSCoreVersion>
+    <DashyNMSCoreVersion>2.0.0-edge.1</DashyNMSCoreVersion>
   </PropertyGroup>
 
 </Project>

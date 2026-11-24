@@ -363,8 +363,8 @@ the image build does (see `docs/dependency-licences`).
 The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
-and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.84`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
+and mobile's (`DashyNMSCoreVersion` in mobile's `Directory.Build.props`) share one entry,
+`2.0.0-edge.1`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
 before pinning this Shared. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -415,6 +415,11 @@ The move from `2.0.0-ci.83` to `2.0.0-ci.84` (core#90 Batch 6) holds one Core ch
 core#101: event and alert log reads that continue back from a time, which the windowed
 tools use on busy networks (#70). An `ILogsApi` that doesn't say it can, such as mobile's
 connection-bound wrappers, is read as before. The licence is unchanged.
+
+The move from `2.0.0-ci.84` to `2.0.0-edge.1` (core#90 Batch 7) holds core#104, the update
+channels Desktop offers, and core#103, how the package is built and published. No tool
+checks for updates or reads those settings, so MCP's output is unchanged. The licence is
+unchanged.
 
 #### Publication
 
