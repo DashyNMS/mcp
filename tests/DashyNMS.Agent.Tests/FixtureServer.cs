@@ -128,7 +128,9 @@ internal sealed class FixtureServer : IDisposable
     public void Dispose()
     {
         stopping.Cancel();
-        listener.Stop();
+
+        // Not Stop first: Close would then look the port up again, and listen on
+        // it to do so, which fails if another test has taken it in between.
         listener.Close();
     }
 }
