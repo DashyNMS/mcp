@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using DashyNMS.Agent;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Mcp.Auditing;
@@ -37,6 +38,43 @@ public static class ToolCallFilters
                 Content = [new TextContentBlock { Text = ToolResult.Render(error, redactor, maxResultBytes) }],
             };
         }));
+    }
+
+    /// <summary>
+    /// Returns each result's JSON as structured content too (#40), which a tool
+    /// with an output schema owes its clients. The text stays as it was, for the
+    /// ones that only read that.
+    /// </summary>
+    /// <remarks>Inside the audit and outside everything that answers for a tool, so the refusals have it as well.</remarks>
+    public static IMcpServerBuilder WithStructuredContent(this IMcpServerBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithRequestFilters(filters => filters.AddCallToolFilter(next => async (context, cancellationToken) =>
+        {
+            var result = await next(context, cancellationToken).ConfigureAwait(false);
+            if (result.Content.OfType<TextContentBlock>().FirstOrDefault() is { } text)
+            {
+                // Over whatever is there: seeing an output schema, the SDK makes
+                // the text a tool returned into structured content as one string.
+                result.StructuredContent = Parse(text.Text);
+            }
+
+            return result;
+        }));
+    }
+
+    /// <summary>The object in <paramref name="text"/>, or null for the SDK's own refusals, which are sentences.</summary>
+    private static JsonElement? Parse(string text)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(text);
+            return json.RootElement.ValueKind == JsonValueKind.Object ? json.RootElement.Clone() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Who is calling: the label of the token they used over HTTP, or stdio's only client.</summary>

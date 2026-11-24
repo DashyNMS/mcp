@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
@@ -49,11 +50,13 @@ public sealed class DeviceTools(
     {
         var result = await new DeviceSearch(client, directory, scopes, options, runner.Redactor)
             .FindDevicesAsync(new(query, status, group, location, offset, limit), cancellationToken).ConfigureAwait(false);
-        object Shape(DeviceSummary d) => verbose ? d : DeviceBrief.FromSummary(d);
-        return result.IsMacSearch
-            ? ToolResult.Ok(result.Summary, new { arp_matches = result.Matches.Select(m => new { device = Shape(m.Device), seen_as = m.SeenAs }), page = result.Page })
-            : ToolResult.Ok(result.Summary, new { devices = result.Matches.Select(m => Shape(m.Device)), page = result.Page });
+        return ToolResult.Ok(result.Summary, verbose ? Data(result, d => d) : Data(result, DeviceBrief.FromSummary));
     }
+
+    private static object Data<T>(FindDevicesResult result, Func<DeviceSummary, T> shape)
+        => result.IsMacSearch
+            ? new MacMatches<T>(result.Matches.Select(m => new MacMatch<T>(shape(m.Device), m.SeenAs)).ToList(), result.Page)
+            : new FoundDevices<T>(result.Matches.Select(m => shape(m.Device)).ToList(), result.Page);
 
     private async Task<JsonObject> HealthAsync(string query, CancellationToken cancellationToken)
     {

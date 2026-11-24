@@ -76,7 +76,7 @@ public sealed class SharedSearchFixtureTests
         var options = new AgentOptions();
         var directory = new DeviceDirectory(client, time);
         var tools = new DeviceTools(client, directory, new DeviceResolver(directory), new DeviceScope(client, directory, time),
-            new ToolRunner(new Redactor(), options, NullLogger<ToolRunner>.Instance), options);
+            new ToolRunner(new Redactor(), options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check }, options);
         return new(transport, client, tools);
     }
 

@@ -29,6 +29,9 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
 
     internal AgentOptions Options => options;
 
+    /// <summary>Sees each result as it's returned, so every tool test also holds it to the tool's output schema (#40).</summary>
+    internal Action<string, string>? Returned { get; set; }
+
     public async Task<string> RunAsync(string tool, Func<CancellationToken, Task<JsonObject>> body, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -70,6 +73,8 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
             };
         }
 
-        return ToolResult.Render(result, redactor, options.MaxResultBytes);
+        var json = ToolResult.Render(result, redactor, options.MaxResultBytes);
+        Returned?.Invoke(tool, json);
+        return json;
     }
 }

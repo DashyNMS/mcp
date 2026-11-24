@@ -47,9 +47,10 @@ Don't use `dotnet run` in a client's configuration. It can write build output to
 Every tool call goes through, in this order:
 
 1. **`ToolCallAudit`**, outermost, so it records exactly one entry however the call ends, including calls no tool runs for. A message filter outside the request filter catches calls the SDK can't read. What the SDK or the HTTP transport refuses before dispatch, such as an unsupported protocol version, isn't a call and has no entry. Its sinks must not throw or block: stderr and GELF each have a bounded queue.
-2. **The rate limit**, when `MCP_RATE_LIMIT_PER_MINUTE` is set, counted per `ToolCallFilters.ClientOf`: the token's label, or `stdio`.
-3. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
-4. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
+2. **Structured content**: the result's JSON is sent as `structuredContent` too, inside the audit and outside everything that can answer for a tool.
+3. **The rate limit**, when `MCP_RATE_LIMIT_PER_MINUTE` is set, counted per `ToolCallFilters.ClientOf`: the token's label, or `stdio`.
+4. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
+5. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
 
 Requests to LibreNMS, Unimus and Graylog each pass a `RequestLimiter`, which Core enters before each HTTP attempt's timeout starts (`IRequestGate`, DashyNMS/core#99).
 
@@ -90,6 +91,7 @@ To release, set `<Version>` in `Directory.Build.props` to the new version and me
 
 - Every tool is read-only, and its MCP annotations say so. A test fails if one isn't.
 - Every string a tool returns goes through the redactor. Add a failing test to `RedactorTests` before fixing a gap.
+- A tool's `data` is a record listed in `ToolOutputs`, which its output schema is generated from (`ToolOutputSchema`). Every tool test holds its result to that schema through `OutputContract`, undeclared properties included. A client may refuse a whole result over one property, so a schema requires only what can't be missing and sets no formats.
 - Summaries and error messages are our own sentences. Device text goes only under `data` or `details`.
 - Tool and parameter descriptions are prompts: review them like code.
 - Logs go to stderr only, and never include a token or password.
@@ -259,7 +261,7 @@ the stdio smoke test holds the running server to it byte for byte. The tools are
 because the SDK lists them in no fixed order. The same test, and `ToolCatalogueTests` against the
 recording, hold the listed names, descriptions and schemas equal to the catalogue. When a tool's
 text changes on purpose, change `ToolText`, then replace the recording with the list the failing
-test prints (base64) and review the diff.
+test prints (gzipped, then base64) and review the diff.
 
 ### Verification and publication follow-up
 

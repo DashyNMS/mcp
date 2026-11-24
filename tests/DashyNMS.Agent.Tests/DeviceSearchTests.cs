@@ -260,7 +260,7 @@ public sealed class DeviceSearchTests
             "ipv4_address":"password=synthetic-ip","mac_address":"token=synthetic-mac"}]}
             """);
         var redactor = new Redactor();
-        var runner = new ToolRunner(redactor, nms.Options, NullLogger<ToolRunner>.Instance);
+        var runner = new ToolRunner(redactor, nms.Options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check };
         Assert.Same(redactor, runner.Redactor);
         var search = DeviceSearch.Create(nms.Client, nms.Time, nms.Options, redactor);
         var match = Assert.Single((await search.FindDevicesAsync(new("aa:bb:cc:dd:ee:ff"))).Matches);

@@ -104,6 +104,7 @@ internal static class ServerSetup
 
             return new ToolCallAudit(sinks, provider.GetRequiredService<AuditRedactor>(), options.Transport == McpTransport.Http ? "http" : "stdio", TimeProvider.System);
         });
+        server.WithStructuredContent();
         if (options.RateLimitPerMinute is { } rateLimit)
         {
             server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), new Redactor(), options.MaxResultBytes);
