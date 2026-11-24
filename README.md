@@ -121,9 +121,6 @@ docker pull ghcr.io/dashynms/mcp:latest
 | macOS | `dashynms-mcp-<version>-osx-arm64.tar.gz` (Apple silicon), `-osx-x64.tar.gz` (Intel) |
 | Linux | `dashynms-mcp-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz` (glibc; on Alpine use the image) |
 
-For an edge build, download `SHA256SUMS-<version>` and rename it to
-`SHA256SUMS` before running this check.
-
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS      # on macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
 gh attestation verify dashynms-mcp-*.tar.gz --repo DashyNMS/mcp   # optional: that it was built here

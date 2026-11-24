@@ -95,7 +95,7 @@ Every DashyNMS repository builds the same way.
 | Workflow | When | Version | Publishes |
 | --- | --- | --- | --- |
 | **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
-| **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on the rolling `v0.0.0-edge` prerelease |
+| **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on a prerelease |
 | **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease |
 | **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
@@ -132,7 +132,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 | Build | Notes |
 | --- | --- |
 | CI | fails if the file is missing, empty or has other headings |
-| Edge | the rolling release links to the file at its commit |
+| Edge | a tag and prerelease with links to the file and to the changes since the last edge build |
 | Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
 | Release | the last step creates the release with the file as its notes |
 
@@ -147,7 +147,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 3. `scripts/publish-binary.py pack`: one archive and its SHA-256.
 4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
 
-Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Nightly and release files don't change once published, unless a release's build is run again to finish it; the edge release's are replaced by each build, with their checksums as `SHA256SUMS-<version>`.
+Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Published files don't change. A release's build that's run again only adds the ones that are missing.
 
 ## Rules for tools
 
@@ -461,7 +461,7 @@ before Shared publication. The archive has one canonical version reference so
 Skopeo can select it unambiguously. Channel aliases are added only during
 publication. `image-publish.yml` copies that archive to GHCR without
 rebuilding, preserving its digests, SBOM and provenance. Edge builds share one
-workflow concurrency group, including image tags and the rolling binary release.
+workflow concurrency group, so the `edge` image tag never moves back.
 They queue without cancelling an in-progress publisher.
 
 Edge, nightly and release builds on protected `main` whose `verify` and
