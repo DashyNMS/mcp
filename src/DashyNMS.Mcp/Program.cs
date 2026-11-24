@@ -44,6 +44,7 @@ builder.Services.AddSingleton<LibreNmsStartup>();
 builder.Services.AddDashyNmsAgent(new AgentOptions
 {
     MaxResultBytes = options.MaxResultBytes,
+    MaxConcurrentRequests = options.MaxConcurrentRequests,
     ServerTimestampsAreUtc = options.TimestampsAreUtc,
     GraylogQueryField = options.GraylogField,
     GraylogMatchAnyAddress = options.GraylogMatchAnyAddress,

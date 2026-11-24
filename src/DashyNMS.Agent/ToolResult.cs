@@ -24,6 +24,10 @@ namespace DashyNMS.Agent;
 /// text is shortened. A cut result says so with <c>"truncated": true</c> and
 /// how many list entries were left out in <c>"omitted"</c>.
 /// </para>
+/// <para>
+/// Either kind can carry <c>"throttling"</c>, when the call's requests had to
+/// queue long enough that the model should slow down (see <see cref="ToolRunner"/>).
+/// </para>
 /// </remarks>
 public static class ToolResult
 {

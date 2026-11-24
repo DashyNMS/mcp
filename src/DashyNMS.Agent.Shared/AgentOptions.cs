@@ -30,6 +30,15 @@ public sealed class AgentOptions
     /// </summary>
     public int MaxResultBytes { get; init; } = DefaultMaxResultBytes;
 
+    public const int DefaultMaxConcurrentRequests = 8;
+
+    /// <summary>
+    /// The most requests the MCP adapter has in flight to each source
+    /// (LibreNMS, Unimus, Graylog) at once; more queue (#38). Other hosts own
+    /// their clients, so it doesn't apply to them.
+    /// </summary>
+    public int MaxConcurrentRequests { get; init; } = DefaultMaxConcurrentRequests;
+
     /// <summary>
     /// Whether LibreNMS's zone-less timestamps are UTC (desktop's "Server
     /// stores timestamps in UTC", on by default) or the server's local time.

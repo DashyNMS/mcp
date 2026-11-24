@@ -1,5 +1,6 @@
 using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Redaction;
+using DashyNMS.Agent.Requests;
 using DesktopNMS.Core.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,16 +23,32 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDashyNmsAgent(this IServiceCollection services, AgentOptions? options = null)
     {
         services.AddSingleton<ServerFailover>();
-        services.AddSingleton<LibreNmsTransport>();
+        // Each source gets its own limit on requests in flight (#38).
+        services.AddSingleton(sp =>
+        {
+            var transport = ActivatorUtilities.CreateInstance<LibreNmsTransport>(sp);
+            transport.RequestGate = Limiter(sp);
+            return transport;
+        });
         services.AddSingleton<ILibreNmsTransport>(sp => sp.GetRequiredService<LibreNmsTransport>());
         services.AddSingleton<LibreNmsClient>();
         services.AddSingleton<ILibreNmsClient>(sp => sp.GetRequiredService<LibreNmsClient>());
 
         // Optional integrations: their tools say "not configured" until the
         // matching environment variables are set.
-        services.AddSingleton<UnimusApi>();
+        services.AddSingleton(sp =>
+        {
+            var unimus = ActivatorUtilities.CreateInstance<UnimusApi>(sp);
+            unimus.RequestGate = Limiter(sp);
+            return unimus;
+        });
         services.AddSingleton<IUnimusApi>(sp => sp.GetRequiredService<UnimusApi>());
-        services.AddSingleton<GraylogApi>();
+        services.AddSingleton(sp =>
+        {
+            var graylog = ActivatorUtilities.CreateInstance<GraylogApi>(sp);
+            graylog.RequestGate = Limiter(sp);
+            return graylog;
+        });
         services.AddSingleton<IGraylogApi>(sp => sp.GetRequiredService<GraylogApi>());
 
         services.AddSingleton(options ?? new AgentOptions());
@@ -53,4 +70,7 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    private static RequestLimiter Limiter(IServiceProvider services)
+        => new(services.GetRequiredService<AgentOptions>().MaxConcurrentRequests, services.GetRequiredService<TimeProvider>());
 }

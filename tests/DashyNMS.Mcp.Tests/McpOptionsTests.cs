@@ -47,6 +47,29 @@ public sealed class McpOptionsTests
         Assert.NotEmpty(errors);
     }
 
+    [Theory]
+    [InlineData(null, 8)]
+    [InlineData("1", 1)]
+    [InlineData("256", 256)]
+    public void Concurrent_requests_are_capped(string? value, int expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.MaxConcurrentRequestsKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.MaxConcurrentRequests);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("257")]
+    [InlineData("-1")]
+    [InlineData("lots")]
+    public void A_cap_that_is_not_one_is_refused(string value)
+    {
+        Assert.Null(Load(new(Minimal()) { [McpOptions.MaxConcurrentRequestsKey] = value }, out var errors));
+        Assert.Contains("is not a whole number from 1 to 256", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Minimal_settings_use_defaults()
     {
