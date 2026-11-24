@@ -422,8 +422,9 @@ public static class ToolText
             "\"any fans failing?\". By default only readings in warning or critical; set only_problems to false for every reading of a type. " +
             "Judged the same way as device_sensors. " +
             TypeHelp +
-            " Filter by device group or location. Paged: 50 by default, up to 100. When LibreNMS won't give this token every sensor at once, devices " +
-            "are read one by one for a limited time, alerting ones first: coverage then says how many were read, and asking again carries on. Say so if it isn't complete.";
+            " Filter by device group or location. Paged: 50 by default, up to 100. " +
+            "If coverage is there, devices were read one by one for a limited time, alerting ones first: when it isn't complete, say how many were " +
+            "read, and ask again to carry on from there.";
 
         /// <summary>Each parameter's description, named after the parameter.</summary>
         public static class Args
