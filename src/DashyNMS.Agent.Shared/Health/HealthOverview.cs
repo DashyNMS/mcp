@@ -167,6 +167,11 @@ public sealed class HealthOverview
 
         var swept = await sensorSource.SweepAsync(order, type, Math.Max(1, options.MaxConcurrentRequests / 2), budget, cancellationToken).ConfigureAwait(false);
         var complete = swept.NotReached == 0 && swept.Denied == 0 && swept.Failed == 0;
+        if (swept.NotReached > 0 || swept.Failed > 0)
+        {
+            SourceOutcomes.Current?.Partial();
+        }
+
         return (swept.Sensors, new SensorCoverage(inScope.Count, swept.Read, inScope.Count - up.Count, swept.Denied, swept.Failed, swept.NotReached,
             complete, swept.OldestReadAt?.UtcDateTime, complete ? null : FleetSensorsRefusedException.Permission));
     }

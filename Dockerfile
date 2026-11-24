@@ -45,6 +45,10 @@ RUN dotnet publish src/DashyNMS.Mcp -c Release --no-restore -a $TARGETARCH --sel
     -p:InvariantGlobalization=true \
     -p:DebugType=none
 
+# Owned by the runtime's user, so a volume mounted here can be written to
+# (MCP_LAST_KNOWN_GOOD_DIR).
+RUN mkdir /data
+
 # Ubuntu chiseled: the .NET and ASP.NET Core runtimes (the HTTP transport) and
 # CA certificates, no shell or package manager, and a non-root user by default.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
@@ -52,6 +56,7 @@ WORKDIR /app
 LABEL org.opencontainers.image.licenses="MIT" \
       net.dashynms.license.scope="MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md."
 COPY --from=build /app .
+COPY --from=build --chown=1654:1654 /data /data
 COPY LICENSE NOTICES.md ./
 COPY --from=build /third-party ./third-party
 

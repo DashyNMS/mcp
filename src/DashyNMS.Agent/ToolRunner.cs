@@ -37,7 +37,9 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
         ArgumentNullException.ThrowIfNull(body);
 
         var waits = ToolCallWaits.Begin();
+        var sources = SourceOutcomes.Begin();
         JsonObject result;
+        var failed = false;
         try
         {
             result = await body(cancellationToken).ConfigureAwait(false);
@@ -49,9 +51,12 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
         catch (ToolException expected)
         {
             result = ToolResult.Error(expected.Message, expected.Details);
+            failed = true;
         }
         catch (Exception ex)
         {
+            failed = true;
+            sources.Failed(ex);
             if (ToolErrors.Describe(ex) is { } error)
             {
                 logger.LogWarning(ex, "{Tool}: request failed", tool);
@@ -75,6 +80,30 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
 
         var json = ToolResult.Render(result, redactor, options.MaxResultBytes);
         Returned?.Invoke(tool, json);
+        ToolCallReport.Current?.Answer(Outcome(failed, sources), json);
         return json;
+    }
+
+    private static ToolCallOutcome Outcome(bool failed, SourceOutcomes sources)
+    {
+        if (sources.WasRefused)
+        {
+            return ToolCallOutcome.TokenRefused;
+        }
+
+        // An answer without what this account may not see is all of it, for this account.
+        if (sources.WasDenied && (failed || !sources.IsComplete))
+        {
+            return ToolCallOutcome.Denied;
+        }
+
+        // A tool turns some sources' failures into its own sentence, so what
+        // the sources did counts, not only what it threw.
+        if (failed ? sources.AnyUnreachable : sources.IsUnreachable)
+        {
+            return ToolCallOutcome.Unreachable;
+        }
+
+        return failed ? ToolCallOutcome.Failed : sources.IsComplete ? ToolCallOutcome.Complete : ToolCallOutcome.Partial;
     }
 }

@@ -33,9 +33,12 @@ public static class Sources
     public static async Task<Fetched<T>> TryAsync<T>(Func<Task<T>> call, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(call);
+        var read = SourceOutcomes.BeginRead();
         try
         {
-            return new Fetched<T>(await call().ConfigureAwait(false), null);
+            var value = await call().ConfigureAwait(false);
+            SourceOutcomes.Current?.Answered(read);
+            return new Fetched<T>(value, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -43,6 +46,7 @@ public static class Sources
         }
         catch (Exception ex) when (ToolErrors.MessageFor(ex) is not null)
         {
+            SourceOutcomes.Current?.Failed(ex);
             return new Fetched<T>(default, ToolErrors.MessageFor(ex));
         }
     }

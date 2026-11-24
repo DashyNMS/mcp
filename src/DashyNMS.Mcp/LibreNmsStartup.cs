@@ -16,14 +16,26 @@ namespace DashyNMS.Mcp;
 public sealed class LibreNmsStartup(ILibreNmsClient client, ILogger<LibreNmsStartup> logger)
 {
     /// <summary>Returns null once connected, or the reason it couldn't connect.</summary>
-    public async Task<string?> ConnectAsync(LibreNmsConnection connection, CancellationToken cancellationToken)
+    /// <param name="canWait">
+    /// Whether to start anyway when LibreNMS doesn't answer, because there are
+    /// answers from before to give meanwhile (#39). A refused token or an
+    /// untrusted certificate stops the server as always.
+    /// </param>
+    public async Task<string?> ConnectAsync(LibreNmsConnection connection, bool canWait, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
         var result = await client.TestAsync(connection, cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded)
         {
-            return Describe(connection, result);
+            if (!canWait || result.IsAuthenticationFailure || result.UntrustedCertificate is not null)
+            {
+                return Describe(connection, result);
+            }
+
+            client.Connect(connection, startOnBackup: false);
+            logger.LogWarning("{Failure} Starting with the last known good answers until it can be reached.", Describe(connection, result));
+            return null;
         }
 
         client.Connect(connection, startOnBackup: result.UsedBackupAddress);

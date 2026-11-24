@@ -49,8 +49,9 @@ Every tool call goes through, in this order:
 1. **`ToolCallAudit`**, outermost, so it records exactly one entry however the call ends, including calls no tool runs for. A message filter outside the request filter catches calls the SDK can't read. What the SDK or the HTTP transport refuses before dispatch, such as an unsupported protocol version, isn't a call and has no entry. Its sinks must not throw or block: stderr and GELF each have a bounded queue.
 2. **Structured content**: the result's JSON is sent as `structuredContent` too, inside the audit and outside everything that can answer for a tool.
 3. **The rate limit**, when `MCP_RATE_LIMIT_PER_MINUTE` is set, counted per `ToolCallFilters.ClientOf`: the token's label, or `stdio`.
-4. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
-5. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
+4. **`LastKnownGoodFilter`**, unless `MCP_LAST_KNOWN_GOOD` is off: it keeps a complete answer, and gives it back, marked stale, when LibreNMS can't be reached. `ToolRunner` tells it how the call went through `ToolCallReport`. An operation that gives a partial answer must record that: `Sources.TryAsync` and `HostBoundary` do so through `SourceOutcomes`, and anything else that leaves part of an answer out calls it itself.
+5. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
+6. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
 
 Requests to LibreNMS, Unimus and Graylog each pass a `RequestLimiter`, which Core enters before each HTTP attempt's timeout starts (`IRequestGate`, DashyNMS/core#99).
 

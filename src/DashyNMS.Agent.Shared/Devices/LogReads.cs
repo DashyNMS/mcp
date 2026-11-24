@@ -144,6 +144,7 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
             catch (Exception ex) when (read > 0 && !cancellationToken.IsCancellationRequested && ToolErrors.MessageFor(ex) is not null)
             {
                 // What was read still stands.
+                SourceOutcomes.Current?.Failed(ex);
                 return Stopped(SourceFailed);
             }
 

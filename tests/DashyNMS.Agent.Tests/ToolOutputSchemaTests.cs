@@ -18,7 +18,7 @@ public sealed class ToolOutputSchemaTests
 
         Assert.Equal("object", schema.GetProperty("type").GetString());
         Assert.Equal(
-            ["status", "summary", "data", "truncated", "omitted", "message", "details", "throttling"],
+            ["status", "summary", "data", "truncated", "omitted", "message", "details", "stale", "as_of", "stale_reason", "throttling"],
             schema.GetProperty("properties").EnumerateObject().Select(p => p.Name));
         Assert.Equal(["status"], schema.GetProperty("required").EnumerateArray().Select(r => r.GetString()!));
         var data = schema.GetProperty("properties").GetProperty("data");
