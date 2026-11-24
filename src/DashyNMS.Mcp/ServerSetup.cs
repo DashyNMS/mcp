@@ -22,6 +22,10 @@ internal static class ServerSetup
         {
             o.LogToStandardErrorThreshold = LogLevel.Trace;
             o.FormatterName = SafeConsoleFormatter.FormatterName;
+
+            // A client that doesn't read stderr must not stop the server: by
+            // default a full queue waits for room, and the caller with it.
+            o.QueueFullMode = ConsoleLoggerQueueFullMode.DropWrite;
         });
         logging.AddConsoleFormatter<SafeConsoleFormatter, ConsoleFormatterOptions>();
         logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
@@ -59,7 +63,9 @@ internal static class ServerSetup
             OverrideSensorLimitsWithAppThresholds = options.SensorSettings.OverrideSensorLimitsWithAppThresholds,
         });
 
-        // Before the MCP server, so it's stopped after it and the last calls' entries still go.
+        // Before the MCP server, so they're stopped after it and the last calls' entries still go.
+        services.AddSingleton<StderrAuditSink>();
+        services.AddHostedService(provider => provider.GetRequiredService<StderrAuditSink>());
         if (options.AuditGelf is { } gelf)
         {
             services.AddSingleton(gelf);
@@ -90,7 +96,7 @@ internal static class ServerSetup
         // The audit first, so it records the calls the rate limit refuses too.
         server.WithAudit(provider =>
         {
-            var sinks = new List<IAuditSink> { new StderrAuditSink() };
+            var sinks = new List<IAuditSink> { provider.GetRequiredService<StderrAuditSink>() };
             if (provider.GetService<GelfAuditSink>() is { } sink)
             {
                 sinks.Add(sink);

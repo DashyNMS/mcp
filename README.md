@@ -204,6 +204,8 @@ Every tool call leaves one line of JSON on stderr, beside the server's other log
 
 With `AUDIT_GELF_URL` set, entries also go to Graylog, as GELF messages with the same fields (`_tool`, `_token_label`, `_arguments` as JSON text, and so on). Delivery is best effort and never holds up a call: if Graylog can't keep up or can't be reached, the server logs that once and carries on, and stderr still has every entry.
 
+If nothing reads stderr, entries queue and then, past 1000, are lost rather than hold up a call. The next line that gets through is preceded by `{"event":"audit_lost","count":…}`, saying how many.
+
 A request refused before it's a call at all - no valid token, or not a valid MCP message - isn't a tool call and leaves no entry.
 
 What a tool returned is never recorded. Arguments still name your devices and say what was searched for, so treat the trail as you would any other log of your network.
