@@ -97,17 +97,23 @@ Every DashyNMS repository builds the same way.
 | **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
 | **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on the rolling `v0.0.0-edge` prerelease |
 | **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease |
-| **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
+| **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
 
 Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
 
-To release, check that `docs/releases/<version>.md` reads well, then publish a blank GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds. The last step attaches the binaries, fills in its title and [notes](#release-notes) and publishes it again. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
+**Releasing:** check that `docs/releases/<version>.md` reads well, then tag `main`'s newest commit and push only the tag:
 
-If a release fails it stays a draft. Don't publish the draft by hand, because that starts the build again:
+```bash
+git tag v2.0.0 origin/main && git push origin v2.0.0
+```
 
-- **Nothing on `main` has to change:** run **Release build** by hand with the tag. A Shared package already published from that commit is kept, after its provenance is checked.
-- **It needs a fix:** the release has to be `main`'s newest commit, so merge the fix, delete the draft with its tag (`gh release delete v2.0.0 --cleanup-tag`) and publish it again. If its Shared package was already published, that version is used up: raise `<Version>` first.
+The tag has to match `<Version>` in `Directory.Build.props`. Don't create the release on GitHub first, because everyone watching would be told about an empty one: the build creates it at the end, with its [notes](#release-notes). A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`, so later edge and nightly builds rank above the release.
+
+If it fails there's no release:
+
+- **Nothing on `main` has to change:** run **Release build** by hand with the tag. The Shared package, if it was already pushed from that commit, is kept after its provenance is checked.
+- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, delete the tag (`git push --delete origin v2.0.0`) and push it again. If the Shared package was already pushed, that version is used up: raise `<Version>` first.
 
 ### Release notes
 
@@ -128,7 +134,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 | CI | fails if the file is missing, empty or has other headings |
 | Edge | the rolling release links to the file at its commit |
 | Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
-| Release | the last step replaces whatever the blank release said with the file |
+| Release | the last step creates the release with the file as its notes |
 
 **Raising `<Version>`:** the same pull request adds `docs/releases/<new version>.md` with its first line, because CI won't pass without it.
 
