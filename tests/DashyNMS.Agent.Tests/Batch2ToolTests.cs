@@ -7,7 +7,7 @@ public sealed class Batch2ToolTests
 {
     private readonly FakeLibreNms _nms = new();
 
-    private HealthTools Health() => new(_nms.Sensors, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner);
+    private HealthTools Health() => new(_nms.Sensors, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Client);
 
     private DetailTools Details() => new(_nms.Client, _nms.Fleet, _nms.Sensors, _nms.Directory, _nms.Resolver, _nms.Runner);
 
@@ -105,7 +105,7 @@ public sealed class Batch2ToolTests
         var core = FakeLibreNms.Parse(await Health().HealthOverview(group: "core switches", cancellationToken: CancellationToken.None));
 
         Assert.Equal("error", everything.GetProperty("status").GetString());
-        Assert.Contains("global read access", everything.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("global read role", everything.GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Equal("3 sensor readings checked on devices visible to this account: 2 critical, 0 warning.", core.GetProperty("summary").GetString());
     }
 
