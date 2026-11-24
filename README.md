@@ -172,7 +172,7 @@ All settings are environment variables.
 | `MCP_HTTP_TOKENS` | With `http` | | The bearer tokens that may use the server, as `label:token` separated by commas. Labels are up to 50 letters, digits, dots, hyphens or underscores, and say whose token it is in the audit trail. Tokens need at least 32 characters. The server doesn't start over HTTP without one. |
 | `MCP_HTTP_PORT` | No | `8080` | The port to listen on |
 | `MCP_HTTP_ADDRESS` | No | `127.0.0.1` | The IP address to listen on, or `*` for every address (the default inside the container image) |
-| `MCP_HTTP_ALLOWED_ORIGINS` | No | | The web origins, such as `https://tools.example.net`, whose pages may call the server from a browser. None by default; clients that aren't web pages don't need it. |
+| `MCP_HTTP_ALLOWED_ORIGINS` | No | | Values of the `Origin` header to accept, such as `https://tools.example.net`, for a client that sends one. Every other request with an `Origin` is refused. It doesn't let web pages call the server: there's no CORS support. |
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
@@ -265,6 +265,8 @@ claude mcp add --transport http dashynms https://mcp.example.net/mcp --header "A
 - `/health` answers `ok` while the server is running, and `/ready` answers `ready`, or `503` when LibreNMS doesn't answer it. Neither needs a token or says anything else. LibreNMS is checked at most once every 15 seconds however often `/ready` is asked, and that check isn't counted in `MCP_MAX_CONCURRENT_REQUESTS`.
 - Everyone gets the same tools and sees what the server's own LibreNMS, Unimus and Graylog accounts can see. A token is permission to use the server, not a LibreNMS login.
 - `MCP_RATE_LIMIT_PER_MINUTE` counts each token's calls separately, whichever sessions they come in.
+- A token can have 64 requests open at once, streams included; past that the answer is `429`.
+- The image has no shell or `curl` for a Docker `HEALTHCHECK`, so point your proxy's or orchestrator's HTTP check at the probes.
 - To change tokens, change the setting and restart. There's no OAuth yet.
 
 ## Help and feedback
