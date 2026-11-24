@@ -96,18 +96,41 @@ Every DashyNMS repository builds the same way.
 | --- | --- | --- | --- |
 | **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
 | **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on the rolling `v0.0.0-edge` prerelease |
-| **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease with notes from the commits |
+| **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease |
 | **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
 
 Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
 
-To release, publish a GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds and is published again when everything is ready. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
+To release, check that `docs/releases/<version>.md` reads well, then publish a blank GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds. The last step attaches the binaries, fills in its title and [notes](#release-notes) and publishes it again. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
 
 If a release fails it stays a draft. Don't publish the draft by hand, because that starts the build again:
 
 - **Nothing on `main` has to change:** run **Release build** by hand with the tag. A Shared package already published from that commit is kept, after its provenance is checked.
 - **It needs a fix:** the release has to be `main`'s newest commit, so merge the fix, delete the draft with its tag (`gh release delete v2.0.0 --cleanup-tag`) and publish it again. If its Shared package was already published, that version is used up: raise `<Version>` first.
+
+### Release notes
+
+Every DashyNMS repository writes its release notes the same way. **`docs/releases/<version>.md` is the one set of notes for the version in `Directory.Build.props`.** It covers everything since the last release and grows as changes merge. Nothing else is written by hand: not a GitHub release's text, and not a file for each nightly.
+
+**In the pull request that makes the change:**
+
+- If a user of this repository would notice it, add or update its line in that file. A `feat`, `fix` or `perf` nearly always needs one. `ci`, `test`, `docs`, `chore`, `refactor` and dependency updates don't, unless someone would notice.
+- Put it under `## Breaking`, `## New`, `## Changed` or `## Fixed`, in that order, as a list item: `- **What it's about:** what's different now, in plain words (#NN).` Other headings fail CI.
+- Say what's true of the release as a whole. If a later change alters or undoes something that hasn't been released, edit its line rather than adding another. A fix to something that has never been released has no line.
+- Breaking changes say what the reader has to do.
+- Never edit a released version's file. Never put download tables, filenames or build numbers in it: they differ for each build.
+
+**What the builds do with it:**
+
+| Build | Notes |
+| --- | --- |
+| CI | fails if the file is missing, empty or has other headings |
+| Edge | the rolling release links to the file at its commit |
+| Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
+| Release | the last step replaces whatever the blank release said with the file |
+
+**Raising `<Version>`:** the same pull request adds `docs/releases/<new version>.md` with its first line, because CI won't pass without it.
 
 ## Standalone binaries
 
@@ -143,6 +166,7 @@ type(scope): what changes, as the user would notice it
 - **Issue numbers:** never in the title. `Closes #NN` goes in the PR description, which then says briefly what changed and how it was checked.
 - **Breaking changes:** a `!` after the scope, and a sentence saying what breaks.
 - **Issue titles:** the same form, worded as the result the fixing PR will deliver, so the PR can reuse the title. An epic ends with `(epic)`. Labels carry the rest.
+- **Release notes:** a change users would notice adds its line to `docs/releases/<version>.md` in the same PR. See [Release notes](#release-notes).
 - **Attribution:** commits, PRs and release notes carry no AI attribution or `Co-Authored-By` lines.
 
 Examples:

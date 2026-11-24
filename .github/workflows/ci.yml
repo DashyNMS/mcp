@@ -19,7 +19,7 @@ env:
 
 jobs:
   version:
-    name: Version
+    name: Version, build scripts and release notes
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -29,6 +29,8 @@ jobs:
           persist-credentials: false
       - name: Test the build scripts
         run: python3 -B -m unittest discover -s scripts/tests -v
+      - name: Check this version's release notes
+        run: python3 scripts/build_version.py check
       # Never published: edge builds are numbered from 1.
       - name: Work out the version
         id: version
