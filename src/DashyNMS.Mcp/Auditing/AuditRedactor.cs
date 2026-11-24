@@ -50,6 +50,9 @@ public sealed class AuditRedactor
         _secrets = secrets.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct(StringComparer.Ordinal).OrderByDescending(s => s.Length).ToArray();
     }
 
+    /// <summary>The length of the longest credential: how much of one the end of a cut text can hold.</summary>
+    internal int LongestSecret => _secrets.Length > 0 ? _secrets[0].Length : 0;
+
     public string Text(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
