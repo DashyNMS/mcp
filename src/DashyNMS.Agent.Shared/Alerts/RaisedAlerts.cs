@@ -47,10 +47,11 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
         var scope = await scopes.ResolveAsync(group, location, cancellationToken).ConfigureAwait(false);
         var devices = (await directory.GetAllAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(d => d.DeviceId);
 
-        var log = DeviceTimeline.ReadBackAsync(
-            depth => client.Logs.ListAlertLogAsync(deviceId, depth, cancellationToken),
-            a => Sources.Utc(a.TimeLogged, options),
+        var log = new LogReads(options, time).AlertsAsync(
+            client.Logs,
+            deviceId,
             window,
+            a => (deviceId is null || a.DeviceId == deviceId) && scope.Includes(a.DeviceId, devices),
             cancellationToken);
         var rules = Sources.TryAsync(() => client.Rules.ListAsync(cancellationToken), cancellationToken);
         var open = Sources.TryAsync(() => client.Alerts.ListAsync(AlertQuery.Open, cancellationToken), cancellationToken);
@@ -112,10 +113,10 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
             ? $"{lead}: no alerts raised" + (severity is not null || deviceId is not null || !scope.IsEverything ? " that match." : ".")
             : $"{lead}: {DeviceHealth.Count(raised.Count, "alert")} raised{FaultNote(raised)} on {DeviceHealth.Count(raised.Select(r => r.DeviceId).Distinct().Count(), "device")} " +
               $"({severitySummary}); {openSummary}.";
-        summary += complete ? string.Empty : $" LibreNMS's alert log only reaches back to {covered:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.";
+        summary += complete ? string.Empty : " " + EventWindowText.Shortfall("alert log", covered, log.Result.Value.Stopped);
         summary += PagingNote(page);
 
-        return new(summary, new RaisedAlertsData(new(window.Since, window.Until, complete, complete ? null : covered), groups, page),
+        return new(summary, new RaisedAlertsData(EventWindowInfo.For(window, complete, covered, log.Result.Value.Stopped), groups, page),
             rules.Result.Error is not null, open.Result.Error is not null);
     }
 

@@ -32,7 +32,7 @@ public sealed class HostEventLookups : IDisposable
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var directory = new DeviceDirectory(client, time);
-        var timeline = new DeviceTimeline(client, options);
+        var timeline = new DeviceTimeline(client, options, time);
         var scopes = new DeviceScope(client, directory, time);
         var redactor = new Redactor();
         return new(new(directory, timeline, options, time, redactor),

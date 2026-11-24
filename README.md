@@ -71,7 +71,7 @@ For any alert, open or acknowledged: what the rule matched and the values that t
 **What's configured, and what changed?**
 With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, you can choose to send no config text at all, and it tells you when a device's backups have stopped. *(`config_backup`, `config_diff`, `recent_config_changes`)*
 
-Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you. Long lists come back a page at a time, so a broad question still gets a complete answer. A window can reach back up to a month, and when LibreNMS's logs don't go back that far, the answer says so.
+Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you. Long lists come back a page at a time, so a broad question still gets a complete answer. A window can reach back up to a month. On a busy network, filters such as an event type let the answer look further back through the logs, and when a window couldn't be read in full the answer says which part is missing.
 
 ## Safe by design
 

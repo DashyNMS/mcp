@@ -30,20 +30,22 @@ public sealed record Timeline(
     int Outages,
     bool WindowComplete,
     DateTime? CoveredSince,
-    IReadOnlyList<Unavailable> Unavailable);
+    IReadOnlyList<Unavailable> Unavailable)
+{
+    /// <summary>Why the logs weren't read back to the window's start, when that's known (<see cref="LogReads"/>).</summary>
+    public string? Stopped { get; init; }
+}
 
 /// <summary>
 /// A device's event log, alert log and outages for a window, merged newest
 /// first - the LibreNMS half of device_events and what_changed.
 /// </summary>
 /// <remarks>
-/// LibreNMS's log APIs have no date filter, only "the newest N entries"
-/// (#57), so each log is read back far enough to cover the window: a short
-/// read first, a longer one when that doesn't reach the window's start, and
-/// no further than <see cref="MaxDepth"/>. When even that stops short, the
-/// result says so instead of passing off part of the window as all of it.
+/// Each log is read back far enough to cover the window (<see cref="LogReads"/>).
+/// When that stops short, the result says so instead of passing off part of the
+/// window as all of it.
 /// </remarks>
-public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options)
+public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options, TimeProvider? time = null)
 {
     public const int FirstDepth = 200;
     public const int MaxDepth = 2000;
@@ -54,8 +56,9 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options)
         ArgumentNullException.ThrowIfNull(window);
         var id = device.DeviceId;
 
-        var events = ReadBackAsync(depth => client.Logs.ListEventLogAsync(id, depth, cancellationToken), e => Sources.Utc(e.Timestamp, options), window, cancellationToken);
-        var alertLog = ReadBackAsync(depth => client.Logs.ListAlertLogAsync(id, depth, cancellationToken), a => Sources.Utc(a.TimeLogged, options), window, cancellationToken);
+        var logs = new LogReads(options, time ?? TimeProvider.System);
+        var events = logs.EventsAsync(client.Logs, id, window, keep: null, cancellationToken);
+        var alertLog = logs.AlertsAsync(client.Logs, id, window, keep: null, cancellationToken);
         var outages = Sources.TryAsync(() => client.Devices.GetOutagesAsync(id, cancellationToken), cancellationToken);
         var rules = Sources.TryAsync(() => client.Rules.ListAsync(cancellationToken), cancellationToken);
         await Task.WhenAll(events, alertLog, outages, rules).ConfigureAwait(false);
@@ -128,43 +131,57 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options)
             outageCount,
             unavailable.Count == 0 && covered <= window.Since,
             unavailable.Count == 0 ? covered : null,
-            unavailable);
+            unavailable)
+        {
+            Stopped = unavailable.Count > 0 ? null
+                : events.Result.Value?.StoppedAt(covered) ?? alertLog.Result.Value?.StoppedAt(covered),
+        };
     }
 
     /// <summary>A log read back as far as the window needs, newest first, and how far it reached.</summary>
-    public sealed record ReadBack<T>(IReadOnlyList<T> Items, DateTime CoveredSince);
+    public sealed record ReadBack<T>(IReadOnlyList<T> Items, DateTime CoveredSince)
+    {
+        /// <summary>Why it stopped before the window's start, when a limit of ours or a failure did it.</summary>
+        public string? Stopped { get; init; }
+
+        /// <summary><see cref="Stopped"/>, when this log is the one that set how far back an answer reaches.</summary>
+        internal string? StoppedAt(DateTime covered) => CoveredSince == covered ? Stopped : null;
+    }
 
     /// <summary>
     /// Reads a newest-first log until it reaches the window's start or
     /// <see cref="MaxDepth"/>. A log that returns fewer entries than asked for
-    /// has nothing older, so it covers everything.
+    /// has nothing older, so it covers everything. Only for a log that can't be
+    /// read back from a time; <see cref="LogReads"/> reads the rest.
     /// </summary>
     public static Task<Fetched<ReadBack<T>>> ReadBackAsync<T>(
         Func<int, Task<IReadOnlyList<T>>> read,
         Func<T, DateTime?> timeOf,
         TimeWindow window,
         CancellationToken cancellationToken)
-        => Sources.TryAsync(async () =>
+        => Sources.TryAsync(() => ReadBackCoreAsync(read, timeOf, window), cancellationToken);
+
+    internal static async Task<ReadBack<T>> ReadBackCoreAsync<T>(Func<int, Task<IReadOnlyList<T>>> read, Func<T, DateTime?> timeOf, TimeWindow window)
+    {
+        var depth = FirstDepth;
+        while (true)
         {
-            var depth = FirstDepth;
-            while (true)
+            var items = await read(depth).ConfigureAwait(false);
+            var oldest = items.Select(timeOf).Where(t => t is not null).Select(t => t!.Value).DefaultIfEmpty(DateTime.MaxValue).Min();
+
+            if (items.Count < depth)
             {
-                var items = await read(depth).ConfigureAwait(false);
-                var oldest = items.Select(timeOf).Where(t => t is not null).Select(t => t!.Value).DefaultIfEmpty(DateTime.MaxValue).Min();
-
-                if (items.Count < depth)
-                {
-                    return new ReadBack<T>(items, DateTime.MinValue);
-                }
-
-                if (oldest <= window.Since || depth >= MaxDepth)
-                {
-                    return new ReadBack<T>(items, oldest);
-                }
-
-                depth = Math.Min(depth * 5, MaxDepth);
+                return new ReadBack<T>(items, DateTime.MinValue);
             }
-        }, cancellationToken);
+
+            if (oldest <= window.Since || depth >= MaxDepth)
+            {
+                return new ReadBack<T>(items, oldest);
+            }
+
+            depth = Math.Min(depth * 5, MaxDepth);
+        }
+    }
 
     /// <summary>LibreNMS's event log severities (1 to 5, as its web UI colours them).</summary>
     private static string? EventSeverity(int? severity) => severity switch
