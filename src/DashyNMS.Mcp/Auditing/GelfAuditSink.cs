@@ -27,7 +27,7 @@ public sealed class GelfAuditSink : BackgroundService, IAuditSink
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>How long entries still queued at shutdown are given to go.</summary>
-    private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(2);
 
     private readonly GelfTarget _target;
     private readonly ILogger<GelfAuditSink> _logger;
