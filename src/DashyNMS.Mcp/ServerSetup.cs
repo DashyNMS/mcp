@@ -4,7 +4,7 @@ using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Console;
 using ModelContextProtocol.Server;
 
 namespace DashyNMS.Mcp;
@@ -12,6 +12,21 @@ namespace DashyNMS.Mcp;
 /// <summary>What the server is, whichever transport it's reached over: the same tools, redaction, caps and audit.</summary>
 internal static class ServerSetup
 {
+    /// <summary>
+    /// Every log line to stderr, as stdout carries the MCP protocol over stdio.
+    /// The SDK's line for each request is left out: the audit trail says more.
+    /// </summary>
+    public static void AddDashyNmsLogging(this ILoggingBuilder logging)
+    {
+        logging.AddConsole(o =>
+        {
+            o.LogToStandardErrorThreshold = LogLevel.Trace;
+            o.FormatterName = SafeConsoleFormatter.FormatterName;
+        });
+        logging.AddConsoleFormatter<SafeConsoleFormatter, ConsoleFormatterOptions>();
+        logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
+    }
+
     /// <summary>Registers everything but the transport.</summary>
     public static IMcpServerBuilder AddDashyNmsServer(this IServiceCollection services, McpOptions options)
     {
@@ -26,6 +41,7 @@ internal static class ServerSetup
         }
 
         services.AddSingleton(options);
+        services.AddSingleton(_ => new AuditRedactor(new Redactor(), options.Secrets));
         services.AddSingleton<LibreNmsStartup>();
         services.AddDashyNmsAgent(new AgentOptions
         {
@@ -72,7 +88,6 @@ internal static class ServerSetup
             .WithDashyNmsTools(options.Tools);
 
         // The audit first, so it records the calls the rate limit refuses too.
-        var redactor = new Redactor();
         server.WithAudit(provider =>
         {
             var sinks = new List<IAuditSink> { new StderrAuditSink() };
@@ -81,11 +96,11 @@ internal static class ServerSetup
                 sinks.Add(sink);
             }
 
-            return new ToolCallAudit(sinks, new AuditRedactor(redactor, options.Secrets), options.Transport == McpTransport.Http ? "http" : "stdio", TimeProvider.System);
+            return new ToolCallAudit(sinks, provider.GetRequiredService<AuditRedactor>(), options.Transport == McpTransport.Http ? "http" : "stdio", TimeProvider.System);
         });
         if (options.RateLimitPerMinute is { } rateLimit)
         {
-            server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), redactor, options.MaxResultBytes);
+            server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), new Redactor(), options.MaxResultBytes);
         }
 
         return server;

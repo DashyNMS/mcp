@@ -31,7 +31,7 @@ internal static class HttpServer
         // Empty, so it's only what's set here: the usual builder also reads
         // appsettings.json, the command line and ASPNETCORE_ variables.
         var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
-        builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        builder.Logging.AddDashyNmsLogging();
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
         // Readiness checks would otherwise log a line each.

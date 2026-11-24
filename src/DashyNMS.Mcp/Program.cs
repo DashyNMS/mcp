@@ -1,7 +1,6 @@
 using DashyNMS.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 // The environment only, not the host's whole configuration: that also reads
 // appsettings.json from the working directory and the command line, so a
@@ -31,8 +30,7 @@ if (options.Transport == McpTransport.Http)
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// stdout carries the MCP protocol, so every log line goes to stderr.
-builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+builder.Logging.AddDashyNmsLogging();
 builder.Services.AddDashyNmsServer(options).WithStdioServerTransport();
 
 using var host = builder.Build();

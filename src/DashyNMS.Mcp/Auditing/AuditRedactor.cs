@@ -58,13 +58,14 @@ public sealed class AuditRedactor
             return $"[{text.Length} characters]";
         }
 
+        return _secrets.Contains(text, StringComparer.Ordinal) ? Marker : Scrub(text);
+    }
+
+    /// <summary>The same redaction for text of any length, with no limit on it and no whole-value match.</summary>
+    internal string Scrub(string text)
+    {
         foreach (var secret in _secrets)
         {
-            if (text.Equals(secret, StringComparison.Ordinal))
-            {
-                return Marker;
-            }
-
             if (secret.Length >= MinimumEmbeddedSecret)
             {
                 text = text.Replace(secret, Marker, StringComparison.Ordinal);
