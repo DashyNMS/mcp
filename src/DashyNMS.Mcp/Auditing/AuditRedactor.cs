@@ -111,8 +111,7 @@ public sealed class AuditRedactor
     {
         JsonValueKind.String => String(value),
 
-        // As text, so a number as long as a page is cut down like any other.
-        JsonValueKind.Number => value.GetRawText() is { Length: <= 32 } number ? JsonNode.Parse(number) : $"[{value.GetRawText().Length} characters]",
+        JsonValueKind.Number => Number(value.GetRawText()),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.Array => List(value),
@@ -133,6 +132,18 @@ public sealed class AuditRedactor
         {
             return "[invalid text]";
         }
+    }
+
+    /// <summary>Checked as the text it is: a credential can be all digits, and a number can be as long as a page.</summary>
+    private JsonNode? Number(string number)
+    {
+        if (number.Length > 32)
+        {
+            return $"[{number.Length} characters]";
+        }
+
+        var text = Text(number);
+        return text == number ? JsonNode.Parse(number) : text;
     }
 
     private JsonArray List(JsonElement value)
