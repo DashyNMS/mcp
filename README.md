@@ -234,8 +234,8 @@ docker run -i --rm --env-file dashynms.env -e MCP_RESOURCES_DIR=/resources -v /s
 A question asked before is answered with its last good answer, for up to a day. The result has `stale: true`, `as_of` with when it was true and `stale_reason`, its summary says so too, and the assistant is told to pass that on. A question that hasn't been asked before, with the same arguments, gets a plain error.
 
 - Only finished answers are kept: nothing partial, and nothing that anything was redacted from. Config, log and graph answers (`config_backup`, `config_diff`, `recent_config_changes`, `what_changed`, `search_logs`, `graph`) are never kept.
-- A refused token forgets every answer, and one LibreNMS no longer allows is forgotten too, so nobody is told from memory what the account may not see.
-- Answers are kept in memory, the 500 used last at most. With `MCP_LAST_KNOWN_GOOD_DIR` they're also on disk, encrypted with a key made from the LibreNMS token and this server's settings: another account or configuration can't read them, and neither can someone with only the folder. They belong to one build of the server, so an update starts afresh. With answers there, the server starts even while LibreNMS can't be reached, though never with a refused token or an untrusted certificate.
+- A refused token forgets every answer. A question LibreNMS now refuses, or says there's no such device for, forgets its own.
+- Answers are kept in memory, the 500 used last at most. With `MCP_LAST_KNOWN_GOOD_DIR` they're also on disk, encrypted with a key made from the LibreNMS token and this server's settings: another account or configuration can't read them, and neither can someone with only the folder. They belong to one build of the server, so an update starts afresh. With answers there, the server starts even while LibreNMS can't be reached, though never with a refused token or an untrusted certificate. `/ready` still answers `503` meanwhile, as it's about LibreNMS.
 
 ### The audit trail
 

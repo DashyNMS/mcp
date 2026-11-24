@@ -34,6 +34,7 @@ public sealed class LastKnownGood
     public const int MaxCharacters = 8 * 1024 * 1024;
 
     private const string FilePattern = "*.answer";
+    private const int PruneEvery = 50;
     private const int NonceBytes = 12;
     private const int TagBytes = 16;
 
@@ -47,6 +48,8 @@ public sealed class LastKnownGood
     private readonly byte[] _nameKey;
     private readonly string? _folder;
     private int _characters;
+    private int _generation;
+    private int _written;
     private bool _diskFailed;
 
     /// <param name="identity">The LibreNMS account and everything else an answer depends on. Never stored.</param>
@@ -66,6 +69,21 @@ public sealed class LastKnownGood
         OnDisk(Prepare);
     }
 
+    /// <summary>
+    /// Changes whenever an answer is dropped. Take it before asking, and an
+    /// answer from before the drop can't be kept after it.
+    /// </summary>
+    public int Generation
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _generation;
+            }
+        }
+    }
+
     /// <summary>Whether there is any answer on disk from before, so it's worth starting while LibreNMS can't be reached.</summary>
     public bool HasStoredAnswers
     {
@@ -77,53 +95,69 @@ public sealed class LastKnownGood
         }
     }
 
-    /// <summary>Keeps <paramref name="json"/> as the answer to <paramref name="question"/>.</summary>
-    public void Keep(string question, string json)
+    /// <summary>Keeps <paramref name="json"/> as the answer to <paramref name="question"/>, unless something was dropped since <paramref name="generation"/>.</summary>
+    public void Keep(string question, string json, int generation)
     {
         ArgumentNullException.ThrowIfNull(json);
         var key = KeyOf(question);
         var answer = new KnownAnswer(json, _time.GetUtcNow());
-        Remember(key, answer);
-        OnDisk(folder => Write(Path.Combine(folder, FileOf(key)), key, answer));
+        lock (_sync)
+        {
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            Remember(key, answer);
+            OnDisk(folder =>
+            {
+                Write(Path.Combine(folder, FileOf(key)), key, answer);
+
+                // As many on disk as in memory, give or take what's written between looks.
+                if (++_written % PruneEvery == 0)
+                {
+                    Prune(folder);
+                }
+            });
+        }
     }
 
     /// <summary>The last good answer to <paramref name="question"/>, or null when there's none recent enough.</summary>
     public KnownAnswer? Find(string question)
     {
         var key = KeyOf(question);
-        KnownAnswer? answer = null;
         lock (_sync)
         {
+            KnownAnswer? answer = null;
             if (_answers.TryGetValue(key, out var node))
             {
                 answer = node.Value.Answer;
                 _byUse.Remove(node);
                 _byUse.AddFirst(node);
             }
-        }
-
-        if (answer is null)
-        {
-            OnDisk(folder => answer = Read(Path.Combine(folder, FileOf(key)), key));
-            if (answer is not null && IsRecent(answer))
+            else
             {
-                Remember(key, answer);
+                OnDisk(folder => answer = Read(Path.Combine(folder, FileOf(key)), key));
+                if (answer is not null && IsRecent(answer))
+                {
+                    Remember(key, answer);
+                }
             }
-        }
 
-        return answer is not null && IsRecent(answer) ? answer : null;
+            return answer is not null && IsRecent(answer) ? answer : null;
+        }
     }
 
-    /// <summary>Drops the answer to <paramref name="question"/>: the account may no longer see what it says.</summary>
+    /// <summary>Drops the answer to <paramref name="question"/>: what it says isn't so any more, or isn't this account's to see.</summary>
     public void Forget(string question)
     {
         var key = KeyOf(question);
         lock (_sync)
         {
+            _generation++;
             Remove(key);
+            OnDisk(folder => File.Delete(Path.Combine(folder, FileOf(key))));
         }
-
-        OnDisk(folder => File.Delete(Path.Combine(folder, FileOf(key))));
     }
 
     /// <summary>Drops every answer: the token no longer works, so what it once saw isn't for anyone who has it now.</summary>
@@ -131,18 +165,18 @@ public sealed class LastKnownGood
     {
         lock (_sync)
         {
+            _generation++;
             _answers.Clear();
             _byUse.Clear();
             _characters = 0;
-        }
-
-        OnDisk(folder =>
-        {
-            foreach (var file in Directory.EnumerateFiles(folder, FilePattern))
+            OnDisk(folder =>
             {
-                File.Delete(file);
-            }
-        });
+                foreach (var file in Directory.EnumerateFiles(folder, FilePattern))
+                {
+                    File.Delete(file);
+                }
+            });
+        }
     }
 
     private static byte[] Derive(byte[] secret, string use)
@@ -161,15 +195,12 @@ public sealed class LastKnownGood
 
     private void Remember(string key, KnownAnswer answer)
     {
-        lock (_sync)
+        Remove(key);
+        _answers[key] = _byUse.AddFirst((key, answer));
+        _characters += answer.Json.Length;
+        while (_byUse.Last is { } last && (_answers.Count > MaxAnswers || _characters > MaxCharacters))
         {
-            Remove(key);
-            _answers[key] = _byUse.AddFirst((key, answer));
-            _characters += answer.Json.Length;
-            while (_byUse.Last is { } last && (_answers.Count > MaxAnswers || _characters > MaxCharacters))
-            {
-                Remove(last.Value.Key);
-            }
+            Remove(last.Value.Key);
         }
     }
 
@@ -193,7 +224,24 @@ public sealed class LastKnownGood
             Directory.CreateDirectory(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        // What's too old, or more than is kept, won't be used again.
+        Prune(folder);
+
+        // Another token's or build's folder, with nothing in it any setting could still use.
+        var unused = _time.GetUtcNow().UtcDateTime - TimeSpan.FromHours(McpOptions.MaximumLastKnownGoodHours);
+        foreach (var other in new DirectoryInfo(folder).Parent!.EnumerateDirectories().Where(d => IsFolderName(d.Name) && d.Name != Path.GetFileName(folder)).ToList())
+        {
+            if (other.LastWriteTimeUtc < unused && other.EnumerateFileSystemInfos().All(f => f.LastWriteTimeUtc < unused))
+            {
+                other.Delete(recursive: true);
+            }
+        }
+    }
+
+    private static bool IsFolderName(string name) => name.Length == 32 && name.All(char.IsAsciiHexDigitLower);
+
+    /// <summary>Deletes what's too old, or more than is kept: it won't be used again.</summary>
+    private void Prune(string folder)
+    {
         var now = _time.GetUtcNow().UtcDateTime;
         foreach (var (file, index) in new DirectoryInfo(folder).EnumerateFiles(FilePattern).OrderByDescending(f => f.LastWriteTimeUtc).Select((f, i) => (f, i)).ToList())
         {

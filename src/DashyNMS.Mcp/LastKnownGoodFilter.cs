@@ -29,6 +29,9 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
         ToolText.Graph.Name,
     };
 
+    /// <summary>How <see cref="ToolResult"/> starts every answer.</summary>
+    private const string OkStart = "{\"status\":\"ok\"";
+
     public async ValueTask<CallToolResult> RunAsync(
         RequestContext<CallToolRequestParams> context,
         McpRequestHandler<CallToolRequestParams, CallToolResult> next,
@@ -41,21 +44,25 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
             return await next(context, cancellationToken).ConfigureAwait(false);
         }
 
+        var generation = answers.Generation;
         var report = ToolCallReport.Begin();
         var result = await next(context, cancellationToken).ConfigureAwait(false);
         var question = Question(tool, context.Params?.Arguments);
         switch (report.Outcome)
         {
             // Never an answer anything was redacted from: what's kept has nothing to hide.
-            case ToolCallOutcome.Complete when report.Json is { } json && !json.Contains(Redactor.Marker, StringComparison.Ordinal):
-                answers.Keep(question, json);
+            // Nor one too big to return, which the tool answered and the cap made an error.
+            case ToolCallOutcome.Complete when report.Json is { } json && json.StartsWith(OkStart, StringComparison.Ordinal) && !json.Contains(Redactor.Marker, StringComparison.Ordinal):
+                answers.Keep(question, json, generation);
                 break;
 
             case ToolCallOutcome.TokenRefused:
                 answers.Clear();
                 break;
 
-            case ToolCallOutcome.Denied:
+            // LibreNMS answered, and the answer is now that there's none: no such
+            // device, perhaps because this account no longer sees it.
+            case ToolCallOutcome.Denied or ToolCallOutcome.Failed:
                 answers.Forget(question);
                 break;
 
