@@ -1,0 +1,124 @@
+name: Edge build
+
+# Every commit to main: <version>-edge.<build>. By hand to make another of the
+# same commit, for example after a failed publish.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+# Covers image aliases and the rolling release without nested locks.
+concurrency:
+  group: edge-build
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  version:
+    name: Version
+    if: github.repository == 'DashyNMS/mcp' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Work out the version
+        id: version
+        run: python3 scripts/build_version.py edge
+
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      packages: read
+
+  binaries:
+    name: Standalone binaries
+    needs: [version, ci]
+    uses: ./.github/workflows/binaries.yml
+    secrets:
+      MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+    with:
+      version: ${{ needs.version.outputs.version }}
+      sign: true
+
+  image-build:
+    name: Build container image
+    needs: [version, ci]
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: edge
+
+  image:
+    name: Publish container image
+    needs: [version, shared, image-build]
+    uses: ./.github/workflows/image-publish.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: edge
+
+  shared:
+    name: Shared package
+    needs: [version, ci, binaries, image-build]
+    uses: ./.github/workflows/shared-package.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    name: Publish
+    needs: [version, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release and its files
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: standalone-binaries
+          path: packed
+      - name: Check the bytes
+        working-directory: packed
+        run: sha256sum --check --strict SHA256SUMS
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: packed/dashynms-mcp-*
+      - name: Publish on the edge release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+          COMMIT: ${{ needs.version.outputs.commit }}
+        # Named for the build, so it always lists the files beside it.
+        run: |
+          mv packed/SHA256SUMS "packed/SHA256SUMS-$VERSION"
+          scripts/publish-edge.sh "$VERSION" "$COMMIT" packed/*

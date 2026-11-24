@@ -1,99 +1,35 @@
 name: Shared package
 
+# Checks DashyNMS.Agent.Shared and publishes it. Called by the edge, nightly
+# and release builds. Mobile verifies that its package was attested by this
+# file, so renaming it means changing SHARED_WORKFLOW there.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
 
 permissions:
   contents: read
   packages: read
 
 env:
-  DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # Unique per run/attempt. GitHub Packages refuses a second push of a version,
-  # and the publish job never skips duplicates, so a version names one set of bytes.
-  SHARED_VERSION: 2.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
+  # A version names one set of bytes: GitHub Packages refuses a second push of
+  # one, and the publish job never skips duplicates.
+  SHARED_VERSION: ${{ inputs.version }}
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    outputs:
-      sha256: ${{ steps.hash.outputs.sha256 }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # The binary compatibility fixture compiles against a pinned pre-move revision.
-          fetch-depth: 0
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          global-json-file: global.json
-      - name: Build and test solution
-        run: |
-          dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror -p:SharedBuildVersion="$SHARED_VERSION" -p:RepositoryCommit="$GITHUB_SHA" -p:SourceRevisionId="$GITHUB_SHA" -p:ContinuousIntegrationBuild=true
-          dotnet test DashyNMS.Mcp.slnx -c Release --no-build
-      - name: Run a previously compiled Agent consumer with current assemblies
-        run: python3 scripts/verify-agent-binary-compatibility.py
-      - name: Pack the Shared package with source provenance
-        run: >-
-          dotnet pack src/DashyNMS.Agent.Shared -c Release --no-build --no-restore -o artifacts
-          -p:SharedBuildVersion="$SHARED_VERSION"
-          -p:RepositoryCommit="$GITHUB_SHA"
-          -p:SourceRevisionId="$GITHUB_SHA"
-          -p:ContinuousIntegrationBuild=true
-      - name: Inspect package and restore a clean Shared-only consumer
-        run: python3 scripts/verify-shared-package.py
-      - name: Recheck provenance hash
-        run: python3 scripts/verify-shared-provenance.py
-      # Later jobs compare downloads with this job output rather than trusting
-      # the report that travels inside the same artefact.
-      - name: Record the verified package hash
-        id: hash
-        run: echo "sha256=$(sha256sum "artifacts/DashyNMS.Agent.Shared.$SHARED_VERSION.nupkg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: shared-package
-          path: artifacts/
-          if-no-files-found: error
+  checks:
+    name: Checks
+    uses: ./.github/workflows/shared-checks.yml
+    with:
+      version: ${{ inputs.version }}
 
-  core-compatibility:
-    name: Core compatibility (${{ matrix.consumer }}, ${{ matrix.core }})
-    needs: verify
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # MCP's own pin (Directory.Build.props). This Shared needs Core 2.0.0-ci.84
-          # or later (Batch 6 of core#90), so mobile - on ci.76 in DashyNMS/mobile's
-          # DashyNMS.Mobile.Shared.csproj - moves to ci.84 before it pins this Shared.
-          # Give mobile its own entry when its pin differs.
-          - consumer: mcp and mobile
-            core: 2.0.0-ci.84
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          global-json-file: global.json
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: shared-package
-          path: artifacts
-      - name: Build the Shared package from source against this Core
-        run: dotnet build src/DashyNMS.Agent.Shared -c Release -warnaserror -p:DashyNMSCoreVersion=${{ matrix.core }}
-      - name: Test the packed Shared binary with this Core
-        env:
-          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
-        run: python3 scripts/verify-shared-core-compatibility.py ${{ matrix.core }}
-
-  # Every verified push to protected main publishes its package, as Core's
-  # development builds do. Pull requests never reach this job.
   publish:
-    needs: [verify, core-compatibility]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DashyNMS/mcp'
+    name: Publish
+    needs: checks
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'DashyNMS/mcp'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -107,7 +43,7 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: global.json
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: shared-package
           path: artifacts
@@ -121,18 +57,41 @@ jobs:
           EXPECTED_SOURCE_RUN_ID: ${{ github.run_id }}
           EXPECTED_SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_SOURCE_REPOSITORY: ${{ github.repository }}
-          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
+          EXPECTED_SHARED_SHA256: ${{ needs.checks.outputs.sha256 }}
         run: |
           python3 scripts/verify-shared-provenance.py --for-publication
           echo "$EXPECTED_SHARED_SHA256  artifacts/DashyNMS.Agent.Shared.$SHARED_VERSION.nupkg" | sha256sum --check --strict
+      # A version is only ever one set of bytes. One that's already there is
+      # accepted only if this workflow attested it from this commit: then an
+      # earlier run published it and something after it failed.
+      - name: Look for an earlier publish of this version
+        id: earlier
+        env:
+          PULL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(curl -sSL -u "DashyNMS:$PULL_TOKEN" -o "$RUNNER_TEMP/published.nupkg" -w '%{http_code}' \
+            "https://nuget.pkg.github.com/DashyNMS/download/dashynms.agent.shared/$SHARED_VERSION/dashynms.agent.shared.$SHARED_VERSION.nupkg")
+          if [ "$status" = 200 ]; then
+            gh attestation verify "$RUNNER_TEMP/published.nupkg" --repo DashyNMS/mcp \
+              --signer-workflow DashyNMS/mcp/.github/workflows/shared-package.yml --source-digest "$GITHUB_SHA"
+            echo "DashyNMS.Agent.Shared $SHARED_VERSION was already published from this commit" >> "$GITHUB_STEP_SUMMARY"
+            echo "sha256=$(sha256sum "$RUNNER_TEMP/published.nupkg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" != 404 ]; then
+            echo "::error::GitHub Packages answered $status when asked for $SHARED_VERSION."
+            exit 1
+          fi
       - name: Attest build provenance
+        if: steps.earlier.outputs.published != 'true'
         id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: artifacts/DashyNMS.Agent.Shared.${{ env.SHARED_VERSION }}.nupkg
-      # No --skip-duplicate: an existing version must fail rather than be
+      # No --skip-duplicate: an unexplained version must fail rather than be
       # reported as published with bytes this run did not produce.
       - name: Publish to GitHub Packages
+        if: steps.earlier.outputs.published != 'true'
         env:
           PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
@@ -142,9 +101,10 @@ jobs:
       - name: Confirm the feed serves the verified bytes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
+          EXPECTED_SHARED_SHA256: ${{ steps.earlier.outputs.sha256 || needs.checks.outputs.sha256 }}
         run: python3 scripts/verify-published-shared.py
       - name: Summary
+        if: steps.earlier.outputs.published != 'true'
         env:
           ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         run: |

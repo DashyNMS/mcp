@@ -1,34 +1,49 @@
-name: Build and test
+name: CI
 
+# Every pull request. Edge, nightly and release builds call it too, so nothing
+# is published from a commit that hasn't passed. "CI result" is the required check.
 on:
-  push:
   pull_request:
+  workflow_call:
 
-# Read-only token: CI only checks out and builds. packages: read restores
-# DashyNMS.Core from GitHub Packages (see nuget.config).
 permissions:
   contents: read
   packages: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 env:
   DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  test:
-    name: Build and test
+  version:
+    name: Version, build scripts and release notes
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          global-json-file: global.json
+          persist-credentials: false
+      - name: Test the build scripts
+        run: python3 -B -m unittest discover -s scripts/tests -v
+      - name: Check this version's release notes
+        run: python3 scripts/build_version.py check
+      # Never published: edge builds are numbered from 1.
+      - name: Work out the version
+        id: version
+        run: echo "version=$(GITHUB_OUTPUT=/dev/null python3 scripts/build_version.py edge | sed -n 's/^version=\(.*\)\.[0-9]*$/\1.0/p')" >> "$GITHUB_OUTPUT"
 
-      - name: Build
-        run: dotnet build DashyNMS.Mcp.slnx -c Release -warnaserror
-
-      - name: Test
-        run: dotnet test DashyNMS.Mcp.slnx -c Release --no-build
+  # The solution's build and tests, and the Shared package's checks.
+  shared:
+    name: Shared package
+    needs: version
+    uses: ./.github/workflows/shared-checks.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      artifact: shared-package-ci
 
   # DashyNMS desktop bundles the server built without the HTTP transport, as
   # one self-contained file. Build it that way here, so a change that breaks it
@@ -38,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
@@ -64,3 +81,34 @@ jobs:
           echo "$output"
           test "$code" -eq 2
           grep -q "MCP_TRANSPORT: this build of the server only has stdio" <<<"$output"
+
+  # The edge, nightly and release builds call these two themselves, to publish.
+  image:
+    name: Container image
+    if: github.event_name == 'pull_request'
+    needs: version
+    uses: ./.github/workflows/image.yml
+    permissions:
+      contents: read
+      packages: read # restores Core; retains the image without publishing
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  binaries:
+    name: Standalone binaries
+    if: github.event_name == 'pull_request'
+    needs: version
+    uses: ./.github/workflows/binaries.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  result:
+    name: CI result
+    if: always()
+    needs: [version, shared, stdio-only, image, binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: test "$FAILED" = false

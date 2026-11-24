@@ -24,7 +24,7 @@ Please give us a reasonable chance to release a fix before you share details pub
 
 ## Supported versions
 
-Security fixes go into `main` first, so the `edge` image has them as soon as they merge, and then into the **next release** (the `latest` image tag). Please check the problem is still there on `edge` or the latest release before reporting.
+Security fixes go into `main` first, so the `edge` image has them as soon as they merge and `nightly` the next day, and then into the **next release** (the `latest` image tag). Please check the problem is still there on `edge` or the latest release before reporting.
 
 You're welcome to test the server you run under its licence for security problems, against your own LibreNMS, Unimus and Graylog. Please don't test against systems you don't own.
 

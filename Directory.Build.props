@@ -10,16 +10,18 @@
     <Authors>Thomas Pickup</Authors>
     <Copyright>Copyright (c) 2026 Thomas Pickup</Copyright>
     <PackageLicenseExpression Condition="'$(MSBuildProjectName)' != 'DashyNMS.Agent.Shared'">MIT</PackageLicenseExpression>
-    <Version>1.1.0</Version>
+    <!-- The version being built towards: edge and nightly builds are
+         2.0.0-edge.N and 2.0.0-nightly.N, and a release is 2.0.0. -->
+    <Version>2.0.0</Version>
     <NeutralLanguage>en-GB</NeutralLanguage>
     <!--
       DesktopNMS.Core lives in DashyNMS/core and comes in as the DashyNMS.Core
-      package from GitHub Packages (see nuget.config), pinned to a development
-      build of core's main (x.y.z-ci.N) between Core releases - the same Core
+      package from GitHub Packages (see nuget.config), pinned to an edge
+      package of core's main (x.y.z-edge.N) between Core releases - the same Core
       the desktop app pins. Set DASHYNMS_LOCAL_CORE to a checkout of
       DashyNMS/core to build against that instead.
     -->
-    <DashyNMSCoreVersion>2.0.0-ci.84</DashyNMSCoreVersion>
+    <DashyNMSCoreVersion>2.0.0-nightly.1</DashyNMSCoreVersion>
   </PropertyGroup>
 
 </Project>

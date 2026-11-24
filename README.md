@@ -102,7 +102,9 @@ docker pull ghcr.io/dashynms/mcp:latest
 | --- | --- |
 | `latest` | The newest release |
 | `1.1`, `1.1.0` | A release line, or one exact release: pin these for no surprises |
-| `edge` | The newest build from `main`, ahead of the next release |
+| `nightly` | Last night's build of `main` |
+| `edge` | The newest build of `main`, from every change; it may not work |
+| `2.0.0-nightly.4`, `2.0.0-edge.12` | One exact build |
 | `sha-abc1234` | One exact commit |
 
 Docker keeps using the copy it already has, so to update, pull again and restart your client:
@@ -111,13 +113,16 @@ Docker keeps using the copy it already has, so to update, pull again and restart
 docker pull ghcr.io/dashynms/mcp:latest
 ```
 
-**Without Docker**, from 2.0: each [release](https://github.com/DashyNMS/mcp/releases) has one self-contained program per platform, with nothing else to install. Download the archive for yours, check it against `SHA256SUMS`, and unpack it anywhere:
+**Without Docker**, from 2.0: each release, nightly and edge build on the [releases page](https://github.com/DashyNMS/mcp/releases) has one self-contained program per platform, with nothing else to install. Download the archive for yours, check it against `SHA256SUMS`, and unpack it anywhere:
 
 | Platform | Archive |
 | --- | --- |
 | Windows | `dashynms-mcp-<version>-win-x64.zip`, `-win-arm64.zip` |
 | macOS | `dashynms-mcp-<version>-osx-arm64.tar.gz` (Apple silicon), `-osx-x64.tar.gz` (Intel) |
 | Linux | `dashynms-mcp-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz` (glibc; on Alpine use the image) |
+
+For an edge build, download `SHA256SUMS-<version>` and rename it to
+`SHA256SUMS` before running this check.
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS      # on macOS: shasum -a 256 --check --ignore-missing SHA256SUMS

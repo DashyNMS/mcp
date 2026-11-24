@@ -40,7 +40,11 @@ RUN python3 scripts/collect-dependency-notices.py src/DashyNMS.Mcp/obj/project.a
 # Not trimmed: the MCP SDK finds tools, and System.Text.Json writes results,
 # by reflection. Invariant globalisation because the chiseled image has no
 # ICU, and the server formats nothing by culture.
+# VERSION is what the server reports; a build without one is the version being
+# built towards.
+ARG VERSION=
 RUN dotnet publish src/DashyNMS.Mcp -c Release --no-restore -a $TARGETARCH --self-contained false -o /app \
+    ${VERSION:+-p:Version=$VERSION} \
     -p:UseAppHost=false \
     -p:InvariantGlobalization=true \
     -p:DebugType=none
