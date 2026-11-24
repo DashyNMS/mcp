@@ -1,4 +1,5 @@
 using DashyNMS.Agent;
+using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Tools;
 using DashyNMS.Mcp;
 using DesktopNMS.Core.Api;
@@ -56,7 +57,7 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     FanSpeedThresholds = options.SensorSettings.FanSpeedThresholds,
     OverrideSensorLimitsWithAppThresholds = options.SensorSettings.OverrideSensorLimitsWithAppThresholds,
 });
-builder.Services
+var server = builder.Services
     .AddMcpServer(o =>
     {
         o.ServerInfo = new()
@@ -76,6 +77,10 @@ builder.Services
     })
     .WithStdioServerTransport()
     .WithDashyNmsTools();
+if (options.RateLimitPerMinute is { } rateLimit)
+{
+    server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), new Redactor(), options.MaxResultBytes);
+}
 
 using var host = builder.Build();
 
