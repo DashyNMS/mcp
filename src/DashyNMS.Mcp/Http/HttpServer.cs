@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
 
@@ -25,6 +26,13 @@ internal static class HttpServer
     private const int MaxConnections = 1000;
     private const int MaxIdleSessions = 200;
     private static readonly TimeSpan SessionIdleTimeout = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// How long calls in progress get to finish at shutdown. "docker stop" kills
+    /// the server after ten seconds, so this leaves time to send the last audit
+    /// entries after it.
+    /// </summary>
+    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
 
     public static async Task<int> RunAsync(McpOptions options)
     {
@@ -55,6 +63,7 @@ internal static class HttpServer
         });
 
         builder.Services.AddRoutingCore();
+        builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = ShutdownTimeout);
         builder.Services.AddSingleton<Readiness>();
         builder.Services.AddDashyNmsServer(options).WithHttpTransport(http =>
         {
@@ -75,7 +84,11 @@ internal static class HttpServer
             return 1;
         }
 
-        var gate = new BearerGate(options.HttpTokens!, options.HttpAllowedOrigins);
+        var gate = new BearerGate(
+            options.HttpTokens!,
+            options.HttpAllowedOrigins,
+            app.Services.GetRequiredService<ILogger<BearerGate>>(),
+            app.Services.GetRequiredService<TimeProvider>());
         app.Use((HttpContext context, RequestDelegate next) => gate.InvokeAsync(context, next));
         string[] probe = [HttpMethods.Get, HttpMethods.Head];
         app.MapMethods(HealthPath, probe, (RequestDelegate)(context => Answer(context, StatusCodes.Status200OK, "ok")));
