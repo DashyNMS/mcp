@@ -1,4 +1,5 @@
 using System.Globalization;
+using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Configuration;
 
@@ -39,6 +40,8 @@ public sealed class McpOptions
     public const string MaxConcurrentRequestsKey = "MCP_MAX_CONCURRENT_REQUESTS";
     public const string ToolsAllow = "MCP_TOOLS_ALLOW";
     public const string ToolsDeny = "MCP_TOOLS_DENY";
+    public const string AuditGelfUrl = "AUDIT_GELF_URL";
+    public const string AuditGelfTrustedCerts = "AUDIT_GELF_TRUSTED_CERTS";
     public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
 
     public const int DefaultTimeoutSeconds = 30;
@@ -133,6 +136,9 @@ public sealed class McpOptions
     /// <summary>The tools the server offers: every one unless the operator's lists say otherwise (#37).</summary>
     public required ToolPolicy Tools { get; init; }
 
+    /// <summary>A Graylog GELF input that gets the audit trail as well as stderr, or null for stderr alone (#18).</summary>
+    public GelfTarget? AuditGelf { get; private init; }
+
     /// <summary>
     /// Every credential the server holds, for keeping them out of the audit
     /// trail (#18). The Graylog username is one, as an access token is given
@@ -164,6 +170,11 @@ public sealed class McpOptions
             Check(Connection.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
             Check(Unimus?.WebRoot, UnimusUrl, "Unimus API token");
             Check(Graylog?.Root, GraylogUrl, "Graylog password");
+            if (AuditGelf?.IsUnencrypted == true)
+            {
+                warnings.Add($"{AuditGelfUrl} isn't https://, so the audit trail, which names devices and searches, crosses the network unencrypted. Use a GELF HTTP input behind https:// if you can.");
+            }
+
             return warnings;
         }
     }
@@ -217,6 +228,7 @@ public sealed class McpOptions
         var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
         var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
         var tools = ParseTools(lookup, problems);
+        var auditGelf = ParseGelf(lookup, problems);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
 
@@ -237,6 +249,7 @@ public sealed class McpOptions
         return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings)
         {
             Tools = tools,
+            AuditGelf = auditGelf,
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
         };
@@ -249,6 +262,24 @@ public sealed class McpOptions
         var policy = ToolPolicy.Parse(Value(lookup, ToolsAllow), Value(lookup, ToolsDeny), toolProblems);
         problems.AddRange(toolProblems);
         return policy;
+    }
+
+    private static GelfTarget? ParseGelf(Func<string, string?> lookup, List<string> problems)
+    {
+        var trusted = Fingerprints(lookup, AuditGelfTrustedCerts, problems);
+        if (Value(lookup, AuditGelfUrl) is not { } text)
+        {
+            return null;
+        }
+
+        var target = GelfTarget.TryParse(text, trusted);
+        if (target is null)
+        {
+            // Fixed rather than quoting the value, which may hold credentials.
+            problems.Add($"{AuditGelfUrl} isn't a GELF input's address. Use https://, http:// or udp:// with a host, such as https://graylog.example.net:12201/gelf or udp://graylog.example.net:12201, and no user name or password.");
+        }
+
+        return target;
     }
 
     private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)

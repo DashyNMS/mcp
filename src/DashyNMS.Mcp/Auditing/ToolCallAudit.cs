@@ -141,11 +141,15 @@ public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor
 public static class ToolCallAuditExtensions
 {
     /// <summary>Records every tool call. Add it before any other filter, so it sees the calls they refuse.</summary>
-    public static IMcpServerBuilder WithAudit(this IMcpServerBuilder builder, ToolCallAudit audit)
+    /// <param name="create">Makes the audit, once, from the host's services.</param>
+    public static IMcpServerBuilder WithAudit(this IMcpServerBuilder builder, Func<IServiceProvider, ToolCallAudit> create)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(audit);
-        return builder.WithRequestFilters(filters => filters.AddCallToolFilter(
-            next => (context, cancellationToken) => audit.RunAsync(context, next, cancellationToken)));
+        ArgumentNullException.ThrowIfNull(create);
+        builder.Services.AddSingleton(create);
+        builder.Services.AddOptions<McpServerOptions>().Configure<ToolCallAudit>((options, audit) =>
+            options.Filters.Request.CallToolFilters.Add(
+                next => (context, cancellationToken) => audit.RunAsync(context, next, cancellationToken)));
+        return builder;
     }
 }

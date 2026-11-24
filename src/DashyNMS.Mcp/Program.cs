@@ -58,6 +58,14 @@ builder.Services.AddDashyNmsAgent(new AgentOptions
     FanSpeedThresholds = options.SensorSettings.FanSpeedThresholds,
     OverrideSensorLimitsWithAppThresholds = options.SensorSettings.OverrideSensorLimitsWithAppThresholds,
 });
+// Before the MCP server, so it's stopped after it and the last calls' entries still go.
+if (options.AuditGelf is { } gelf)
+{
+    builder.Services.AddSingleton(gelf);
+    builder.Services.AddSingleton<GelfAuditSink>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<GelfAuditSink>());
+}
+
 var server = builder.Services
     .AddMcpServer(o =>
     {
@@ -81,7 +89,16 @@ var server = builder.Services
 
 // The audit first, so it records the calls the rate limit refuses too.
 var redactor = new Redactor();
-server.WithAudit(new ToolCallAudit([new StderrAuditSink()], new AuditRedactor(redactor, options.Secrets), "stdio", TimeProvider.System));
+server.WithAudit(services =>
+{
+    var sinks = new List<IAuditSink> { new StderrAuditSink() };
+    if (services.GetService<GelfAuditSink>() is { } sink)
+    {
+        sinks.Add(sink);
+    }
+
+    return new ToolCallAudit(sinks, new AuditRedactor(redactor, options.Secrets), "stdio", TimeProvider.System);
+});
 if (options.RateLimitPerMinute is { } rateLimit)
 {
     server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), redactor, options.MaxResultBytes);
