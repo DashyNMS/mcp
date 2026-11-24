@@ -215,15 +215,15 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
 
     private (IReadOnlyList<Sensor> Sensors, DateTimeOffset ReadAt)? Swept(int deviceId, string? type)
     {
-        if (_swept.TryGetValue((deviceId, type), out var own))
+        var hasOwn = _swept.TryGetValue((deviceId, type), out var own);
+
+        // Every class was read for another question: the one wanted is among them, and may be newer.
+        if (type is not null && _swept.TryGetValue((deviceId, null), out var every) && (!hasOwn || every.ReadAt > own.ReadAt))
         {
-            return own;
+            return (every.Sensors.Where(s => s.HasClass(type)).ToList(), every.ReadAt);
         }
 
-        // Every class was read for an earlier question: the one wanted is among them.
-        return type is not null && _swept.TryGetValue((deviceId, null), out var every)
-            ? (every.Sensors.Where(s => s.HasClass(type)).ToList(), every.ReadAt)
-            : null;
+        return hasOwn ? own : null;
     }
 
     private async Task ApplyDefinitionsAsync(IReadOnlyList<Sensor> sensors, CancellationToken token)

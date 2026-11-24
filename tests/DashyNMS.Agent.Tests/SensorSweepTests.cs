@@ -117,6 +117,19 @@ public sealed class SensorSweepTests
     }
 
     [Fact]
+    public async Task The_newer_of_two_readings_is_used_whichever_question_it_was_read_for()
+    {
+        await Overview(type: "temperature");
+        _network.Time.Advance(TimeSpan.FromMinutes(1));
+        _network.Hot = 9;
+        await Overview();
+
+        var readings = (await Overview(type: "temperature")).GetProperty("data").GetProperty("readings");
+
+        Assert.Equal("edge-sw9.example.net", Assert.Single(readings.EnumerateArray()).GetProperty("device").GetProperty("hostname").GetString());
+    }
+
+    [Fact]
     public async Task Devices_the_account_may_not_read_or_LibreNMS_cannot_answer_for_are_counted_apart()
     {
         _network.Denied = [3, 4];
@@ -219,6 +232,9 @@ public sealed class SensorSweepTests
 
         public bool Slow { get; set; }
 
+        /// <summary>The one device that's hot.</summary>
+        public int Hot { get; set; } = 7;
+
         /// <summary>Called before each per-device request, with how many there have been.</summary>
         public Action<int>? Reached { get; set; }
 
@@ -280,7 +296,7 @@ public sealed class SensorSweepTests
             {
                 3 => """{"graphs":[{"name":"device_temperature"},{"name":"device_processor"}]}""",
                 4 => $$"""{"graphs":[{"sensor_id":{{device}},"desc":"Inlet"}]}""",
-                _ => $$"""{"graphs":[{"sensor_id":{{device}},"device_id":{{device}},"sensor_class":"temperature","sensor_descr":"Inlet","sensor_current":{{(device == 7 ? 95 : 21)}},"sensor_limit":80}]}""",
+                _ => $$"""{"graphs":[{"sensor_id":{{device}},"device_id":{{device}},"sensor_class":"temperature","sensor_descr":"Inlet","sensor_current":{{(device == Hot ? 95 : 21)}},"sensor_limit":80}]}""",
             });
         }
 
