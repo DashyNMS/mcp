@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net;
+using System.Reflection;
+using System.Text.Json;
 using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Configuration;
@@ -59,6 +61,9 @@ public sealed class McpOptions
     public const string HttpTokensKey = "MCP_HTTP_TOKENS";
     public const string HttpAllowedOriginsKey = "MCP_HTTP_ALLOWED_ORIGINS";
     public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
+    public const string LastKnownGoodKey = "MCP_LAST_KNOWN_GOOD";
+    public const string LastKnownGoodDirectoryKey = "MCP_LAST_KNOWN_GOOD_DIR";
+    public const string LastKnownGoodHoursKey = "MCP_LAST_KNOWN_GOOD_HOURS";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
@@ -71,6 +76,11 @@ public sealed class McpOptions
 
     /// <summary>Past this nothing is being limited, and every allowed call is remembered for a minute.</summary>
     public const int MaximumRateLimitPerMinute = 10_000;
+
+    public const int DefaultLastKnownGoodHours = 24;
+
+    /// <summary>A week: an answer older than that says little about the network now.</summary>
+    public const int MaximumLastKnownGoodHours = 168;
 
     public const int DefaultHttpPort = 8080;
 
@@ -161,6 +171,32 @@ public sealed class McpOptions
 
     /// <summary>The most tool calls one client may make in a minute, or null - the default - for no limit (#38).</summary>
     public int? RateLimitPerMinute { get; private init; }
+
+    /// <summary>How old an answer may be given when LibreNMS can't be reached, or null to give none (#39).</summary>
+    public TimeSpan? LastKnownGood { get; private init; }
+
+    /// <summary>Where those answers are kept on disk as well as in memory; null for memory alone.</summary>
+    public string? LastKnownGoodDirectory { get; private init; }
+
+    /// <summary>
+    /// Everything one of those answers depends on: the LibreNMS account, the
+    /// settings that shape a result, and the build that shaped it. Holds the
+    /// token, so it's only ever made into keys.
+    /// </summary>
+    internal string AnswerIdentity => JsonSerializer.Serialize(new
+    {
+        Connection.WebRoot,
+        Connection.BackupWebRoot,
+        Connection.ApiToken,
+        TimestampsAreUtc,
+        MaxResultBytes,
+        SensorSettings.DbmThresholds,
+        SensorSettings.SignalThresholds,
+        SensorSettings.TemperatureThresholds,
+        SensorSettings.FanSpeedThresholds,
+        SensorSettings.OverrideSensorLimitsWithAppThresholds,
+        Build = typeof(McpOptions).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+    });
 
     /// <summary>The tools the server offers: every one unless the operator's lists say otherwise (#37).</summary>
     public required ToolPolicy Tools { get; init; }
@@ -283,6 +319,9 @@ public sealed class McpOptions
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
         var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
         var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
+        var lastKnownGood = ParseBool(lookup, LastKnownGoodKey, fallback: true, problems);
+        var lastKnownGoodHours = ParseInt(lookup, LastKnownGoodHoursKey, DefaultLastKnownGoodHours, minimum: 1, problems, MaximumLastKnownGoodHours);
+        var lastKnownGoodDirectory = ParseDirectory(lookup, LastKnownGoodDirectoryKey, problems);
         var tools = ParseTools(lookup, problems);
         var transport = ParseTransport(lookup, problems);
         var http = transport == McpTransport.Http;
@@ -320,7 +359,22 @@ public sealed class McpOptions
             HasUnusedHttpSettings = !http && new[] { HttpPortKey, HttpTokensKey, HttpAllowedOriginsKey }.Any(key => Value(lookup, key) is not null),
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
+            LastKnownGood = lastKnownGood ? TimeSpan.FromHours(lastKnownGoodHours) : null,
+            LastKnownGoodDirectory = lastKnownGood ? lastKnownGoodDirectory : null,
         };
+    }
+
+    /// <summary>A folder's full path: a relative one would depend on where the client happened to start the server.</summary>
+    private static string? ParseDirectory(Func<string, string?> lookup, string key, List<string> problems)
+    {
+        var path = Value(lookup, key);
+        if (path is null || Path.IsPathFullyQualified(path))
+        {
+            return path;
+        }
+
+        problems.Add($"{key} isn't a full path.");
+        return null;
     }
 
     private static ToolPolicy ParseTools(Func<string, string?> lookup, List<string> problems)

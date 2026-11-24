@@ -48,6 +48,53 @@ public sealed class McpOptionsTests
     }
 
     [Theory]
+    [InlineData(null, null, 24)]
+    [InlineData("true", "1", 1)]
+    [InlineData("on", "168", 168)]
+    [InlineData("off", null, null)]
+    [InlineData("off", "12", null)]
+    public void Last_known_good_answers_are_on_for_a_day_unless_told_otherwise(string? on, string? hours, int? expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.LastKnownGoodKey] = on, [McpOptions.LastKnownGoodHoursKey] = hours }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.LastKnownGood?.TotalHours);
+        Assert.Null(options.LastKnownGoodDirectory);
+    }
+
+    [Theory]
+    [InlineData(McpOptions.LastKnownGoodKey, "sometimes")]
+    [InlineData(McpOptions.LastKnownGoodHoursKey, "0")]
+    [InlineData(McpOptions.LastKnownGoodHoursKey, "169")]
+    [InlineData(McpOptions.LastKnownGoodDirectoryKey, "answers")]
+    public void Bad_last_known_good_settings_are_refused(string key, string value)
+    {
+        Assert.Null(Load(new(Minimal()) { [key] = value }, out var errors));
+        Assert.StartsWith(key, Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Answers_belong_to_an_account_and_the_settings_that_shape_them()
+    {
+        string Identity(string key, string value) => Load(new(Minimal()) { [key] = value }, out _)!.AnswerIdentity;
+        var usual = Load(Minimal(), out _)!.AnswerIdentity;
+
+        Assert.Equal(usual, Load(Minimal(), out _)!.AnswerIdentity);
+        foreach (var (key, value) in new[]
+        {
+            (McpOptions.LibreNmsUrl, "other.example.com"),
+            (McpOptions.LibreNmsToken, "another-token"),
+            (McpOptions.LibreNmsTimestampsUtc, "false"),
+            (McpOptions.MaxResultBytesKey, "2048"),
+            ("MCP_TEMPERATURE_HIGH_WARNING", "51"),
+            ("MCP_OVERRIDE_SENSOR_LIMITS", "true"),
+        })
+        {
+            Assert.NotEqual(usual, Identity(key, value));
+        }
+    }
+
+    [Theory]
     [InlineData(null, 8)]
     [InlineData("1", 1)]
     [InlineData("256", 256)]

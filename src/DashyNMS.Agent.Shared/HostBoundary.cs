@@ -35,11 +35,13 @@ internal static class HostBoundary
         var token = linked.Token;
         token.ThrowIfCancellationRequested();
         Task<T>? inner = null;
+        var read = SourceOutcomes.BeginRead();
         try
         {
             inner = run(token);
             var result = await inner.WaitAsync(token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
+            SourceOutcomes.Current?.Answered(read);
             return (result, null);
         }
         catch (Exception) when (token.IsCancellationRequested)
@@ -52,6 +54,7 @@ internal static class HostBoundary
         }
         catch (Exception error)
         {
+            SourceOutcomes.Current?.Failed(error);
             return (null, Classify(error));
         }
     }

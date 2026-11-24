@@ -8,6 +8,9 @@ public static class AuditStatus
     /// <summary>The tool answered.</summary>
     public const string Ok = "ok";
 
+    /// <summary>LibreNMS couldn't be reached, so the last good answer was given (#39).</summary>
+    public const string Stale = "stale";
+
     /// <summary>The tool answered that it couldn't: no such device, or LibreNMS failed.</summary>
     public const string Error = "error";
 

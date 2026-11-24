@@ -180,9 +180,12 @@ public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor
         try
         {
             using var json = JsonDocument.Parse(text.Text);
-            return json.RootElement.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String && status.ValueEquals("ok")
-                ? AuditStatus.Ok
-                : AuditStatus.Error;
+            if (!json.RootElement.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.String || !status.ValueEquals("ok"))
+            {
+                return AuditStatus.Error;
+            }
+
+            return json.RootElement.TryGetProperty("stale", out var stale) && stale.ValueKind == JsonValueKind.True ? AuditStatus.Stale : AuditStatus.Ok;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {

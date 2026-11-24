@@ -176,11 +176,22 @@ All settings are environment variables.
 | `MCP_HTTP_ALLOWED_ORIGINS` | No | | Values of the `Origin` header to accept, such as `https://tools.example.net`, for a client that sends one. Every other request with an `Origin` is refused. It doesn't let web pages call the server: there's no CORS support. |
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
+| `MCP_LAST_KNOWN_GOOD` | No | `true` | Whether to give [the last known answer](#when-librenms-cant-be-reached), marked as stale, when LibreNMS can't be reached |
+| `MCP_LAST_KNOWN_GOOD_HOURS` | No | `24` | How old such an answer may be (1 to 168 hours) |
+| `MCP_LAST_KNOWN_GOOD_DIR` | No | | A folder to keep them in as well as in memory, encrypted, so they outlast a restart. A full path; in the container, mount a volume at `/data` and set it to `/data`. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
 | `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff,recent_config_changes,what_changed` for every one that can return something from Unimus. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
 | `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
 | `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns. It's sent twice, as text and as structured content, so the message is up to about twice as long. |
+
+### When LibreNMS can't be reached
+
+A question asked before is answered with its last good answer, for up to a day. The result has `stale: true`, `as_of` with when it was true and `stale_reason`, its summary says so too, and the assistant is told to pass that on. A question that hasn't been asked before, with the same arguments, gets a plain error.
+
+- Only finished answers are kept: nothing partial, and nothing that anything was redacted from. Config, log and graph answers (`config_backup`, `config_diff`, `recent_config_changes`, `what_changed`, `search_logs`, `graph`) are never kept.
+- A refused token forgets every answer, and one LibreNMS no longer allows is forgotten too, so nobody is told from memory what the account may not see.
+- Answers are kept in memory, the 500 used last at most. With `MCP_LAST_KNOWN_GOOD_DIR` they're also on disk, encrypted with a key made from the LibreNMS token and this server's settings: another account or configuration can't read them, and neither can someone with only the folder. They belong to one build of the server, so an update starts afresh. With answers there, the server starts even while LibreNMS can't be reached, though never with a refused token or an untrusted certificate.
 
 ### The audit trail
 
@@ -199,7 +210,7 @@ Every tool call leaves one line of JSON on stderr, beside the server's other log
 | `tool` | The tool asked for |
 | `arguments` | The arguments that tool takes, with anything that looks like a secret and the server's own credentials redacted. Text over 256 characters is recorded as its length. |
 | `undeclared_arguments` | How many other arguments were sent. Their names and values aren't recorded. |
-| `status` | `ok`, `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, arguments that don't fit, or a call that couldn't be read), `rate_limited`, `cancelled` or `failed` |
+| `status` | `ok`, `stale` (the last known answer, as LibreNMS couldn't be reached), `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, arguments that don't fit, or a call that couldn't be read), `rate_limited`, `cancelled` or `failed` |
 | `result_bytes` | The size of the result: its text in UTF-8, plus any image |
 | `duration_ms` | How long the call took |
 
