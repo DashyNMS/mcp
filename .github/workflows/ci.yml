@@ -29,3 +29,37 @@ jobs:
 
       - name: Test
         run: dotnet test DashyNMS.Mcp.slnx -c Release --no-build
+
+  # DashyNMS desktop bundles the server built without the HTTP transport, as
+  # one self-contained file. Build it that way here, so a change that breaks it
+  # fails in this repo rather than at desktop's next bundle.
+  stdio-only:
+    name: Build without HTTP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Publish
+        run: >-
+          dotnet publish src/DashyNMS.Mcp -c Release -r linux-x64 --self-contained true -warnaserror
+          -p:McpHttpTransport=false -p:PublishSingleFile=true -o publish
+
+      - name: Check it has no ASP.NET Core and refuses HTTP
+        run: |
+          # Not the file as a whole: the SDK downloads ASP.NET Core's runtime pack either way.
+          assets=src/DashyNMS.Mcp/obj/project.assets.json
+          if jq -e '[.project.frameworks[].frameworkReferences | keys[]] + [.libraries | keys[]] | any(test("aspnetcore"; "i"))' "$assets"; then
+            echo "::error::The stdio-only build uses ASP.NET Core."
+            exit 1
+          fi
+          set +e
+          output=$(MCP_TRANSPORT=http LIBRENMS_URL=https://librenms.example.net LIBRENMS_TOKEN=synthetic ./publish/dashynms-mcp 2>&1 </dev/null)
+          code=$?
+          set -e
+          echo "$output"
+          test "$code" -eq 2
+          grep -q "MCP_TRANSPORT: this build of the server only has stdio" <<<"$output"

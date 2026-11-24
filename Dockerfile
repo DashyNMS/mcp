@@ -2,6 +2,10 @@
 # DashyNMS MCP server. Speaks MCP over stdio, so run it with -i:
 #   docker run -i --rm -e LIBRENMS_URL=... -e LIBRENMS_TOKEN=... dashynms-mcp
 #
+# Or over HTTP, behind a reverse proxy that does TLS:
+#   docker run -d -p 127.0.0.1:8080:8080 -e MCP_TRANSPORT=http -e MCP_HTTP_TOKENS=... \
+#     -e LIBRENMS_URL=... -e LIBRENMS_TOKEN=... dashynms-mcp
+#
 # Build from the repo root. Core comes from GitHub Packages, which needs a
 # token with read:packages, passed as a build secret so it never lands in a layer:
 #   DASHYNMS_PACKAGES_TOKEN=... docker build --secret id=packages,env=DASHYNMS_PACKAGES_TOKEN -t dashynms-mcp .
@@ -41,14 +45,19 @@ RUN dotnet publish src/DashyNMS.Mcp -c Release --no-restore -a $TARGETARCH --sel
     -p:InvariantGlobalization=true \
     -p:DebugType=none
 
-# Ubuntu chiseled: the .NET runtime and CA certificates, no shell or package
-# manager, and a non-root user by default.
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled@sha256:1b234cef150624fe8cc7d027e8d742c0f03a16aef2484dc469eb8c872167255e
+# Ubuntu chiseled: the .NET and ASP.NET Core runtimes (the HTTP transport) and
+# CA certificates, no shell or package manager, and a non-root user by default.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
 WORKDIR /app
 LABEL org.opencontainers.image.licenses="MIT" \
       net.dashynms.license.scope="MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md."
 COPY --from=build /app .
 COPY LICENSE NOTICES.md ./
 COPY --from=build /third-party ./third-party
+
+# Only used with MCP_TRANSPORT=http. Every address inside the container; what
+# reaches it is up to the ports the container publishes.
+ENV MCP_HTTP_ADDRESS=*
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "dashynms-mcp.dll"]

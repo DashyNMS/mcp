@@ -6,10 +6,10 @@
 | --- | --- |
 | `src/DashyNMS.Agent` | The MCP tool layer: tools, redaction, result caps, device lookup. It stays in this repo with the host, so MCP runs standalone. Apps reference `DashyNMS.Agent.Shared` instead. |
 | `src/DashyNMS.Agent.Shared` | Typed, read-only operations over a host-owned Core client, published as the `DashyNMS.Agent.Shared` package for in-process hosts such as DashyNMS mobile. No `ModelContextProtocol` reference. See [Shared package for mobile](#shared-package-for-mobile). |
-| `src/DashyNMS.Mcp` | The host: settings, the startup check, and MCP over stdio |
+| `src/DashyNMS.Mcp` | The host: settings, the startup check, tool policy, audit, and MCP over stdio or HTTP |
 | `tests/DashyNMS.Agent.Shared.Tests` | The shared package's operations and its host contract |
 | `tests/DashyNMS.Agent.Tests` | Tools against recorded LibreNMS JSON through Core's real APIs, plus redaction and caps |
-| `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and an end-to-end stdio test against a stand-in LibreNMS |
+| `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and end-to-end tests over stdio and HTTP against a stand-in LibreNMS |
 
 ## Core
 
@@ -40,6 +40,34 @@ dotnet publish src/DashyNMS.Mcp -c Release -o publish
 
 Don't use `dotnet run` in a client's configuration. It can write build output to stdout, which carries the MCP protocol.
 
+## Transports and the tool call pipeline
+
+`ServerSetup` registers everything that doesn't depend on the transport. `Program` adds stdio, or hands over to `Http/HttpServer` for `MCP_TRANSPORT=http`. Keep it that way round: a tool, cap or filter registered in one transport's branch would be missing from the other's.
+
+Every tool call goes through, in this order:
+
+1. **`ToolCallAudit`**, outermost, so it records exactly one entry however the call ends, including calls no tool runs for. Its sinks must not throw or block.
+2. **The rate limit**, when `MCP_RATE_LIMIT_PER_MINUTE` is set, counted per `ToolCallFilters.ClientOf`: the token's label, or `stdio`.
+3. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
+4. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
+
+Requests to LibreNMS, Unimus and Graylog each pass a `RequestLimiter`, which Core enters before each HTTP attempt's timeout starts (`IRequestGate`, DashyNMS/core#99).
+
+### HTTP
+
+- `BearerGate` comes before every endpoint and lets only `/health` and `/ready` through without a token. A new endpoint needs one without doing anything.
+- The host is built empty and Kestrel's endpoint set in code, so `appsettings.json`, the command line and `ASPNETCORE_` variables change nothing.
+- Clients on protocol revisions before 2026-07-28 get a session, because they name themselves only once, at `initialize`. The SDK ties each session to the token's label and answers `403` to any other. Newer clients are served statelessly.
+- The readiness check is Core's connection test, outside the request cap, single-flight and kept for 15 seconds.
+
+### Building without HTTP
+
+`-p:McpHttpTransport=false` leaves out `Http/`, `ModelContextProtocol.AspNetCore` and ASP.NET Core's shared framework. DashyNMS desktop bundles the server that way: it only uses stdio, the installers stay smaller, and what it ships can't open a port. CI's `stdio-only` job publishes it as desktop does. `MCP_TRANSPORT=http` stops such a build at startup.
+
+### Audit entries
+
+`AuditRedactor` decides what is recorded of a call's arguments. When a tool gains a parameter nothing needs changing: only declared parameters are recorded, strings go through the redactor and lose the server's own credentials (`McpOptions.Secrets`, where a new credential setting must be added), and long text is recorded by its length. A result never reaches the audit at all. GELF delivery is a bounded background queue; entries are kept small enough for one UDP packet, and `GelfAuditTests` holds them to it.
+
 ## Container image
 
 ```bash
@@ -48,7 +76,7 @@ docker build -t dashynms-mcp .
 
 The Dockerfile cross-compiles for the target architecture, so `docker buildx build --platform linux/arm64 .` is as fast as a native build. Base images are pinned by digest and kept current by Dependabot.
 
-`.github/workflows/image.yml` builds every pull request and smoke-tests it: with no settings, the image must exit with code 2 and name what's missing. It publishes to `ghcr.io/dashynms/mcp`:
+`.github/workflows/image.yml` builds every pull request and smoke-tests it: with no settings, the image must exit with code 2 and name what's missing; over HTTP against a stand-in LibreNMS, it must answer its probes, refuse a request without a token and answer one with. It publishes to `ghcr.io/dashynms/mcp`:
 
 - every merge to `main` updates `edge` and adds `sha-<commit>`,
 - a `vX.Y.Z` tag publishes `X.Y.Z`, `X.Y` and `latest`,

@@ -52,6 +52,10 @@ internal sealed class StdioServer : IDisposable
 
     /// <summary>Starts the server with only <paramref name="settings"/> configured; a null value leaves that setting unset.</summary>
     public static StdioServer Start(IReadOnlyDictionary<string, string?> settings)
+        => new(Process.Start(StartInfo(settings))!);
+
+    /// <summary>The server process as a test starts it, whichever transport it's to use.</summary>
+    internal static ProcessStartInfo StartInfo(IReadOnlyDictionary<string, string?> settings)
     {
         var start = new ProcessStartInfo("dotnet", $"\"{Path.Combine(AppContext.BaseDirectory, "dashynms-mcp.dll")}\"")
         {
@@ -75,7 +79,7 @@ internal sealed class StdioServer : IDisposable
             }
         }
 
-        return new StdioServer(Process.Start(start)!);
+        return start;
     }
 
     /// <summary>Sends one message as it is, without waiting for anything.</summary>

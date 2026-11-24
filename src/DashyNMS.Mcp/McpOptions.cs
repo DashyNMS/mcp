@@ -1,9 +1,20 @@
 using System.Globalization;
+using System.Net;
 using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Configuration;
 
 namespace DashyNMS.Mcp;
+
+/// <summary>How clients reach the server.</summary>
+public enum McpTransport
+{
+    /// <summary>The client starts the server and talks over its stdin and stdout.</summary>
+    Stdio,
+
+    /// <summary>The server listens for MCP's Streamable HTTP, with bearer tokens.</summary>
+    Http,
+}
 
 /// <summary>
 /// The server's settings, read from environment variables (or anything else
@@ -42,6 +53,11 @@ public sealed class McpOptions
     public const string ToolsDeny = "MCP_TOOLS_DENY";
     public const string AuditGelfUrl = "AUDIT_GELF_URL";
     public const string AuditGelfTrustedCerts = "AUDIT_GELF_TRUSTED_CERTS";
+    public const string TransportKey = "MCP_TRANSPORT";
+    public const string HttpPortKey = "MCP_HTTP_PORT";
+    public const string HttpAddressKey = "MCP_HTTP_ADDRESS";
+    public const string HttpTokensKey = "MCP_HTTP_TOKENS";
+    public const string HttpAllowedOriginsKey = "MCP_HTTP_ALLOWED_ORIGINS";
     public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
 
     public const int DefaultTimeoutSeconds = 30;
@@ -55,6 +71,19 @@ public sealed class McpOptions
 
     /// <summary>Past this nothing is being limited, and every allowed call is remembered for a minute.</summary>
     public const int MaximumRateLimitPerMinute = 10_000;
+
+    public const int DefaultHttpPort = 8080;
+
+    /// <summary>
+    /// Whether this build has the HTTP transport. A host that bundles the
+    /// server to run it over stdio builds without it (McpHttpTransport=false),
+    /// and ships neither ASP.NET Core nor a way to open a port.
+    /// </summary>
+#if MCP_HTTP
+    internal static bool HasHttp => true;
+#else
+    internal static bool HasHttp => false;
+#endif
 
     private McpOptions(
         LibreNmsConnection connection,
@@ -139,13 +168,30 @@ public sealed class McpOptions
     /// <summary>A Graylog GELF input that gets the audit trail as well as stderr, or null for stderr alone (#18).</summary>
     public GelfTarget? AuditGelf { get; private init; }
 
+    /// <summary>How clients reach the server: stdio unless the operator asks for HTTP (#17).</summary>
+    public McpTransport Transport { get; private init; }
+
+    public int HttpPort { get; private init; } = DefaultHttpPort;
+
+    /// <summary>The address to listen on, this machine only by default; null is every address.</summary>
+    public IPAddress? HttpAddress { get; private init; } = IPAddress.Loopback;
+
+    /// <summary>Who may use the server over HTTP. Never null when that's the transport.</summary>
+    public HttpTokens? HttpTokens { get; private init; }
+
+    /// <summary>The web origins that may call the server from a browser; none by default.</summary>
+    public IReadOnlyCollection<string> HttpAllowedOrigins { get; private init; } = [];
+
+    /// <summary>HTTP settings given without HTTP turned on, which is probably not what was meant.</summary>
+    private bool HasUnusedHttpSettings { get; init; }
+
     /// <summary>
     /// Every credential the server holds, for keeping them out of the audit
     /// trail (#18). The Graylog username is one, as an access token is given
     /// as the username.
     /// </summary>
     internal IReadOnlyList<string> Secrets
-        => new[] { Connection.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().ToArray();
+        => new[] { Connection.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().Concat(HttpTokens?.Values ?? []).ToArray();
 
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
@@ -173,6 +219,16 @@ public sealed class McpOptions
             if (AuditGelf?.IsUnencrypted == true)
             {
                 warnings.Add($"{AuditGelfUrl} isn't https://, so the audit trail, which names devices and searches, crosses the network unencrypted. Use a GELF HTTP input behind https:// if you can.");
+            }
+
+            if (Transport == McpTransport.Http && (HttpAddress is null || !IPAddress.IsLoopback(HttpAddress)))
+            {
+                warnings.Add($"{TransportKey}=http serves plain HTTP, so tokens and answers are only private behind a reverse proxy that does TLS. Don't expose the port itself.");
+            }
+
+            if (HasUnusedHttpSettings)
+            {
+                warnings.Add($"MCP_HTTP_ settings are set but {TransportKey} isn't http, so they do nothing.");
             }
 
             return warnings;
@@ -228,6 +284,12 @@ public sealed class McpOptions
         var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
         var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
         var tools = ParseTools(lookup, problems);
+        var transport = ParseTransport(lookup, problems);
+        var http = transport == McpTransport.Http;
+        var httpPort = http ? ParseInt(lookup, HttpPortKey, DefaultHttpPort, minimum: 1, problems, maximum: 65535) : DefaultHttpPort;
+        var httpAddress = http ? ParseHttpAddress(lookup, problems) : IPAddress.Loopback;
+        var httpTokens = http ? ParseHttpTokens(lookup, problems) : null;
+        var httpOrigins = http ? ParseOrigins(lookup, problems) : [];
         var auditGelf = ParseGelf(lookup, problems);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
@@ -250,6 +312,12 @@ public sealed class McpOptions
         {
             Tools = tools,
             AuditGelf = auditGelf,
+            Transport = transport,
+            HttpPort = httpPort,
+            HttpAddress = httpAddress,
+            HttpTokens = httpTokens,
+            HttpAllowedOrigins = httpOrigins,
+            HasUnusedHttpSettings = !http && new[] { HttpPortKey, HttpTokensKey, HttpAllowedOriginsKey }.Any(key => Value(lookup, key) is not null),
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
         };
@@ -262,6 +330,69 @@ public sealed class McpOptions
         var policy = ToolPolicy.Parse(Value(lookup, ToolsAllow), Value(lookup, ToolsDeny), toolProblems);
         problems.AddRange(toolProblems);
         return policy;
+    }
+
+    private static McpTransport ParseTransport(Func<string, string?> lookup, List<string> problems)
+    {
+        switch (Value(lookup, TransportKey)?.ToLowerInvariant())
+        {
+            case null or "stdio":
+                return McpTransport.Stdio;
+            case "http" when HasHttp:
+                return McpTransport.Http;
+            case "http":
+                problems.Add($"{TransportKey}: this build of the server only has stdio. Use the container image, or build without McpHttpTransport=false.");
+                return McpTransport.Stdio;
+            case var other:
+                problems.Add($"{TransportKey}: '{other}' should be stdio or http.");
+                return McpTransport.Stdio;
+        }
+    }
+
+    private static IPAddress? ParseHttpAddress(Func<string, string?> lookup, List<string> problems)
+    {
+        switch (Value(lookup, HttpAddressKey))
+        {
+            case null:
+                return IPAddress.Loopback;
+            case "*":
+                return null;
+            case var text when IPAddress.TryParse(text, out var address):
+                return address;
+            case var other:
+                problems.Add($"{HttpAddressKey}: '{other}' isn't an IP address. Use one of this machine's, 127.0.0.1 for this machine only, or * for every address.");
+                return IPAddress.Loopback;
+        }
+    }
+
+    private static HttpTokens? ParseHttpTokens(Func<string, string?> lookup, List<string> problems)
+    {
+        if (Value(lookup, HttpTokensKey) is { } text)
+        {
+            return HttpTokens.Parse(text, HttpTokensKey, problems);
+        }
+
+        problems.Add($"{HttpTokensKey} is not set. The server doesn't run over HTTP without a token: set one or more as label:token, such as alice:$(openssl rand -hex 32).");
+        return null;
+    }
+
+    /// <summary>Origins as a browser writes them: scheme, host and any port, with nothing after.</summary>
+    private static List<string> ParseOrigins(Func<string, string?> lookup, List<string> problems)
+    {
+        var origins = new List<string>();
+        foreach (var entry in (Value(lookup, HttpAllowedOriginsKey) ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Uri.TryCreate(entry, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && uri.GetLeftPart(UriPartial.Authority) == entry.TrimEnd('/') && uri.UserInfo.Length == 0)
+            {
+                origins.Add(uri.GetLeftPart(UriPartial.Authority));
+            }
+            else
+            {
+                problems.Add($"{HttpAllowedOriginsKey}: '{entry}' isn't an origin, such as https://tools.example.net.");
+            }
+        }
+
+        return origins;
     }
 
     private static GelfTarget? ParseGelf(Func<string, string?> lookup, List<string> problems)
