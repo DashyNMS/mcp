@@ -37,6 +37,8 @@ public sealed class McpOptions
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
     public const string ConfigTextKey = "MCP_CONFIG_TEXT";
     public const string MaxConcurrentRequestsKey = "MCP_MAX_CONCURRENT_REQUESTS";
+    public const string ToolsAllow = "MCP_TOOLS_ALLOW";
+    public const string ToolsDeny = "MCP_TOOLS_DENY";
     public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
 
     public const int DefaultTimeoutSeconds = 30;
@@ -128,6 +130,9 @@ public sealed class McpOptions
     /// <summary>The most tool calls one client may make in a minute, or null - the default - for no limit (#38).</summary>
     public int? RateLimitPerMinute { get; private init; }
 
+    /// <summary>The tools the server offers: every one unless the operator's lists say otherwise (#37).</summary>
+    public required ToolPolicy Tools { get; init; }
+
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
     /// plain http sends its token or password across the network unencrypted.
@@ -203,6 +208,7 @@ public sealed class McpOptions
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
         var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
         var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
+        var tools = ParseTools(lookup, problems);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
 
@@ -222,9 +228,19 @@ public sealed class McpOptions
 
         return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings)
         {
+            Tools = tools,
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
         };
+    }
+
+    private static ToolPolicy ParseTools(Func<string, string?> lookup, List<string> problems)
+    {
+        // A list of its own: the policy only reports a list that leaves nothing on when the names in it were right.
+        var toolProblems = new List<string>();
+        var policy = ToolPolicy.Parse(Value(lookup, ToolsAllow), Value(lookup, ToolsDeny), toolProblems);
+        problems.AddRange(toolProblems);
+        return policy;
     }
 
     private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)
