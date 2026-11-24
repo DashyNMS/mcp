@@ -46,12 +46,14 @@ public sealed class ResourceFolder
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     private readonly string _root;
+    private readonly string _realRoot;
     private readonly AuditRedactor _redactor;
     private readonly ILogger<ResourceFolder> _logger;
 
     public ResourceFolder(string root, AuditRedactor redactor, ILogger<ResourceFolder> logger)
     {
-        _root = Path.GetFullPath(root);
+        _root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        _realRoot = RealPath(_root);
         _redactor = redactor;
         _logger = logger;
     }
@@ -84,7 +86,7 @@ public sealed class ResourceFolder
         string text;
         try
         {
-            text = ReadText(entry.File);
+            text = ReadText(entry);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
         {
@@ -107,10 +109,12 @@ public sealed class ResourceFolder
         };
     }
 
-    private static string ReadText(FileInfo file)
+    private string ReadText(Entry entry)
     {
+        using var stream = new FileStream(entry.File.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        EnsureInside(entry, stream);
+
         // Bounded by what's read, not by what the size was: a file can grow in between.
-        using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var bytes = new byte[MaxBytes + 1];
         var length = stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
         if (length > MaxBytes)
@@ -127,11 +131,68 @@ public sealed class ResourceFolder
         return text.TrimStart('﻿');
     }
 
+    /// <summary>
+    /// Opening follows links, and one could have been put in place since the
+    /// folder was listed. Linux says what was really opened; elsewhere the path
+    /// is looked at again.
+    /// </summary>
+    private void EnsureInside(Entry entry, FileStream stream)
+    {
+        var inside = OperatingSystem.IsLinux() && Directory.Exists("/proc/self/fd")
+            ? string.Equals(
+                new FileInfo($"/proc/self/fd/{stream.SafeFileHandle.DangerousGetHandle()}").LinkTarget,
+                Path.Combine(_realRoot, entry.Name),
+                StringComparison.Ordinal)
+            : !PathsDownTo(entry.Name).Any(path => new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null);
+        if (!inside)
+        {
+            throw new IOException("it's a link, or was replaced while it was being read");
+        }
+    }
+
+    private IEnumerable<string> PathsDownTo(string name)
+    {
+        var path = _root;
+        foreach (var part in name.Split('/'))
+        {
+            yield return path = Path.Combine(path, part);
+        }
+    }
+
+    /// <summary>The folder's own path with every link in it followed: the operator may well have made it through one.</summary>
+    private static string RealPath(string path)
+    {
+        var real = Path.GetPathRoot(path)!;
+        foreach (var part in path[real.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            real = Path.Combine(real, part);
+            if (new DirectoryInfo(real).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+            {
+                real = RealPath(target.FullName);
+            }
+        }
+
+        return real;
+    }
+
     private List<Entry> Entries()
     {
         var entries = new List<Entry>();
         Collect(new DirectoryInfo(_root), string.Empty, entries, depth: 0);
         return entries;
+    }
+
+    /// <summary>Not for a file that went away since it was listed, either.</summary>
+    private static bool IsSmall(FileInfo file)
+    {
+        try
+        {
+            return file.Length <= MaxBytes;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>What's directly in a folder; nothing when it can't be read, which is no reason to lose the rest.</summary>
@@ -167,7 +228,7 @@ public sealed class ResourceFolder
                     Collect(folder, path + "/", entries, depth + 1);
                 }
             }
-            else if (item is FileInfo file && Types.TryGetValue(file.Extension, out var type) && file.Length <= MaxBytes
+            else if (item is FileInfo file && Types.TryGetValue(file.Extension, out var type) && IsSmall(file)
                 && !path.Any(char.IsControl) && _redactor.Scrub(path) == path)
             {
                 entries.Add(new Entry(path, UriPrefix + string.Join('/', path.Split('/').Select(Uri.EscapeDataString)), type, file));

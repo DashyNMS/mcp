@@ -129,6 +129,66 @@ public sealed class ResourceTests : IDisposable
     }
 
     [Fact]
+    public void A_folder_reached_through_a_link_is_served_all_the_same()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Write("sub/naming.md", "The text.");
+        var link = Path.Combine(_outside, "link");
+        Directory.CreateSymbolicLink(link, _root);
+        var folder = new ResourceFolder(link + "/", new AuditRedactor(new Redactor(), []), NullLogger<ResourceFolder>.Instance);
+
+        Assert.EndsWith("The text.", Text(folder.Read(Assert.Single(folder.List().Resources).Uri, "tests")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_file_swapped_for_a_link_as_it_is_read_never_gives_what_it_points_at()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var secret = Path.Combine(_outside, "secret.md");
+        File.WriteAllText(secret, "outside");
+        var path = Path.Combine(_root, "naming.md");
+        Write("naming.md", "inside");
+        var folder = Folder();
+        using var stop = new CancellationTokenSource();
+        var swapping = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                File.Delete(path);
+                File.CreateSymbolicLink(path, secret);
+                File.Delete(path);
+                File.WriteAllText(path, "inside");
+            }
+        });
+
+        for (var i = 0; i < 2000; i++)
+        {
+            try
+            {
+                if (folder.Read("dashynms://resources/naming.md", "tests") is { } read)
+                {
+                    Assert.DoesNotContain("outside", Text(read), StringComparison.Ordinal);
+                }
+            }
+            catch (McpProtocolException)
+            {
+                // Caught in the act.
+            }
+        }
+
+        await stop.CancelAsync();
+        await swapping;
+    }
+
+    [Fact]
     public void A_file_that_is_not_text_says_so_without_its_contents()
     {
         WriteBytes("binary.txt", [0xFF, 0xFE, 0x00, 0x41]);
