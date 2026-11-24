@@ -169,6 +169,29 @@ All settings are environment variables.
 | `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff`. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
+### The audit trail
+
+Every tool call leaves one line of JSON on stderr, beside the server's other logs, however the call ends:
+
+```json
+{"event":"tool_call","time":"2026-11-24T09:30:00.123Z","transport":"stdio","client_name":"claude-ai","client_version":"1.0","tool":"find_device","arguments":{"query":"core"},"status":"ok","result_bytes":412,"duration_ms":38}
+```
+
+| Field | What it holds |
+| --- | --- |
+| `time` | When the call arrived, in UTC |
+| `transport` | `stdio` or `http` |
+| `token_label` | Over HTTP, the label of the token used, never the token |
+| `client_name`, `client_version` | What the MCP client calls itself. It can say anything, so it isn't proof of who called. |
+| `tool` | The tool asked for |
+| `arguments` | The arguments that tool takes, with anything that looks like a secret and the server's own credentials redacted. Text over 256 characters is recorded as its length. |
+| `undeclared_arguments` | How many other arguments were sent. Their names and values aren't recorded. |
+| `status` | `ok`, `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, or arguments that don't fit), `rate_limited`, `cancelled` or `failed` |
+| `result_bytes` | The size of the result: its text in UTF-8, plus any image |
+| `duration_ms` | How long the call took |
+
+What a tool returned is never recorded. Arguments still name your devices and say what was searched for, so treat the trail as you would any other log of your network.
+
 Sensor thresholds can also be set by this host, including whether they override
 LibreNMS sensor limits. See [Host sensor thresholds](docs/DEVELOPMENT.md#host-sensor-thresholds)
 for the `MCP_DBM_*`, `MCP_SIGNAL_*`, `MCP_TEMPERATURE_*`, `MCP_FAN_SPEED_*` and

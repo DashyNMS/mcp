@@ -2,6 +2,7 @@ using DashyNMS.Agent;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Tools;
 using DashyNMS.Mcp;
+using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -77,9 +78,13 @@ var server = builder.Services
     })
     .WithStdioServerTransport()
     .WithDashyNmsTools(options.Tools);
+
+// The audit first, so it records the calls the rate limit refuses too.
+var redactor = new Redactor();
+server.WithAudit(new ToolCallAudit([new StderrAuditSink()], new AuditRedactor(redactor, options.Secrets), "stdio", TimeProvider.System));
 if (options.RateLimitPerMinute is { } rateLimit)
 {
-    server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), new Redactor(), options.MaxResultBytes);
+    server.WithRateLimit(new ToolCallRateLimiter(rateLimit, TimeProvider.System), redactor, options.MaxResultBytes);
 }
 
 using var host = builder.Build();

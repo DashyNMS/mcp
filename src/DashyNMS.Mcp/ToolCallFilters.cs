@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using DashyNMS.Agent;
 using DashyNMS.Agent.Redaction;
+using DashyNMS.Mcp.Auditing;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -25,6 +26,7 @@ public static class ToolCallFilters
                 return await next(context, cancellationToken).ConfigureAwait(false);
             }
 
+            context.Items[ToolCallAudit.RateLimitedItem] = true;
             var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
             var error = ToolResult.Error(
                 $"Too many tool calls: the limit is {limiter.CallsPerMinute} a minute. Wait {seconds} seconds before calling again.",
