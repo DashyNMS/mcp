@@ -298,8 +298,8 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.79`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
-before pinning this Shared (DashyNMS/mobile#665). For each entry it:
+`2.0.0-ci.83`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
+before pinning this Shared. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -340,6 +340,10 @@ Desktop's agent providers and adds provider, handoff and personality settings: a
 additive, and none called by a tool (MCP doesn't call `AskAsync` or build instructions).
 MCP's output is unchanged; the move keeps MCP, the Shared package, mobile and Desktop on
 one Core. The licence is unchanged.
+
+The move from `2.0.0-ci.79` to `2.0.0-ci.83` (core#90 Batch 5) holds one Core change,
+core#99: an optional `RequestGate` on the three clients, null by default. MCP sets it to
+cap requests in flight (#38); Shared's operations are unchanged, and so is the licence.
 
 #### Publication
 
