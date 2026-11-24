@@ -71,6 +71,9 @@ For any alert, open or acknowledged: what the rule matched and the values that t
 **What's configured, and what changed?**
 With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, you can choose to send no config text at all, and it tells you when a device's backups have stopped. *(`config_backup`, `config_diff`, `recent_config_changes`)*
 
+**Where do I start?**
+Three prompts in your client's prompt menu walk the assistant through the right tools in order: *Investigate this device*, *Morning check: what's down and why* and *What changed before this alert?* With a folder of your own runbooks, naming conventions or site notes ([`MCP_RESOURCES_DIR`](#your-own-reference-files)), your client can attach those too.
+
 Each tool takes a device however you'd name it: hostname, display name, IP address or LibreNMS ID. If more than one device matches, the assistant is told which ones, and asks you. Long lists come back a page at a time, so a broad question still gets a complete answer. A window can reach back up to a month. On a busy network, filters such as an event type let the answer look further back through the logs, and when a window couldn't be read in full the answer says which part is missing.
 
 ## Safe by design
@@ -176,6 +179,7 @@ All settings are environment variables.
 | `MCP_HTTP_ALLOWED_ORIGINS` | No | | Values of the `Origin` header to accept, such as `https://tools.example.net`, for a client that sends one. Every other request with an `Origin` is refused. It doesn't let web pages call the server: there's no CORS support. |
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
+| `MCP_RESOURCES_DIR` | No | | A folder of [reference files](#your-own-reference-files) to offer as resources. A full path. A folder that isn't there stops the server at startup. |
 | `MCP_LAST_KNOWN_GOOD` | No | `true` | Whether to give [the last known answer](#when-librenms-cant-be-reached), marked as stale, when LibreNMS can't be reached |
 | `MCP_LAST_KNOWN_GOOD_HOURS` | No | `24` | How old such an answer may be (1 to 168 hours) |
 | `MCP_LAST_KNOWN_GOOD_DIR` | No | | A folder to keep them in as well as in memory, encrypted, so they outlast a restart. A full path; in the container, mount a volume at `/data` and set it to `/data`. |
@@ -184,6 +188,18 @@ All settings are environment variables.
 | `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
 | `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns. It's sent twice, as text and as structured content, so the message is up to about twice as long. |
+
+### Your own reference files
+
+Point `MCP_RESOURCES_DIR` at a folder of runbooks, naming conventions, site lists or notes on what normal looks like, and each file appears in your client as a resource it can attach. In the container, mount it read-only:
+
+```bash
+docker run -i --rm --env-file dashynms.env -e MCP_RESOURCES_DIR=/resources -v /srv/dashynms/resources:/resources:ro ghcr.io/dashynms/mcp:latest
+```
+
+- Markdown, text, CSV, JSON and YAML files in UTF-8, up to 128 KB each and 200 in all, in folders up to eight deep. Hidden files and links aren't served, so a Kubernetes ConfigMap needs its files mounted with `subPath`.
+- They're read as they are when asked for, never written to, and redacted like a tool's results. Over HTTP, everyone with a token can read them.
+- Each is marked as data, not instructions, where it's listed and where it's read.
 
 ### When LibreNMS can't be reached
 
