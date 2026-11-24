@@ -92,7 +92,18 @@ The Dockerfile cross-compiles for the target architecture, so `docker buildx bui
 - a `vX.Y.Z` tag publishes `X.Y.Z`, `X.Y` and `latest`,
 - a pre-release tag such as `v1.2.0-rc.1` gets its own tag only, and doesn't move `latest`.
 
-To release, set `<Version>` in `Directory.Build.props` to the new version and merge that first: it's the version the server reports to clients. Then tag `main` with `vX.Y.Z`.
+To release, set `<Version>` in `Directory.Build.props` to the new version and merge that first: it's the version the server reports to clients. Then tag `main` with `vX.Y.Z`. The tag publishes the image and the [standalone binaries](#standalone-binaries), which check that the two versions agree.
+
+## Standalone binaries
+
+`.github/workflows/release-binaries.yml` builds one self-contained, single-file executable each for `win-x64`, `win-arm64`, `osx-arm64`, `osx-x64`, `linux-x64` and `linux-arm64`, with the HTTP transport. They're separate from the builds DashyNMS desktop bundles, and checked separately. Every build runs on its own platform and goes through:
+
+1. `scripts/publish-binary.py build`: publish, fail unless the result is exactly one file, and collect the licences of what's inside it.
+2. On a `v*` tag, `scripts/macos/sign.sh` for macOS: a Developer ID signature with the hardened runtime, notarised by Apple, as desktop's are. It needs the six `MACOS_*` and `APPLE_*` secrets desktop uses in a `DashyNMS_MacOS` environment in this repository, and the release stops without them rather than publish something macOS would block. Windows builds are unsigned until there's a signing identity (DashyNMS/desktop#109).
+3. `scripts/publish-binary.py pack`: one archive and its SHA-256.
+4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
+
+Then every archive is checked together and `SHA256SUMS` made. Pull requests and manual runs stop there, with the result kept as the `standalone-binaries` artefact. A `v*` tag attests the archives' provenance and attaches them to the tag's GitHub release, creating a draft if there isn't one. It never replaces a file that's already attached.
 
 ## Rules for tools
 
