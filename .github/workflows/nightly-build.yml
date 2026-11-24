@@ -70,7 +70,6 @@ jobs:
     uses: ./.github/workflows/image.yml
     with:
       version: ${{ needs.version.outputs.version }}
-      channel: nightly
 
   image:
     name: Publish container image

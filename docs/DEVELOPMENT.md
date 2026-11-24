@@ -457,7 +457,9 @@ MCP and the Shared package use the same pin, with updated licence evidence.
 #### Publication
 
 Every channel builds and smoke-tests the multi-platform image into an OCI archive
-before Shared publication. `image-publish.yml` copies that archive to GHCR without
+before Shared publication. The archive has one canonical version reference so
+Skopeo can select it unambiguously. Channel aliases are added only during
+publication. `image-publish.yml` copies that archive to GHCR without
 rebuilding, preserving its digests, SBOM and provenance. Edge builds share one
 workflow concurrency group, including image tags and the rolling binary release.
 They queue without cancelling an in-progress publisher.

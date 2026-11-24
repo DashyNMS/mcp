@@ -64,7 +64,6 @@ jobs:
     uses: ./.github/workflows/image.yml
     with:
       version: ${{ needs.version.outputs.version }}
-      channel: edge
 
   image:
     name: Publish container image
