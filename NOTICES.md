@@ -11,7 +11,7 @@ must not imply endorsement or identify another product or service.
 DashyNMS.Core is consumed as a NuGet package from DashyNMS/core, currently
 pinned in Directory.Build.props. It retains its own licence and attribution.
 NuGet dependencies,
-the .NET runtime, and Microsoft/Canonical container base layers retain their
+the .NET and ASP.NET Core runtimes, and Microsoft/Canonical container base layers retain their
 publishers' licences. Include their applicable notices when redistributing them.
 
 ## Container distribution
@@ -21,7 +21,7 @@ material only. Each image carries this file and LICENSE in /app, and
 /app/third-party holds the licence and notice files for every restored NuGet
 package, copied verbatim, with an inventory of package and file hashes. Where a
 package embeds no licence text, the text comes from the exact upstream commit its
-nuspec records; see docs/dependency-licences. The .NET runtime and Canonical
+nuspec records; see docs/dependency-licences. The .NET and ASP.NET Core runtimes and Canonical
 chiseled base layers are not covered by that inventory and keep their
 publishers' terms. Images published before this change carry the earlier
 PolyForm Internal Use labels and no bundled notices.

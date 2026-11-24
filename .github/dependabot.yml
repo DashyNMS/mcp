@@ -36,7 +36,7 @@ updates:
       # enabled without mixing a new SDK major with the current runtime.
       - dependency-name: "dotnet/sdk"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "dotnet/runtime"
+      - dependency-name: "dotnet/aspnet"
         update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly

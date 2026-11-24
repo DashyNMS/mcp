@@ -79,6 +79,9 @@ Each tool takes a device however you'd name it: hostname, display name, IP addre
 - **Secrets stay out of answers.** SNMP communities, passwords and hashes, RADIUS, TACACS, IPsec, NTP and OSPF keys, API and licence keys, private keys, and pfSense, OpenWrt and Brocade secrets are redacted before anything leaves the server, including secrets inside base64-encoded config. The rules were checked by hand against real backups from eleven vendor types.
 - **Your network's text is treated as data.** Device names, port descriptions, log lines and config text never appear as the server's own words, and the assistant is told not to take instructions from them.
 - **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
+- **Every call is on record.** One line per tool call says who asked for what and how it went, with secrets redacted and nothing of the answer. See [the audit trail](#the-audit-trail).
+- **You choose the tools.** Turn any of them off with `MCP_TOOLS_DENY`, such as everything that returns config, or list the only ones to offer in `MCP_TOOLS_ALLOW`.
+- **Your servers come first.** Requests to each of LibreNMS, Unimus and Graylog are capped (8 at once by default), however many questions are asked at once.
 - **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for. Use https:// for every service where you can: the server warns at startup about any on plain http, whose token or password would cross the network unencrypted.
 
 What the tools return still goes to whichever model your client uses. Config backups and diffs are redacted, but they're still your configuration. If that shouldn't leave your network, set `MCP_CONFIG_TEXT=summary`, which keeps the answers to "did it change, when, and by how much?" without any config text, or `off`.
@@ -140,6 +143,8 @@ claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS
 
 Quit Claude Desktop completely (from the tray icon, not just the window) and open it again. It reads the file only at startup, and while it's running it can write over changes you make to the file.
 
+To share one server between several people instead, [run it over HTTP](#share-it-over-http).
+
 When the server starts, it checks its settings and tests your LibreNMS address and token before it answers anything. If something's wrong, it stops with one plain line on stderr. Claude Desktop shows that line under **Settings → Developer**.
 
 ## Settings
@@ -163,6 +168,11 @@ All settings are environment variables.
 | `GRAYLOG_QUERY_FIELD` | No | `source` | The Graylog field matched against a device's addresses, as LibreNMS's `graylog.query_field` |
 | `GRAYLOG_MATCH_ANY_ADDRESS` | No | `false` | Also match a device's messages on every address on its interfaces, as LibreNMS's and DashyNMS desktop's "match any address". Turn it on when devices log from a VLAN or loopback address rather than the one LibreNMS polls. |
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
+| `MCP_TRANSPORT` | No | `stdio` | `stdio`, where the client starts the server, or `http` to [share one server](#share-it-over-http) |
+| `MCP_HTTP_TOKENS` | With `http` | | The bearer tokens that may use the server, as `label:token` separated by commas. Labels are up to 50 letters, digits, dots, hyphens or underscores, and say whose token it is in the audit trail. Tokens need at least 32 characters. The server doesn't start over HTTP without one. |
+| `MCP_HTTP_PORT` | No | `8080` | The port to listen on |
+| `MCP_HTTP_ADDRESS` | No | `127.0.0.1` | The IP address to listen on, or `*` for every address (the default inside the container image) |
+| `MCP_HTTP_ALLOWED_ORIGINS` | No | | The web origins, such as `https://tools.example.net`, whose pages may call the server from a browser. None by default; clients that aren't web pages don't need it. |
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
@@ -204,6 +214,56 @@ for the `MCP_DBM_*`, `MCP_SIGNAL_*`, `MCP_TEMPERATURE_*`, `MCP_FAN_SPEED_*` and
 Unimus and Graylog aren't tested at startup. If one can't be reached, the tools that use it say so, and `what_changed` still returns everything else.
 
 **Self-signed or internal CA certificates:** the server can't ask whether to trust a certificate, so if yours doesn't pass the normal checks, startup stops. It prints the certificate's subject, issuer, dates and fingerprint. Check the fingerprint against your server's own certificate, then add it to `LIBRENMS_TRUSTED_CERTS`. Only that exact certificate is trusted, so when it's renewed you add the new one. There's no setting that trusts every certificate.
+
+## Share it over HTTP
+
+One server can answer a whole team over MCP's Streamable HTTP. Give each person or client a token of their own, so the [audit trail](#the-audit-trail) says who asked and you can take one away without changing the rest:
+
+```bash
+openssl rand -hex 32   # once per person
+docker run -d --name dashynms-mcp --restart unless-stopped -p 127.0.0.1:8080:8080 --env-file dashynms.env ghcr.io/dashynms/mcp:latest
+```
+
+with this in `dashynms.env`, which only its owner should be able to read:
+
+```
+LIBRENMS_URL=https://librenms.example.com
+LIBRENMS_TOKEN=your-token
+MCP_TRANSPORT=http
+MCP_HTTP_TOKENS=alice:<alice's token>,bob:<bob's token>
+```
+
+The server speaks plain HTTP, so put a reverse proxy with TLS in front of it and don't publish the port itself. With Caddy that's the whole configuration:
+
+```
+mcp.example.net {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+With nginx, turn buffering off, as answers are streamed:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+}
+```
+
+Then point each client at `/mcp` with its token. In Claude Code:
+
+```bash
+claude mcp add --transport http dashynms https://mcp.example.net/mcp --header "Authorization: Bearer <alice's token>"
+```
+
+- Everything but the two probes needs a token. Without a valid one the answer is `401` and no tool runs.
+- `/health` answers `ok` while the server is running, and `/ready` answers `ready`, or `503` when LibreNMS doesn't answer it. Neither needs a token or says anything else. LibreNMS is checked at most once every 15 seconds however often `/ready` is asked, and that check isn't counted in `MCP_MAX_CONCURRENT_REQUESTS`.
+- Everyone gets the same tools and sees what the server's own LibreNMS, Unimus and Graylog accounts can see. A token is permission to use the server, not a LibreNMS login.
+- `MCP_RATE_LIMIT_PER_MINUTE` counts each token's calls separately, whichever sessions they come in.
+- To change tokens, change the setting and restart. There's no OAuth yet.
 
 ## Help and feedback
 
