@@ -113,6 +113,35 @@ internal sealed class StdioServer : IDisposable
     }
 
     /// <summary>
+    /// Sends every call without waiting for the answers, as an agent calling
+    /// tools in parallel does, and returns each call's JSON document by ID in
+    /// whatever order the answers come.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<int, JsonElement>> CallToolsAsync(IReadOnlyList<(int Id, string Name, string Arguments)> calls, CancellationToken cancellationToken)
+    {
+        foreach (var (id, name, arguments) in calls)
+        {
+            await _process.StandardInput.WriteLineAsync($$$"""{"jsonrpc":"2.0","id":{{{id}}},"method":"tools/call","params":{"name":"{{{name}}}","arguments":{{{arguments}}}}}""");
+        }
+
+        await _process.StandardInput.FlushAsync(cancellationToken);
+        var results = new Dictionary<int, JsonElement>();
+        while (results.Count < calls.Count)
+        {
+            var line = await _process.StandardOutput.ReadLineAsync(cancellationToken)
+                ?? throw new InvalidOperationException($"Server exited. stderr:\n{Stderr}");
+            var message = JsonDocument.Parse(line).RootElement;
+            if (message.TryGetProperty("id", out var id))
+            {
+                var text = message.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
+                results.Add(id.GetInt32(), JsonDocument.Parse(text).RootElement);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Waits for a server that refused to start to exit, returning its exit
     /// code and whatever it wrote to stdout, which must stay empty: an MCP
     /// client would read anything there as protocol.

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Redaction;
+using DashyNMS.Agent.Requests;
 using DesktopNMS.Core.Api;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,13 @@ namespace DashyNMS.Agent;
 /// </remarks>
 public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<ToolRunner> logger)
 {
+    /// <summary>
+    /// The shortest wait worth telling the model about. Below it, parallel
+    /// calls overlapped briefly, which is what the queue is for; saying so
+    /// every time would only teach the model to ignore it.
+    /// </summary>
+    internal static readonly TimeSpan ReportedWait = TimeSpan.FromSeconds(1);
+
     internal Redactor Redactor => redactor;
 
     internal AgentOptions Options => options;
@@ -25,6 +33,7 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
     {
         ArgumentNullException.ThrowIfNull(body);
 
+        var waits = ToolCallWaits.Begin();
         JsonObject result;
         try
         {
@@ -50,6 +59,15 @@ public sealed class ToolRunner(Redactor redactor, AgentOptions options, ILogger<
                 logger.LogError(ex, "{Tool} failed unexpectedly", tool);
                 result = ToolResult.Error($"Something went wrong running {tool}. The server log has the details.");
             }
+        }
+
+        if (waits.Longest >= ReportedWait)
+        {
+            result["throttling"] = new JsonObject
+            {
+                ["waited_seconds"] = Math.Round(waits.Longest.TotalSeconds, 1),
+                ["message"] = "Requests for this call queued behind others. Make fewer calls at once.",
+            };
         }
 
         return ToolResult.Render(result, redactor, options.MaxResultBytes);

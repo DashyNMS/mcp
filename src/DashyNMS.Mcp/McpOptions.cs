@@ -36,12 +36,16 @@ public sealed class McpOptions
     public const string GraylogTrustedCerts = "GRAYLOG_TRUSTED_CERTS";
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
     public const string ConfigTextKey = "MCP_CONFIG_TEXT";
+    public const string MaxConcurrentRequestsKey = "MCP_MAX_CONCURRENT_REQUESTS";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
 
     /// <summary>Below this a single device summary wouldn't fit, so a smaller cap is a mistake rather than a choice.</summary>
     public const int MinimumMaxResultBytes = 1024;
+
+    /// <summary>More than this in flight isn't a limit on anything, so a larger number is a mistake.</summary>
+    public const int MaximumConcurrentRequests = 256;
 
     private McpOptions(
         LibreNmsConnection connection,
@@ -113,6 +117,9 @@ public sealed class McpOptions
 
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
+
+    /// <summary>The most requests in flight to each of LibreNMS, Unimus and Graylog; more queue (#38).</summary>
+    public int MaxConcurrentRequests { get; private init; }
 
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
@@ -187,6 +194,7 @@ public sealed class McpOptions
         var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
         var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
+        var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
 
@@ -204,7 +212,10 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings);
+        return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings)
+        {
+            MaxConcurrentRequests = maxConcurrentRequests,
+        };
     }
 
     private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)
@@ -393,7 +404,7 @@ public sealed class McpOptions
         return trusted;
     }
 
-    private static int ParseInt(Func<string, string?> lookup, string key, int fallback, int minimum, List<string> problems)
+    private static int ParseInt(Func<string, string?> lookup, string key, int fallback, int minimum, List<string> problems, int maximum = int.MaxValue)
     {
         var text = Value(lookup, key);
         if (text is null)
@@ -401,9 +412,11 @@ public sealed class McpOptions
             return fallback;
         }
 
-        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value < minimum)
+        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value < minimum || value > maximum)
         {
-            problems.Add($"{key}: '{text}' is not a whole number of at least {minimum}.");
+            problems.Add(maximum == int.MaxValue
+                ? $"{key}: '{text}' is not a whole number of at least {minimum}."
+                : $"{key}: '{text}' is not a whole number from {minimum} to {maximum}.");
             return fallback;
         }
 
