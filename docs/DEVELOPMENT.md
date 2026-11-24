@@ -96,13 +96,18 @@ Every DashyNMS repository builds the same way.
 | --- | --- | --- | --- |
 | **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
 | **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on the rolling `v0.0.0-edge` prerelease |
-| **Nightly build** (`nightly-build.yml`) | 00:00 UTC if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease with notes from the commits |
+| **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease with notes from the commits |
 | **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
 
-Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If a publish fails part way, run the build again by hand for a new number.
+Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
 
-To release, publish a GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds and is published again when everything is ready; if something fails it stays a draft, and **Release build** can be run by hand with the tag. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
+To release, publish a GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds and is published again when everything is ready. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
+
+If a release fails it stays a draft. Don't publish the draft by hand, because that starts the build again:
+
+- **Nothing on `main` has to change:** run **Release build** by hand with the tag. A Shared package already published from that commit is kept, after its provenance is checked.
+- **It needs a fix:** the release has to be `main`'s newest commit, so merge the fix, delete the draft with its tag (`gh release delete v2.0.0 --cleanup-tag`) and publish it again. If its Shared package was already published, that version is used up: raise `<Version>` first.
 
 ## Standalone binaries
 
@@ -433,7 +438,8 @@ Edge, nightly and release builds on protected `main` whose `verify` and
    storage redirects are followed without it.
 
 Re-running a failed publish job fails provenance verification on purpose, because the
-verify job recorded another attempt. Run the build again by hand, for a new version.
+verify job recorded another attempt. Run the build again by hand: an edge or nightly takes a new version, and a release keeps a package
+that was already published from its commit.
 
 What this does and does not guarantee:
 
