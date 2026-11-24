@@ -70,6 +70,25 @@ public sealed class McpOptionsTests
         Assert.Contains("is not a whole number from 1 to 256", Assert.Single(errors), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("0", null)]
+    [InlineData("60", 60)]
+    public void Tool_calls_are_unlimited_until_a_rate_is_set(string? value, int? expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.RateLimitPerMinuteKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.RateLimitPerMinute);
+    }
+
+    [Fact]
+    public void A_rate_that_is_not_one_is_refused()
+    {
+        Assert.Null(Load(new(Minimal()) { [McpOptions.RateLimitPerMinuteKey] = "10001" }, out var errors));
+        Assert.Contains("is not a whole number from 0 to 10000", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Minimal_settings_use_defaults()
     {

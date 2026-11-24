@@ -164,6 +164,7 @@ All settings are environment variables.
 | `GRAYLOG_MATCH_ANY_ADDRESS` | No | `false` | Also match a device's messages on every address on its interfaces, as LibreNMS's and DashyNMS desktop's "match any address". Turn it on when devices log from a VLAN or loopback address rather than the one LibreNMS polls. |
 | `GRAYLOG_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for Graylog |
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
+| `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
 Sensor thresholds can also be set by this host, including whether they override

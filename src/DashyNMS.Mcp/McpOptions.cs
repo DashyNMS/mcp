@@ -37,6 +37,7 @@ public sealed class McpOptions
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
     public const string ConfigTextKey = "MCP_CONFIG_TEXT";
     public const string MaxConcurrentRequestsKey = "MCP_MAX_CONCURRENT_REQUESTS";
+    public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
@@ -46,6 +47,9 @@ public sealed class McpOptions
 
     /// <summary>More than this in flight isn't a limit on anything, so a larger number is a mistake.</summary>
     public const int MaximumConcurrentRequests = 256;
+
+    /// <summary>Past this nothing is being limited, and every allowed call is remembered for a minute.</summary>
+    public const int MaximumRateLimitPerMinute = 10_000;
 
     private McpOptions(
         LibreNmsConnection connection,
@@ -121,6 +125,9 @@ public sealed class McpOptions
     /// <summary>The most requests in flight to each of LibreNMS, Unimus and Graylog; more queue (#38).</summary>
     public int MaxConcurrentRequests { get; private init; }
 
+    /// <summary>The most tool calls one client may make in a minute, or null - the default - for no limit (#38).</summary>
+    public int? RateLimitPerMinute { get; private init; }
+
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
     /// plain http sends its token or password across the network unencrypted.
@@ -195,6 +202,7 @@ public sealed class McpOptions
         var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
         var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
+        var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
 
@@ -215,6 +223,7 @@ public sealed class McpOptions
         return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings)
         {
             MaxConcurrentRequests = maxConcurrentRequests,
+            RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
         };
     }
 
