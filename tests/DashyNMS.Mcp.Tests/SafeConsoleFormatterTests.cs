@@ -16,6 +16,15 @@ public sealed class SafeConsoleFormatterTests
     }
 
     [Fact]
+    public void Nothing_invisible_or_line_breaking_gets_through()
+    {
+        // A line feed, an escape, a line separator, a right-to-left override and a tag character outside the basic plane.
+        var line = _formatter.OneLine("a\nb\u001bc\u2028d\u202ee\U000E0041f");
+
+        Assert.Equal("a b c d e f", line);
+    }
+
+    [Fact]
     public void No_part_of_a_credential_shows_wherever_the_cut_falls()
     {
         for (var before = SafeConsoleFormatter.MaxLength - Secret.Length - 2; before <= SafeConsoleFormatter.MaxLength + 2; before++)
