@@ -39,11 +39,12 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(next);
-        if (context.MatchedPrimitive is not McpServerTool { ProtocolTool: { } tool } || NotKept.Contains(tool.Name))
+        if (context.MatchedPrimitive is not McpServerTool { ProtocolTool: { } tool })
         {
             return await next(context, cancellationToken).ConfigureAwait(false);
         }
 
+        // For every tool, kept or not: a token refused to one is refused to all.
         var generation = answers.Generation;
         var report = ToolCallReport.Begin();
         var result = await next(context, cancellationToken).ConfigureAwait(false);
@@ -52,7 +53,7 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
         {
             // Never an answer anything was redacted from: what's kept has nothing to hide.
             // Nor one too big to return, which the tool answered and the cap made an error.
-            case ToolCallOutcome.Complete when report.Json is { } json && json.StartsWith(OkStart, StringComparison.Ordinal) && !json.Contains(Redactor.Marker, StringComparison.Ordinal):
+            case ToolCallOutcome.Complete when !NotKept.Contains(tool.Name) && report.Json is { } json && json.StartsWith(OkStart, StringComparison.Ordinal) && !json.Contains(Redactor.Marker, StringComparison.Ordinal):
                 answers.Keep(question, json, generation);
                 break;
 

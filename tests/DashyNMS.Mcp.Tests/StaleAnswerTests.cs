@@ -12,6 +12,7 @@ public sealed class StaleAnswerTests : IDisposable
 
     private volatile string _state = "up";
     private volatile string _sysName = "core-sw1";
+    private volatile bool _hasPort;
 
     public StaleAnswerTests()
     {
@@ -51,7 +52,9 @@ public sealed class StaleAnswerTests : IDisposable
             })),
             "alerts" or "faults" => new(200, """{"status":"ok","alerts":[],"faults":[]}"""),
             "rules" => new(200, """{"status":"ok","rules":[]}"""),
-            "ports" or "devices/1/ports" => new(200, """{"status":"ok","ports":[]}"""),
+            "ports" or "devices/1/ports" => new(200, _hasPort
+                ? """{"status":"ok","ports":[{"port_id":7,"device_id":1,"ifName":"1/1/1","ifAdminStatus":"up","ifOperStatus":"up"}]}"""
+                : """{"status":"ok","ports":[]}"""),
             "devices/1/maintenance" => new(200, """{"status":"ok","maintenance":[],"is_under_maintenance":false}"""),
             _ => new(200, """{"status":"ok","graphs":[],"logs":[],"sensors":[],"links":[]}"""),
         };
@@ -158,18 +161,37 @@ public sealed class StaleAnswerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_device_that_is_no_longer_there_is_not_given_from_before()
+    public async Task What_is_no_longer_there_is_not_given_from_before()
+    {
+        const string question = """{"device":"core-sw1","port":"1/1/1"}""";
+        using var server = Start();
+        await server.InitializeAsync(_cts.Token);
+        _hasPort = true;
+        Assert.Equal("ok", (await server.CallToolAsync(2, "port_status", question, _cts.Token)).GetProperty("status").GetString());
+        _state = "down";
+        Assert.True((await server.CallToolAsync(3, "port_status", question, _cts.Token)).GetProperty("stale").GetBoolean());
+
+        // LibreNMS answers that there's no such port any more.
+        _state = "up";
+        _hasPort = false;
+        Assert.Equal("error", (await server.CallToolAsync(4, "port_status", question, _cts.Token)).GetProperty("status").GetString());
+
+        _state = "down";
+        Assert.False((await server.CallToolAsync(5, "port_status", question, _cts.Token)).TryGetProperty("stale", out _));
+    }
+
+    [Fact]
+    public async Task A_token_refused_to_a_tool_that_is_never_kept_forgets_everything_too()
     {
         using var server = Start();
         await server.InitializeAsync(_cts.Token);
-        Assert.Equal("ok", (await server.CallToolAsync(2, "device_events", """{"device":"core-sw1"}""", _cts.Token)).GetProperty("status").GetString());
+        await Overview(server, 2);
 
-        // Gone for the same question, asked of a different name: the device list is kept for a minute.
-        Assert.Equal("error", (await server.CallToolAsync(3, "device_events", """{"device":"edge-sw9"}""", _cts.Token)).GetProperty("status").GetString());
+        _state = "token refused";
+        await server.CallToolAsync(3, "graph", """{"device":"core-sw1","type":"device_bits"}""", _cts.Token);
 
         _state = "down";
-        Assert.False((await server.CallToolAsync(4, "device_events", """{"device":"edge-sw9"}""", _cts.Token)).TryGetProperty("stale", out _));
-        Assert.True((await server.CallToolAsync(5, "device_events", """{"device":"core-sw1"}""", _cts.Token)).GetProperty("stale").GetBoolean());
+        Assert.False((await Overview(server, 4)).TryGetProperty("stale", out _));
     }
 
     [Fact]
