@@ -33,7 +33,9 @@ public sealed class LastKnownGood
     /// <summary>The most all answers take, in characters.</summary>
     public const int MaxCharacters = 8 * 1024 * 1024;
 
-    private const string FilePattern = "*.answer";
+    private const string FolderPrefix = "dashynms-";
+    private const string FileExtension = ".answer";
+    private const string FilePattern = "*" + FileExtension;
     private const int PruneEvery = 50;
     private const int NonceBytes = 12;
     private const int TagBytes = 16;
@@ -65,7 +67,7 @@ public sealed class LastKnownGood
         _nameKey = Derive(secret, "name");
 
         // A folder of its own, so one account's answers can be dropped without touching another's.
-        _folder = directory is null ? null : Path.Combine(directory, Convert.ToHexStringLower(Derive(secret, "folder").AsSpan(0, 16)));
+        _folder = directory is null ? null : Path.Combine(directory, FolderPrefix + Convert.ToHexStringLower(Derive(secret, "folder").AsSpan(0, 16)));
         OnDisk(Prepare);
     }
 
@@ -184,7 +186,7 @@ public sealed class LastKnownGood
 
     private string KeyOf(string question) => Convert.ToHexStringLower(HMACSHA256.HashData(_nameKey, Encoding.UTF8.GetBytes(question)));
 
-    private static string FileOf(string key) => key + ".answer";
+    private static string FileOf(string key) => key + FileExtension;
 
     /// <summary>Neither too old, nor from a clock that has since gone back.</summary>
     private bool IsRecent(KnownAnswer answer)
@@ -226,18 +228,34 @@ public sealed class LastKnownGood
 
         Prune(folder);
 
-        // Another token's or build's folder, with nothing in it any setting could still use.
+        DeleteUnused(new DirectoryInfo(folder));
+    }
+
+    /// <summary>
+    /// Deletes another token's or build's folder once nothing in it could be
+    /// used under any setting. Only one of our own, by its name and by there
+    /// being nothing else in it: the operator's folder may hold other things.
+    /// </summary>
+    private void DeleteUnused(DirectoryInfo folder)
+    {
         var unused = _time.GetUtcNow().UtcDateTime - TimeSpan.FromHours(McpOptions.MaximumLastKnownGoodHours);
-        foreach (var other in new DirectoryInfo(folder).Parent!.EnumerateDirectories().Where(d => IsFolderName(d.Name) && d.Name != Path.GetFileName(folder)).ToList())
+        foreach (var other in folder.Parent!.EnumerateDirectories(FolderPrefix + "*").Where(d => d.Name != folder.Name).ToList())
         {
-            if (other.LastWriteTimeUtc < unused && other.EnumerateFileSystemInfos().All(f => f.LastWriteTimeUtc < unused))
+            try
             {
-                other.Delete(recursive: true);
+                var files = other.EnumerateFileSystemInfos().ToList();
+                if (other.LastWriteTimeUtc < unused && files.All(f => f is FileInfo && f.Name.Contains(FileExtension, StringComparison.Ordinal) && f.LastWriteTimeUtc < unused))
+                {
+                    files.ForEach(f => f.Delete());
+                    other.Delete();
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Not this server's to delete, and no reason not to use its own.
             }
         }
     }
-
-    private static bool IsFolderName(string name) => name.Length == 32 && name.All(char.IsAsciiHexDigitLower);
 
     /// <summary>Deletes what's too old, or more than is kept: it won't be used again.</summary>
     private void Prune(string folder)

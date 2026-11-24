@@ -19,9 +19,10 @@ public sealed record EventWindowInfo(DateTime Since, DateTime Until, bool Window
 
 /// <param name="Reason">
 /// depth_limit (the log can only be read from its newest entry, and no further back),
-/// read_limit (more entries than one call reads), time_limit (reading further took
-/// too long) or source_failed (LibreNMS stopped answering part way). The gap can be
-/// asked for on its own, with <paramref name="Until"/> as the window's end.
+/// read_limit (more entries than one call reads), time_limit (reading further took too
+/// long) or source_failed (LibreNMS stopped answering part way). Events and alert changes
+/// can then be asked for over the gap alone, with <paramref name="Until"/> as the window's
+/// end. A depth_limit gap can't, nor can one in the alerts raised: they're read from now.
 /// </param>
 public sealed record EventGap(DateTime Since, DateTime Until, string Reason)
 {
