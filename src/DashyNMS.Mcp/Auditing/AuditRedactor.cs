@@ -109,7 +109,7 @@ public sealed class AuditRedactor
 
     private JsonNode? Value(JsonElement value) => value.ValueKind switch
     {
-        JsonValueKind.String => Text(value.GetString()!),
+        JsonValueKind.String => String(value),
 
         // As text, so a number as long as a page is cut down like any other.
         JsonValueKind.Number => value.GetRawText() is { Length: <= 32 } number ? JsonNode.Parse(number) : $"[{value.GetRawText().Length} characters]",
@@ -121,6 +121,19 @@ public sealed class AuditRedactor
         JsonValueKind.Object => "[object]",
         _ => null,
     };
+
+    /// <summary>JSON can spell text that isn't valid Unicode, half a surrogate pair, which can't be read as a string.</summary>
+    private string String(JsonElement value)
+    {
+        try
+        {
+            return Text(value.GetString()!);
+        }
+        catch (InvalidOperationException)
+        {
+            return "[invalid text]";
+        }
+    }
 
     private JsonArray List(JsonElement value)
     {
