@@ -198,11 +198,13 @@ Every tool call leaves one line of JSON on stderr, beside the server's other log
 | `tool` | The tool asked for |
 | `arguments` | The arguments that tool takes, with anything that looks like a secret and the server's own credentials redacted. Text over 256 characters is recorded as its length. |
 | `undeclared_arguments` | How many other arguments were sent. Their names and values aren't recorded. |
-| `status` | `ok`, `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, or arguments that don't fit), `rate_limited`, `cancelled` or `failed` |
+| `status` | `ok`, `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, arguments that don't fit, or a call that couldn't be read), `rate_limited`, `cancelled` or `failed` |
 | `result_bytes` | The size of the result: its text in UTF-8, plus any image |
 | `duration_ms` | How long the call took |
 
 With `AUDIT_GELF_URL` set, entries also go to Graylog, as GELF messages with the same fields (`_tool`, `_token_label`, `_arguments` as JSON text, and so on). Delivery is best effort and never holds up a call: if Graylog can't keep up or can't be reached, the server logs that once and carries on, and stderr still has every entry.
+
+A request refused before it's a call at all - no valid token, or not a valid MCP message - isn't a tool call and leaves no entry.
 
 What a tool returned is never recorded. Arguments still name your devices and say what was searched for, so treat the trail as you would any other log of your network.
 

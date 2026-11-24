@@ -89,6 +89,30 @@ public sealed class ToolCallAuditTests
         Assert.DoesNotContain(FixtureServer.Token, stderr, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""{"arguments":{"query":"core"}}""", "", "rejected")]
+    [InlineData("""{"name":7,"arguments":{}}""", "", "rejected")]
+    [InlineData("""{"name":"find_device","arguments":"core"}""", "find_device", "rejected")]
+    [InlineData("""{"name":"find_device","arguments":{"query":"\ud800"}}""", "find_device", null)]
+    public async Task A_call_the_server_cannot_read_still_leaves_one_entry(string parameters, string tool, string? status)
+    {
+        using var librenms = LibreNms();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var server = Start(librenms);
+        await server.InitializeAsync(cts.Token);
+
+        await server.RequestAsync(2, "tools/call", parameters, cts.Token);
+
+        var entry = Assert.Single(Entries(await server.StopAsync(cts.Token)));
+        Assert.Equal(tool, entry.GetProperty("tool").GetString());
+
+        // How the SDK fares with half a surrogate pair is its own business; that there's an entry isn't.
+        if (status is not null)
+        {
+            Assert.Equal(status, entry.GetProperty("status").GetString());
+        }
+    }
+
     [Fact]
     public async Task A_rate_limited_call_is_recorded_as_one()
     {

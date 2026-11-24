@@ -16,11 +16,16 @@ namespace DashyNMS.Mcp.Auditing;
 /// A request filter, so it also sees the calls no tool ever runs for: a tool
 /// that doesn't exist or is off, arguments that don't fit, a client over its
 /// rate limit. Register it before any other filter: the first is outermost.
+/// A message filter outside that catches the calls the SDK can't even read -
+/// no tool name, arguments that aren't an object - which never get that far.
 /// </remarks>
 public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor redactor, string transport, TimeProvider time)
 {
     /// <summary>Set on a call's <see cref="MessageContext.Items"/> by the filter that refused it.</summary>
     internal const string RateLimitedItem = "DashyNMS.RateLimited";
+
+    /// <summary>Set on a call's items once it has its entry, for the message filter to see.</summary>
+    private const string RecordedItem = "DashyNMS.Audited";
 
     /// <summary>Client names longer than this are the client's problem, not the log's.</summary>
     private const int MaxName = 100;
@@ -55,8 +60,71 @@ public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor
         }
         finally
         {
-            Record(Entry(context, arrived, time.GetElapsedTime(started), status, result));
+            Record(context.Items, () => Entry(context, arrived, time.GetElapsedTime(started), status, result), arrived, context.User);
         }
+    }
+
+    /// <summary>Records a tools/call that failed before <see cref="RunAsync"/> saw it, and passes everything else by.</summary>
+    public async Task RunMessageAsync(MessageContext context, McpMessageHandler next, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+        if (context.JsonRpcMessage is not JsonRpcRequest { Method: RequestMethods.ToolsCall } request)
+        {
+            await next(context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var arrived = time.GetUtcNow();
+        var started = time.GetTimestamp();
+        try
+        {
+            await next(context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!context.Items.ContainsKey(RecordedItem))
+            {
+                var status = cancellationToken.IsCancellationRequested ? AuditStatus.Cancelled : AuditStatus.Rejected;
+                Record(context.Items, () => Entry(context, request, arrived, time.GetElapsedTime(started), status), arrived, context.User);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes the entry <paramref name="create"/> makes. Should what the client
+    /// sent defeat that, a bare one is written instead: a call that breaks its
+    /// own entry must not go unrecorded, nor fail because of it.
+    /// </summary>
+    private void Record(IDictionary<string, object?> items, Func<AuditEntry> create, DateTimeOffset arrived, ClaimsPrincipal? user)
+    {
+        items[RecordedItem] = true;
+        AuditEntry entry;
+        try
+        {
+            entry = create();
+        }
+        catch (Exception)
+        {
+            entry = new AuditEntry(arrived, transport, LabelOf(user), null, null, string.Empty, null, 0, AuditStatus.Failed, 0, TimeSpan.Zero);
+        }
+
+        foreach (var sink in sinks)
+        {
+            sink.Write(entry);
+        }
+    }
+
+    private static string? LabelOf(ClaimsPrincipal? user) => user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+    private AuditEntry Entry(MessageContext context, JsonRpcRequest request, DateTimeOffset arrived, TimeSpan duration, string status)
+    {
+        var client = context.Server.ClientInfo;
+        var parameters = request.Params as JsonObject;
+        var tool = parameters?["name"] is JsonValue value && value.TryGetValue<string>(out var name) ? name : null;
+        return new AuditEntry(
+            arrived, transport, LabelOf(context.User), Name(client?.Name), Name(client?.Version), Name(tool) ?? string.Empty,
+            null, (parameters?["arguments"] as JsonObject)?.Count ?? 0, status, 0, duration);
     }
 
     private AuditEntry Entry(RequestContext<CallToolRequestParams> context, DateTimeOffset arrived, TimeSpan duration, string status, CallToolResult? result)
@@ -73,7 +141,7 @@ public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor
         return new AuditEntry(
             arrived,
             transport,
-            context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            LabelOf(context.User),
             Name(client?.Name),
             Name(client?.Version),
             matched?.ProtocolTool.Name ?? Name(context.Params?.Name) ?? string.Empty,
@@ -82,14 +150,6 @@ public sealed class ToolCallAudit(IReadOnlyList<IAuditSink> sinks, AuditRedactor
             status,
             SizeOf(result),
             duration);
-    }
-
-    private void Record(AuditEntry entry)
-    {
-        foreach (var sink in sinks)
-        {
-            sink.Write(entry);
-        }
     }
 
     /// <summary>A name the client chose for itself or for a tool: as free as any text it sends.</summary>
@@ -148,8 +208,12 @@ public static class ToolCallAuditExtensions
         ArgumentNullException.ThrowIfNull(create);
         builder.Services.AddSingleton(create);
         builder.Services.AddOptions<McpServerOptions>().Configure<ToolCallAudit>((options, audit) =>
+        {
+            options.Filters.Message.IncomingFilters.Add(
+                next => (context, cancellationToken) => audit.RunMessageAsync(context, next, cancellationToken));
             options.Filters.Request.CallToolFilters.Add(
-                next => (context, cancellationToken) => audit.RunAsync(context, next, cancellationToken)));
+                next => (context, cancellationToken) => audit.RunAsync(context, next, cancellationToken));
+        });
         return builder;
     }
 }
