@@ -79,6 +79,7 @@ Each tool takes a device however you'd name it: hostname, display name, IP addre
 - **Secrets stay out of answers.** SNMP communities, passwords and hashes, RADIUS, TACACS, IPsec, NTP and OSPF keys, API and licence keys, private keys, and pfSense, OpenWrt and Brocade secrets are redacted before anything leaves the server, including secrets inside base64-encoded config. The rules were checked by hand against real backups from eleven vendor types.
 - **Your network's text is treated as data.** Device names, port descriptions, log lines and config text never appear as the server's own words, and the assistant is told not to take instructions from them.
 - **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
+- **Answers have a fixed shape.** Every tool declares an output schema, and returns its result as structured content as well as the same JSON as text, so a client can rely on field names.
 - **Every call is on record.** One line per tool call says who asked for what and how it went, with secrets redacted and nothing of the answer. See [the audit trail](#the-audit-trail).
 - **You choose the tools.** Turn any of them off with `MCP_TOOLS_DENY`, or list the only ones to offer in `MCP_TOOLS_ALLOW`.
 - **Your servers come first.** Requests to each of LibreNMS, Unimus and Graylog are capped (8 at once by default), however many questions are asked at once.
@@ -179,7 +180,7 @@ All settings are environment variables.
 | `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff,recent_config_changes,what_changed` for every one that can return something from Unimus. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
 | `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
 | `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
-| `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
+| `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns. It's sent twice, as text and as structured content, so the message is up to about twice as long. |
 
 ### The audit trail
 

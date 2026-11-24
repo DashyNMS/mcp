@@ -30,6 +30,8 @@
   -->
   <ItemGroup>
     <Compile Include="../DashyNMS.Agent.Tests/FixtureServer.cs" Link="FixtureServer.cs" />
+    <!-- What holds a result to its output schema (DashyNMS/mcp#40). -->
+    <Compile Include="../DashyNMS.Agent.Tests/JsonSchemaCheck.cs" Link="JsonSchemaCheck.cs" />
     <None Include="../DashyNMS.Agent.Tests/Fixtures/ConfigLookups/routes.json" Link="Fixtures/ConfigLookups/routes.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

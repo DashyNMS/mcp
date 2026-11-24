@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Health;
 using DashyNMS.Agent.Summaries;
 using ModelContextProtocol.Server;
@@ -53,12 +54,7 @@ public sealed class HealthTools(
         var readings = result.Readings;
 
         var shown = ToolResult.Take(readings, MaxReadings, out var omitted);
-        var data = new
-        {
-            device = DeviceBrief.From(device),
-            types = result.Types.Select(t => new { type = t.Type, count = t.Count }).ToList(),
-            readings = shown,
-        };
+        var data = new DeviceSensorsData(DeviceBrief.From(device), result.Types, shown);
 
         var type = SensorReading.ParseType(typeText);
         return ToolResult.Ok(Sentence(readings, readings.Count == 0 ? (type is null ? "No sensors on this device." : "No sensors of that type on this device.") : null), data, omitted);
