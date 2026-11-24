@@ -80,7 +80,7 @@ Each tool takes a device however you'd name it: hostname, display name, IP addre
 - **Your network's text is treated as data.** Device names, port descriptions, log lines and config text never appear as the server's own words, and the assistant is told not to take instructions from them.
 - **Answers stay small.** Every result is capped (16 KB by default), and says when something was left out.
 - **Every call is on record.** One line per tool call says who asked for what and how it went, with secrets redacted and nothing of the answer. See [the audit trail](#the-audit-trail).
-- **You choose the tools.** Turn any of them off with `MCP_TOOLS_DENY`, such as everything that returns config, or list the only ones to offer in `MCP_TOOLS_ALLOW`.
+- **You choose the tools.** Turn any of them off with `MCP_TOOLS_DENY`, or list the only ones to offer in `MCP_TOOLS_ALLOW`.
 - **Your servers come first.** Requests to each of LibreNMS, Unimus and Graylog are capped (8 at once by default), however many questions are asked at once.
 - **Tokens stay on your side.** They're read from the environment, never logged, and never sent anywhere but the server they're for. Use https:// for every service where you can: the server warns at startup about any on plain http, whose token or password would cross the network unencrypted.
 
@@ -176,7 +176,7 @@ All settings are environment variables.
 | `MCP_MAX_CONCURRENT_REQUESTS` | No | `8` | The most requests in flight to each of LibreNMS, Unimus and Graylog (1 to 256). More wait their turn, which never counts towards `LIBRENMS_TIMEOUT`. A call that waited a second or more says so in its result's `throttling`, so the assistant can slow down. |
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
-| `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff`. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
+| `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff,recent_config_changes,what_changed` for every one that can return something from Unimus. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
 | `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
 | `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
