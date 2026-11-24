@@ -328,7 +328,7 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.83`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
+`2.0.0-ci.84`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
 before pinning this Shared. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
@@ -374,6 +374,11 @@ one Core. The licence is unchanged.
 The move from `2.0.0-ci.79` to `2.0.0-ci.83` (core#90 Batch 5) holds one Core change,
 core#99: an optional `RequestGate` on the three clients, null by default. MCP sets it to
 cap requests in flight (#38); Shared's operations are unchanged, and so is the licence.
+
+The move from `2.0.0-ci.83` to `2.0.0-ci.84` (core#90 Batch 6) holds one Core change,
+core#101: event and alert log reads that continue back from a time, which the windowed
+tools use on busy networks (#70). An `ILogsApi` that doesn't say it can, such as mobile's
+connection-bound wrappers, is read as before. The licence is unchanged.
 
 #### Publication
 

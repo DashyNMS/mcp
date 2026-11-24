@@ -68,7 +68,7 @@ check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuG
 lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
 feed and restore with a token that has `packages: read`.
 
-The package is built against Core `2.0.0-ci.83` (MCP's pin; mobile moves to it from `2.0.0-ci.76` before adopting this release) and
+The package is built against Core `2.0.0-ci.84` (MCP's pin; mobile moves to it from `2.0.0-ci.76` before adopting this release) and
 declares it as a minimum. Before publication, CI runs the Shared tests on the exact
 packed binary with that Core. That is plain .NET
 evidence: a consumer must still verify its own restore, Release trimming/AOT and
