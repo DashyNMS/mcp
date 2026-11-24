@@ -31,8 +31,8 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
     /// <summary>Alert log entries carry what each alert matched, so they're much bigger.</summary>
     public const int AlertPage = 1000;
 
-    /// <summary>The most asked for at once, when more entries than a page share one second.</summary>
-    public const int MaxPage = 16_000;
+    /// <summary>The most asked for at once, when more entries than a page share one second: so many pages' worth.</summary>
+    public const int MaxPages = 8;
 
     /// <summary>Entries kept for an answer. An unfiltered question on a busy network stops here.</summary>
     public const int MaxKept = 10_000;
@@ -66,9 +66,12 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
             keep,
             cancellationToken);
 
-    /// <summary>From the newest entry, as a recovery after the window says how an alert in it ended.</summary>
+    /// <param name="toNow">
+    /// Whether to read from the newest entry, as a recovery after the window says
+    /// how an alert in it ended. What a change meant depends only on those before it.
+    /// </param>
     public Task<Fetched<DeviceTimeline.ReadBack<AlertLogEntry>>> AlertsAsync(
-        ILogsApi logs, int? deviceId, TimeWindow window, Func<AlertLogEntry, bool>? keep, CancellationToken cancellationToken)
+        ILogsApi logs, int? deviceId, TimeWindow window, Func<AlertLogEntry, bool>? keep, bool toNow, CancellationToken cancellationToken)
         => ReadAsync(
             depth => logs.ListAlertLogAsync(deviceId, depth, cancellationToken),
             logs.CanReadUpTo ? (upTo, limit) => logs.ListAlertLogUpToAsync(deviceId, upTo, limit, cancellationToken) : null,
@@ -76,7 +79,7 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
             a => a.TimeLogged,
             AlertPage,
             window,
-            start: null,
+            toNow ? null : Start(window),
             keep,
             cancellationToken);
 
@@ -104,12 +107,21 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
         DateTime? start,
         Func<T, bool>? keep,
         CancellationToken cancellationToken)
-        => upTo is null
-            ? DeviceTimeline.ReadBackAsync(newest, e => Sources.Utc(timeOf(e), options), window, cancellationToken)
-            : Sources.TryAsync(
-                async () => await PagesAsync(newest, upTo, idOf, timeOf, pageSize, window, start, keep, cancellationToken).ConfigureAwait(false)
-                    ?? await DeviceTimeline.ReadBackCoreAsync(newest, e => Sources.Utc(timeOf(e), options), window).ConfigureAwait(false),
-                cancellationToken);
+        => Sources.TryAsync(
+            async () =>
+            {
+                var read = upTo is null
+                    ? null
+                    : await PagesAsync(newest, upTo, idOf, timeOf, pageSize, window, start, keep, cancellationToken).ConfigureAwait(false);
+                read ??= await DeviceTimeline.ReadBackCoreAsync(newest, e => Sources.Utc(timeOf(e), options), window).ConfigureAwait(false);
+                if (read.CoveredSince > window.Since)
+                {
+                    SourceOutcomes.Current?.Partial();
+                }
+
+                return read;
+            },
+            cancellationToken);
 
     /// <summary>Null when the server ignores the time it's given.</summary>
     private async Task<DeviceTimeline.ReadBack<T>?> PagesAsync<T>(
@@ -181,12 +193,12 @@ internal sealed class LogReads(AgentOptions options, TimeProvider time)
             // A page all of one second says nothing about what's before it.
             if (fresh.Count == 0 || cursor == oldest)
             {
-                if (limit >= MaxPage)
+                if (limit >= pageSize * MaxPages)
                 {
                     return Stopped(ReadLimit);
                 }
 
-                limit = Math.Min(limit * 4, MaxPage);
+                limit = Math.Min(limit * 4, pageSize * MaxPages);
             }
             else
             {

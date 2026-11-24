@@ -52,7 +52,7 @@ public sealed class NetworkEventHistory(ILibreNmsClient client, FleetCache fleet
         // Filtered as they're read, so the filters reach further back on a busy network (#70).
         var logs = new LogReads(options, time);
         var events = log is "events" or "both" ? logs.EventsAsync(client.Logs, deviceId, window, Matches, cancellationToken) : null;
-        var alerts = log is "alerts" or "both" ? logs.AlertsAsync(client.Logs, deviceId, window, a => Wanted(a.DeviceId), cancellationToken) : null;
+        var alerts = log is "alerts" or "both" ? logs.AlertsAsync(client.Logs, deviceId, window, a => Wanted(a.DeviceId), toNow: false, cancellationToken) : null;
         var rules = alerts is null ? null : Sources.TryAsync(() => fleet.GetRulesAsync(cancellationToken), cancellationToken);
         await Task.WhenAll(new Task?[] { events, alerts, rules }.Where(t => t is not null)!).ConfigureAwait(false);
 

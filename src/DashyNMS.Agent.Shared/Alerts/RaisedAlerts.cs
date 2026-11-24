@@ -52,6 +52,7 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
             deviceId,
             window,
             a => (deviceId is null || a.DeviceId == deviceId) && scope.Includes(a.DeviceId, devices),
+            toNow: true,
             cancellationToken);
         var rules = Sources.TryAsync(() => client.Rules.ListAsync(cancellationToken), cancellationToken);
         var open = Sources.TryAsync(() => client.Alerts.ListAsync(AlertQuery.Open, cancellationToken), cancellationToken);
@@ -113,7 +114,7 @@ public sealed class RaisedAlerts(ILibreNmsClient client, DeviceDirectory directo
             ? $"{lead}: no alerts raised" + (severity is not null || deviceId is not null || !scope.IsEverything ? " that match." : ".")
             : $"{lead}: {DeviceHealth.Count(raised.Count, "alert")} raised{FaultNote(raised)} on {DeviceHealth.Count(raised.Select(r => r.DeviceId).Distinct().Count(), "device")} " +
               $"({severitySummary}); {openSummary}.";
-        summary += complete ? string.Empty : " " + EventWindowText.Shortfall("alert log", covered, log.Result.Value.Stopped);
+        summary += complete ? string.Empty : " " + EventWindowText.Shortfall("alert log", covered, log.Result.Value.Stopped, canContinue: false);
         summary += PagingNote(page);
 
         return new(summary, new RaisedAlertsData(EventWindowInfo.For(window, complete, covered, log.Result.Value.Stopped), groups, page),

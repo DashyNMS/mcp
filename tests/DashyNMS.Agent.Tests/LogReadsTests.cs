@@ -94,6 +94,33 @@ public sealed class LogReadsTests
         Assert.True(log.Asked.Sum() < 5000, string.Join(", ", log.Asked));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Alert_changes_in_the_past_start_at_the_windows_end_unless_what_came_after_matters(bool toNow)
+    {
+        var log = BusyLog.Every(TimeSpan.FromSeconds(1), TimeSpan.FromDays(2), _ => "alert");
+        var window = new TimeWindow(Now.AddHours(-30), Now.AddHours(-29.9));
+
+        var read = (await new LogReads(new AgentOptions(), _time).AlertsAsync(log, null, window, keep: null, toNow, CancellationToken.None)).Value!;
+
+        Assert.Equal(toNow ? LogReads.ReadLimit : null, read.Stopped);
+        Assert.Equal(toNow ? 0 : 361, read.Items.Count(a => window.Contains(DateTime.SpecifyKind(a.TimeLogged!.Value, DateTimeKind.Utc))));
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(24, true)]
+    public async Task A_window_not_read_in_full_is_recorded_as_partial(int hours, bool partial)
+    {
+        var log = BusyLog.Every(TimeSpan.FromSeconds(1), TimeSpan.FromDays(2), _ => "interface");
+        var outcomes = SourceOutcomes.Begin();
+
+        await Read(log, Last(TimeSpan.FromHours(hours)));
+
+        Assert.Equal(!partial, outcomes.IsComplete);
+    }
+
     [Fact]
     public async Task A_window_in_the_past_allows_for_a_server_keeping_local_time()
     {
@@ -234,8 +261,14 @@ public sealed class LogReadsTests
                 ? Answer(IgnoresTime ? _entries : _entries.Where(e => Shift(e.Time) <= upTo), limit)
                 : throw new NotSupportedException();
 
-        public Task<IReadOnlyList<AlertLogEntry>> ListAlertLogAsync(int? deviceId, int limit = 50, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AlertLogEntry>>([]);
+        public async Task<IReadOnlyList<AlertLogEntry>> ListAlertLogAsync(int? deviceId, int limit = 50, CancellationToken cancellationToken = default)
+            => Alerts(await ListEventLogAsync(deviceId, limit, cancellationToken));
+
+        public async Task<IReadOnlyList<AlertLogEntry>> ListAlertLogUpToAsync(int? deviceId, DateTime upTo, int limit, CancellationToken cancellationToken = default)
+            => Alerts(await ListEventLogUpToAsync(deviceId, upTo, limit, cancellationToken));
+
+        private static List<AlertLogEntry> Alerts(IReadOnlyList<EventLogEntry> entries)
+            => entries.Select(e => new AlertLogEntry { Id = e.Id, DeviceId = e.DeviceId, RuleId = 1, StateValue = 1, TimeLogged = e.Timestamp }).ToList();
 
         public Task<AlertLogEntry?> GetLatestForRuleAsync(int deviceId, int ruleId, int searchDepth = 50, CancellationToken cancellationToken = default)
             => Task.FromResult<AlertLogEntry?>(null);
