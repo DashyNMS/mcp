@@ -134,6 +134,14 @@ public sealed class McpOptions
     public required ToolPolicy Tools { get; init; }
 
     /// <summary>
+    /// Every credential the server holds, for keeping them out of the audit
+    /// trail (#18). The Graylog username is one, as an access token is given
+    /// as the username.
+    /// </summary>
+    internal IReadOnlyList<string> Secrets
+        => new[] { Connection.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().ToArray();
+
+    /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
     /// plain http sends its token or password across the network unencrypted.
     /// Printed at startup rather than refused, since some Unimus and Graylog

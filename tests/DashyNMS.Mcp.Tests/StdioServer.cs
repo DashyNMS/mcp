@@ -78,6 +78,13 @@ internal sealed class StdioServer : IDisposable
         return new StdioServer(Process.Start(start)!);
     }
 
+    /// <summary>Sends one message as it is, without waiting for anything.</summary>
+    public async Task SendAsync(string message, CancellationToken cancellationToken)
+    {
+        await _process.StandardInput.WriteLineAsync(message);
+        await _process.StandardInput.FlushAsync(cancellationToken);
+    }
+
     /// <summary>Sends a request and returns the response with the same ID, skipping any notifications in between.</summary>
     public async Task<JsonElement> RequestAsync(int id, string method, string parameters, CancellationToken cancellationToken)
     {
