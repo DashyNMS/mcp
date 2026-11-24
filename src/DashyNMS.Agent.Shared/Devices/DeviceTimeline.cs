@@ -45,8 +45,13 @@ public sealed record Timeline(
 /// When that stops short, the result says so instead of passing off part of the
 /// window as all of it.
 /// </remarks>
-public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options, TimeProvider? time = null)
+public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options, TimeProvider time)
 {
+    public DeviceTimeline(ILibreNmsClient client, AgentOptions options)
+        : this(client, options, TimeProvider.System)
+    {
+    }
+
     public const int FirstDepth = 200;
     public const int MaxDepth = 2000;
 
@@ -56,7 +61,7 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options,
         ArgumentNullException.ThrowIfNull(window);
         var id = device.DeviceId;
 
-        var logs = new LogReads(options, time ?? TimeProvider.System);
+        var logs = new LogReads(options, time);
         var events = logs.EventsAsync(client.Logs, id, window, keep: null, cancellationToken);
         var alertLog = logs.AlertsAsync(client.Logs, id, window, keep: null, toNow: false, cancellationToken);
         var outages = Sources.TryAsync(() => client.Devices.GetOutagesAsync(id, cancellationToken), cancellationToken);

@@ -94,6 +94,7 @@ public sealed class DeviceScope(ILibreNmsClient client, DeviceDirectory director
             cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
+                SourceOutcomes.NoteCached();
                 return fetched;
             }
 

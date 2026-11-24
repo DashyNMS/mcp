@@ -221,6 +221,13 @@ public sealed class LogReadsTests
         Assert.Contains("the start of the window isn't covered", busy.Summary, StringComparison.Ordinal);
         Assert.Contains("until", busy.Summary, StringComparison.Ordinal);
 
+        // On a log that can't be read back from a time too, where that's all there is to say.
+        nms.Client.Logs.Returns(new BusyLog(Enumerable.Range(0, 5000).Select(i => (Now.AddSeconds(-i), "interface"))) { CanReadUpTo = false });
+        var capped = (await history.ReadAsync(new NetworkEventsRequest(Hours: 168))).Data.Window;
+        Assert.False(capped.WindowComplete);
+        Assert.Equal(new EventGap(capped.Since, capped.CoveredSince!.Value, "depth_limit"), capped.NotCovered);
+        nms.Client.Logs.Returns(BusyLog.Every(TimeSpan.FromSeconds(1), TimeSpan.FromDays(8), _ => "interface"));
+
         var quiet = await history.ReadAsync(new NetworkEventsRequest(Hours: 24, Type: "reboot"));
         Assert.True(quiet.Data.Window.WindowComplete);
         Assert.Null(quiet.Data.Window.NotCovered);

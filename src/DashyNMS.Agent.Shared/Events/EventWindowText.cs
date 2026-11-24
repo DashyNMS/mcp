@@ -11,18 +11,22 @@ public sealed record EventWindowInfo(DateTime Since, DateTime Until, bool Window
         => new(window.Since, window.Until, complete, complete ? null : covered)
         {
             // A read from now may not have got as far back as the window's end.
-            NotCovered = !complete && covered is { } until && stopped is not null
-                ? new EventGap(window.Since, until < window.Until ? until : window.Until, stopped)
+            NotCovered = !complete && covered is { } until
+                ? new EventGap(window.Since, until < window.Until ? until : window.Until, stopped ?? EventGap.DepthLimit)
                 : null,
         };
 }
 
 /// <param name="Reason">
+/// depth_limit (the log can only be read from its newest entry, and no further back),
 /// read_limit (more entries than one call reads), time_limit (reading further took
 /// too long) or source_failed (LibreNMS stopped answering part way). The gap can be
 /// asked for on its own, with <paramref name="Until"/> as the window's end.
 /// </param>
-public sealed record EventGap(DateTime Since, DateTime Until, string Reason);
+public sealed record EventGap(DateTime Since, DateTime Until, string Reason)
+{
+    internal const string DepthLimit = "depth_limit";
+}
 
 /// <summary>Consistent coverage and time-window wording for all historical tools.</summary>
 public static class EventWindowText

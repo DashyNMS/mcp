@@ -63,6 +63,7 @@ public sealed class FleetCache(ILibreNmsClient client, TimeProvider time)
                 cancellationToken.ThrowIfCancellationRequested();
                 if (Fresh() is { } fetched)
                 {
+                    SourceOutcomes.NoteCached();
                     return fetched;
                 }
 
