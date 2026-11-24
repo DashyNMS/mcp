@@ -142,10 +142,7 @@ public sealed class RequestLoadTests
         private static object Device(int id)
             => new { device_id = id, hostname = $"switch{id}.example.net", ip = $"192.0.2.{id}", status = 1, disabled = 0, ignore = 0 };
 
-        public void Dispose()
-        {
-            _listener.Stop();
-            _listener.Close();
-        }
+        // As FixtureServer: stopping first would have Close listen again.
+        public void Dispose() => _listener.Close();
     }
 }
