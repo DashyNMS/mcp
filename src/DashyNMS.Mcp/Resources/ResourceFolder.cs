@@ -130,22 +130,28 @@ public sealed class ResourceFolder
     private List<Entry> Entries()
     {
         var entries = new List<Entry>();
+        Collect(new DirectoryInfo(_root), string.Empty, entries, depth: 0);
+        return entries;
+    }
+
+    /// <summary>What's directly in a folder; nothing when it can't be read, which is no reason to lose the rest.</summary>
+    private List<FileSystemInfo> Contents(DirectoryInfo directory)
+    {
         try
         {
-            Collect(new DirectoryInfo(_root), string.Empty, entries, depth: 0);
+            return directory.EnumerateFileSystemInfos().OrderBy(i => i.Name, StringComparer.Ordinal).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning("The resources folder couldn't be read: {Reason}", ex.Message);
+            _logger.LogWarning("Part of the resources folder couldn't be read: {Reason}", ex.Message);
+            return [];
         }
-
-        return entries;
     }
 
     private void Collect(DirectoryInfo directory, string prefix, List<Entry> entries, int depth)
     {
         const int maxDepth = 8;
-        foreach (var item in directory.EnumerateFileSystemInfos().OrderBy(i => i.Name, StringComparer.Ordinal))
+        foreach (var item in Contents(directory))
         {
             // Links are skipped whole: what they point at may be anywhere.
             if (entries.Count >= MaxFiles || item.Name.StartsWith('.') || item.Attributes.HasFlag(FileAttributes.ReparsePoint) || item.Attributes.HasFlag(FileAttributes.Hidden))
