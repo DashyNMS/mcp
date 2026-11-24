@@ -145,7 +145,7 @@ public sealed class GelfAuditSink : BackgroundService, IAuditSink
     private static string Describe(Exception ex) => ex switch
     {
         HttpRequestException { StatusCode: { } status } => $"HTTP {(int)status}",
-        HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => $"its certificate isn't trusted; see {McpOptions.AuditGelfTrustedCerts}",
+        HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => "its certificate isn't trusted; see AUDIT_GELF_TRUSTED_CERTS",
         HttpRequestException http => http.HttpRequestError.ToString(),
         SocketException socket => socket.SocketErrorCode.ToString(),
         OperationCanceledException => "timed out",
