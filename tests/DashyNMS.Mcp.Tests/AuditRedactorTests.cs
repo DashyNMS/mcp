@@ -55,6 +55,16 @@ public sealed class AuditRedactorTests
     }
 
     [Fact]
+    public void A_credential_given_as_a_number_is_redacted_too()
+    {
+        var redactor = new AuditRedactor(new Redactor(), ["73928146"]);
+
+        var (recorded, _) = redactor.Arguments(Read("""{"limit":73928146,"device":1073928146,"query":7392,"levels":[73928146,5]}"""), Schema);
+
+        Assert.Equal("""{"limit":"[redacted]","device":"10[redacted]","query":7392,"levels":["[redacted]",5]}""", recorded.ToJsonString());
+    }
+
+    [Fact]
     public void Long_text_is_recorded_by_its_length()
     {
         var recorded = Arguments(JsonSerializer.Serialize(new { query = "start " + new string('x', 400) + " password=hunter2" }));
