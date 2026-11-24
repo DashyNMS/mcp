@@ -143,7 +143,9 @@ public sealed class LibreNmsCompatibilityTests
 
         // One list request per call, however many faults.
         Assert.Equal(calls + 1, _nms.Transport.Requests.Count(r => r.StartsWith("faults?state=1", StringComparison.Ordinal)));
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(20), $"Took {timer.Elapsed}");
+
+        // Only against work that grows out of hand: a CI runner shares its processors with the other tests.
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(60), $"Took {timer.Elapsed}");
     }
 
     /// <summary>Core's eight-core estate: device 7's eight cores, each answerable by ID. Returns their fault IDs.</summary>
