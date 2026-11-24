@@ -80,10 +80,12 @@ public sealed class GelfAuditSink : BackgroundService, IAuditSink
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         // No more come, so the loop ends by itself once what's queued has gone.
+        // Not the host's token: it may already be out of time by now, spent on
+        // calls whose entries these are.
         _queue.Writer.TryComplete();
         if (ExecuteTask is { } sending)
         {
-            await Task.WhenAny(sending, Task.Delay(FlushTimeout, cancellationToken)).ConfigureAwait(false);
+            await Task.WhenAny(sending, Task.Delay(FlushTimeout, CancellationToken.None)).ConfigureAwait(false);
         }
 
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
