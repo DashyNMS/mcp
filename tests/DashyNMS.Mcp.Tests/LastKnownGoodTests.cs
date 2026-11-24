@@ -262,19 +262,23 @@ public sealed class LastKnownGoodTests : IDisposable
     {
         Keep(Answers("one", onDisk: true), "a", "1");
         Keep(Answers("two", onDisk: true), "a", "2");
-        Directory.CreateDirectory(Path.Combine(_directory, "not ours"));
-        var old = Path.GetDirectoryName(Files()[0])!;
-        var kept = Path.GetDirectoryName(Files()[1])!;
+        var files = Files();
+        var old = Path.GetDirectoryName(files[0])!;
+        var kept = Path.GetDirectoryName(files[1])!;
+
+        // Someone else's: one named nothing like ours, and one that is but holds something we didn't write.
+        var others = new[] { Path.Combine(_directory, new string('a', 32)), Path.Combine(_directory, "dashynms-notes") };
+        var theirs = others.Select(o => Path.Combine(Directory.CreateDirectory(o).FullName, "file.txt")).ToList();
+        theirs.ForEach(t => File.WriteAllText(t, "theirs"));
         var longAgo = _clock.GetUtcNow().UtcDateTime - TimeSpan.FromHours(McpOptions.MaximumLastKnownGoodHours + 1);
-        File.SetLastWriteTimeUtc(Files()[0], longAgo);
-        Directory.SetLastWriteTimeUtc(old, longAgo);
-        Directory.SetLastWriteTimeUtc(Path.Combine(_directory, "not ours"), longAgo);
+        theirs.Append(files[0]).ToList().ForEach(f => File.SetLastWriteTimeUtc(f, longAgo));
+        others.Append(old).ToList().ForEach(d => Directory.SetLastWriteTimeUtc(d, longAgo));
 
         _ = Answers("three", onDisk: true);
 
         Assert.False(Directory.Exists(old));
         Assert.True(Directory.Exists(kept));
-        Assert.True(Directory.Exists(Path.Combine(_directory, "not ours")));
+        Assert.All(theirs, t => Assert.True(File.Exists(t)));
     }
 
     [Fact]
