@@ -16,7 +16,7 @@ internal sealed class StdioServer : IDisposable
     /// inherited environment so a developer's own configuration can't leak into
     /// a test and quietly change what it proves.
     /// </summary>
-    private static readonly string[] SettingPrefixes = ["LIBRENMS_", "UNIMUS_", "GRAYLOG_", "MCP_"];
+    private static readonly string[] SettingPrefixes = ["LIBRENMS_", "UNIMUS_", "GRAYLOG_", "MCP_", "AUDIT_"];
 
     private readonly Process _process;
     private readonly StringBuilder _stderr = new();

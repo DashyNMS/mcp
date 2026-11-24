@@ -167,6 +167,8 @@ All settings are environment variables.
 | `MCP_RATE_LIMIT_PER_MINUTE` | No | `0` | The most tool calls each client may make in any minute (up to 10000), or `0` for no limit. Over HTTP each token is a client. A call over the limit isn't run, and its result says how long to wait. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
 | `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff`. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
+| `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
+| `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns |
 
 ### The audit trail
@@ -189,6 +191,8 @@ Every tool call leaves one line of JSON on stderr, beside the server's other log
 | `status` | `ok`, `error` (the tool couldn't answer), `rejected` (no such tool, one that's off, or arguments that don't fit), `rate_limited`, `cancelled` or `failed` |
 | `result_bytes` | The size of the result: its text in UTF-8, plus any image |
 | `duration_ms` | How long the call took |
+
+With `AUDIT_GELF_URL` set, entries also go to Graylog, as GELF messages with the same fields (`_tool`, `_token_label`, `_arguments` as JSON text, and so on). Delivery is best effort and never holds up a call: if Graylog can't keep up or can't be reached, the server logs that once and carries on, and stderr still has every entry.
 
 What a tool returned is never recorded. Arguments still name your devices and say what was searched for, so treat the trail as you would any other log of your network.
 
