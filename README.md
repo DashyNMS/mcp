@@ -111,13 +111,28 @@ Docker keeps using the copy it already has, so to update, pull again and restart
 docker pull ghcr.io/dashynms/mcp:latest
 ```
 
+**Without Docker**, from 2.0: each [release](https://github.com/DashyNMS/mcp/releases) has one self-contained program per platform, with nothing else to install. Download the archive for yours, check it against `SHA256SUMS`, and unpack it anywhere:
+
+| Platform | Archive |
+| --- | --- |
+| Windows | `dashynms-mcp-<version>-win-x64.zip`, `-win-arm64.zip` |
+| macOS | `dashynms-mcp-<version>-osx-arm64.tar.gz` (Apple silicon), `-osx-x64.tar.gz` (Intel) |
+| Linux | `dashynms-mcp-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz` (glibc; on Alpine use the image) |
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS      # on macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+gh attestation verify dashynms-mcp-*.tar.gz --repo DashyNMS/mcp   # optional: that it was built here
+```
+
+The macOS builds are signed and notarised. The Windows ones aren't signed yet, so SmartScreen may ask the first time. It reads its settings from the environment, and speaks stdio or HTTP exactly as the image does.
+
 You can also build it yourself from source; see the [developer guide](docs/DEVELOPMENT.md).
 
 ## What you need
 
 - A LibreNMS server you can reach, with its API turned on.
 - An API token for a **read-only** LibreNMS user. In LibreNMS, open the settings menu, then **API → API Tokens**, and create one for that user.
-- Docker, or the .NET 10 SDK to build from source.
+- Docker, a [standalone program](#get-it), or the .NET 10 SDK to build from source.
 - Optionally, Unimus (1.7 or later) and Graylog (2.1 or later, tested up to 7.2), for `what_changed` and `search_logs`.
 
 **Give that user global read** for network-wide sensor questions ("is anything running hot?"). LibreNMS only gives its network-wide sensor list to users with its global read role or, on versions with custom roles, one with the `sensor.view` permission. Without it, `device_sensors` still works, and `health_overview` reads devices one by one: up to 25 in a device group or location in full, and a larger scope for about 20 seconds at a time, alerting devices first. The answer then says how many devices it covers, and asking again within a few minutes carries on from there. A new permission is noticed within 10 minutes.
@@ -140,6 +155,19 @@ claude mcp add dashynms -e LIBRENMS_URL=https://librenms.example.com -e LIBRENMS
     "dashynms": {
       "command": "docker",
       "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\dashynms.env", "ghcr.io/dashynms/mcp:latest"]
+    }
+  }
+}
+```
+
+With a [standalone program](#get-it), `command` is its full path, there are no `args`, and the settings go in `env`:
+
+```json
+{
+  "mcpServers": {
+    "dashynms": {
+      "command": "C:\\path\\to\\dashynms-mcp.exe",
+      "env": { "LIBRENMS_URL": "https://librenms.example.com", "LIBRENMS_TOKEN": "your-token" }
     }
   }
 }

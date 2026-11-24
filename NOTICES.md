@@ -26,6 +26,12 @@ chiseled base layers are not covered by that inventory and keep their
 publishers' terms. Images published before this change carry the earlier
 PolyForm Internal Use labels and no bundled notices.
 
+## Standalone binaries
+
+Each archive carries LICENSE, this file and third-party/: the same verbatim
+licences and inventory as the image for every package in the executable, and
+the notices of the .NET and ASP.NET Core runtimes it contains.
+
 ## Shared package
 
 DashyNMS.Agent.Shared bundles LICENSE and this file. It contains no dependency

@@ -1,0 +1,197 @@
+name: Standalone binaries
+
+# One self-contained executable per platform, for people without Docker or the
+# .NET SDK (#36). Pull requests and manual runs build and test them; a v* tag
+# also attaches them to its GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release-binaries.yml
+      - scripts/publish-binary.py
+      - scripts/smoke-binary.py
+      - scripts/macos/**
+      - scripts/collect-dependency-notices.py
+      - docs/dependency-licences/**
+      - src/**
+      - Directory.Build.props
+      - global.json
+      - LICENSE
+      - NOTICES.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tag names the release, and the version set beforehand is what the
+      # server reports to clients, so they must agree.
+      - name: Check the tag against the project's version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          project=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          version=$project-ci.$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT
+          if [ "$REF_TYPE" = tag ]; then
+            version=${REF_NAME#v}
+            if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || [ "${version%%-*}" != "$project" ]; then
+              echo "::error::The tag $REF_NAME doesn't match <Version> $project in Directory.Build.props."
+              exit 1
+            fi
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.runtime }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each on its own platform, so the smoke test runs the real thing.
+        include:
+          - runtime: win-x64
+            os: windows-latest
+          - runtime: win-arm64
+            os: windows-11-arm
+          - runtime: osx-arm64
+            os: macos-latest
+          - runtime: osx-x64
+            os: macos-15-intel
+          - runtime: linux-x64
+            os: ubuntu-24.04
+          - runtime: linux-arm64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    # The signing secrets, for a release's macOS builds and nothing else.
+    environment: ${{ github.ref_type == 'tag' && startsWith(matrix.runtime, 'osx-') && 'DashyNMS_MacOS' || '' }}
+    steps:
+      # The licence evidence is checked by hash, so line endings must be as committed.
+      - name: Keep line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Build
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: python scripts/publish-binary.py build ${{ matrix.runtime }} "$VERSION" "$GITHUB_SHA" artifacts
+      # Windows builds stay unsigned, as desktop's do (DashyNMS/desktop#109).
+      - name: Sign and notarise for macOS
+        if: github.ref_type == 'tag' && startsWith(matrix.runtime, 'osx-')
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: scripts/macos/sign.sh "artifacts/dashynms-mcp-$VERSION-${{ matrix.runtime }}/dashynms-mcp"
+      - name: Pack
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: python scripts/publish-binary.py pack ${{ matrix.runtime }} "$VERSION" artifacts artifacts/packed
+      - name: Smoke test
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+          PYTHONUTF8: "1"
+        run: |
+          archive=$(find artifacts/packed -name '*.zip' -o -name '*.tar.gz')
+          python scripts/smoke-binary.py "$archive" "$VERSION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: binary-${{ matrix.runtime }}
+          path: artifacts/packed/
+          if-no-files-found: error
+          retention-days: 14
+
+  # One folder of everything, checked as a whole, whether or not it's published.
+  collect:
+    name: Checksums
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: binary-*
+          path: packed
+          merge-multiple: true
+      - name: Check every platform is here, once, as it was packed
+        working-directory: packed
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: |
+          printf '%s\n' dashynms-mcp-"$VERSION"-{linux-arm64,linux-x64,osx-arm64,osx-x64}.tar.gz dashynms-mcp-"$VERSION"-{win-arm64,win-x64}.zip > ../expected
+          ls | grep -v '\.sha256$' | diff ../expected -
+          cat ./*.sha256 > ../SHA256SUMS
+          sha256sum --check --strict ../SHA256SUMS
+          rm ./*.sha256
+          mv ../SHA256SUMS .
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-binaries
+          path: packed/
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Attach to the release
+    needs: [version, collect]
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.repository == 'DashyNMS/mcp'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attaches the binaries
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-binaries
+          path: packed
+      - name: Check the bytes
+        working-directory: packed
+        run: sha256sum --check --strict SHA256SUMS
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: packed/dashynms-mcp-*
+      # A draft when there's no release yet, for its notes to be written. Never
+      # over a file that's already there: a published binary doesn't change.
+      - name: Attach
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            prerelease=()
+            [[ $TAG == *-* ]] && prerelease=(--prerelease)
+            gh release create "$TAG" --draft --verify-tag --title "${TAG#v}" --notes "" "${prerelease[@]}"
+          fi
+          gh release upload "$TAG" packed/*
