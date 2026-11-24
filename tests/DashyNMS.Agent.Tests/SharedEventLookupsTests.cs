@@ -297,7 +297,7 @@ public sealed class SharedEventLookupsTests
         Assert.Equal("read_limit", result.Data.Window.NotCovered!.Reason);
         Assert.Equal(result.Data.Window.CoveredSince, result.Data.Window.NotCovered.Until);
         Assert.Equal(4, server.Requests.Count(p => p == "logs/eventlog"));
-        Assert.Equal(LogReads.MaxPage, result.Data.Page.Total);
+        Assert.Equal(LogReads.EventPage * LogReads.MaxPages, result.Data.Page.Total);
         Assert.Single(result.Data.Entries);
         host.Dispose();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ReadDeviceAsync(new(1)));

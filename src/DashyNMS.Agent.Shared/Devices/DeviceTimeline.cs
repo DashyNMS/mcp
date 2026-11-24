@@ -58,7 +58,7 @@ public sealed class DeviceTimeline(ILibreNmsClient client, AgentOptions options,
 
         var logs = new LogReads(options, time ?? TimeProvider.System);
         var events = logs.EventsAsync(client.Logs, id, window, keep: null, cancellationToken);
-        var alertLog = logs.AlertsAsync(client.Logs, id, window, keep: null, cancellationToken);
+        var alertLog = logs.AlertsAsync(client.Logs, id, window, keep: null, toNow: false, cancellationToken);
         var outages = Sources.TryAsync(() => client.Devices.GetOutagesAsync(id, cancellationToken), cancellationToken);
         var rules = Sources.TryAsync(() => client.Rules.ListAsync(cancellationToken), cancellationToken);
         await Task.WhenAll(events, alertLog, outages, rules).ConfigureAwait(false);

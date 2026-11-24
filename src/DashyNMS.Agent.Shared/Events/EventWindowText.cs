@@ -10,7 +10,10 @@ public sealed record EventWindowInfo(DateTime Since, DateTime Until, bool Window
     internal static EventWindowInfo For(TimeWindow window, bool complete, DateTime? covered, string? stopped)
         => new(window.Since, window.Until, complete, complete ? null : covered)
         {
-            NotCovered = !complete && covered is { } until && stopped is not null ? new EventGap(window.Since, until, stopped) : null,
+            // A read from now may not have got as far back as the window's end.
+            NotCovered = !complete && covered is { } until && stopped is not null
+                ? new EventGap(window.Since, until < window.Until ? until : window.Until, stopped)
+                : null,
         };
 }
 
@@ -37,15 +40,21 @@ public static class EventWindowText
         => EventWindowInfo.For(window, result.WindowComplete, result.CoveredSince, result.Stopped);
 
     /// <summary>How far back <paramref name="logs"/> reach, when that's short of the window, and what to do about it.</summary>
-    internal static string Shortfall(string logs, DateTime covered, string? stopped)
-        => $"LibreNMS's {logs} {(stopped is null ? "only reach" + (logs.EndsWith('s') ? string.Empty : "es") : (logs.EndsWith('s') ? "were" : "was") + " read")} back to {covered:yyyy-MM-dd HH:mm} UTC, " +
-            "so the start of the window isn't covered." + stopped switch
-            {
-                LogReads.ReadLimit => " More entries are in it than one call reads: narrow it by type, device, group or location, or ask for the rest with until set to then.",
-                LogReads.TimeLimit => " Reading further took too long: ask for the rest with until set to then.",
-                LogReads.SourceFailed => " LibreNMS stopped answering part way: try again.",
-                _ => string.Empty,
-            };
+    /// <param name="canContinue">Whether asking for the part missing, with until, reads on from there.</param>
+    internal static string Shortfall(string logs, DateTime covered, string? stopped, bool canContinue = true)
+    {
+        var plural = logs.EndsWith('s');
+        var reach = stopped is null ? (plural ? "only reach" : "only reaches") : (plural ? "were read" : "was read");
+        var rest = canContinue ? "ask for the rest with until set to then" : "ask about a window closer to now";
+        var advice = stopped switch
+        {
+            LogReads.ReadLimit => $" More entries are in it than one call reads: narrow it by {(canContinue ? "type, " : string.Empty)}device, group or location, or {rest}.",
+            LogReads.TimeLimit => $" Reading further took too long: narrow it, or {rest}.",
+            LogReads.SourceFailed => " LibreNMS stopped answering part way: try again.",
+            _ => string.Empty,
+        };
+        return $"LibreNMS's {logs} {reach} back to {covered:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.{advice}";
+    }
 
     public static string TimelineSentence(Timeline result, TimeWindow window, DateTime now)
         => $"{Describe(window, now)}: {DeviceHealth.Count(result.Events, "event")}, " +
