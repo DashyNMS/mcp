@@ -93,7 +93,6 @@ jobs:
     uses: ./.github/workflows/image.yml
     with:
       version: ${{ needs.version.outputs.version }}
-      channel: release
 
   image:
     name: Publish container image

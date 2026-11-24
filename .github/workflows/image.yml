@@ -12,10 +12,6 @@ on:
       version:
         type: string
         required: true
-      channel:
-        description: edge, nightly or release; used for image metadata
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -44,11 +40,6 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=${{ inputs.version }}
-            type=raw,value=edge,enable=${{ inputs.channel == 'edge' }}
-            type=sha,format=short,enable=${{ inputs.channel == 'edge' }}
-            type=raw,value=nightly,enable=${{ inputs.channel == 'nightly' }}
-            type=raw,value=latest,enable=${{ inputs.channel == 'release' }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ inputs.channel == 'release' }}
           flavor: |
             latest=false
           labels: |
@@ -164,7 +155,9 @@ jobs:
             VERSION=${{ inputs.version }}
           platforms: linux/amd64,linux/arm64
           outputs: type=oci,dest=${{ runner.temp }}/image.tar
-          tags: ${{ steps.meta.outputs.tags }}
+          # A single reference keeps the OCI archive unambiguous to Skopeo.
+          # Channel aliases are applied only by image-publish.yml.
+          tags: ${{ env.IMAGE }}:${{ inputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
@@ -176,6 +169,7 @@ jobs:
       # Exercise the same OCI reader used by publication before any publisher runs.
       - name: Verify the OCI archive can be copied with its digests intact
         run: |
+          python3 scripts/verify-oci-archive.py "$RUNNER_TEMP/image.tar"
           sudo apt-get update
           sudo apt-get install --yes skopeo
           skopeo copy --all --preserve-digests "oci-archive:$RUNNER_TEMP/image.tar" "oci:$RUNNER_TEMP/image-check:checked"
