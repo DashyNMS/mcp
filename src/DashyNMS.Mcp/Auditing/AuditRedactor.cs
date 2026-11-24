@@ -50,8 +50,37 @@ public sealed class AuditRedactor
         _secrets = secrets.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct(StringComparer.Ordinal).OrderByDescending(s => s.Length).ToArray();
     }
 
-    /// <summary>The length of the longest credential: how much of one the end of a cut text can hold.</summary>
-    internal int LongestSecret => _secrets.Length > 0 ? _secrets[0].Length : 0;
+    /// <summary>
+    /// The start of <paramref name="text"/>, at most <paramref name="length"/>
+    /// of it, with any credential the cut would go through left out whole: half
+    /// of one isn't found. It only looks around the cut, so it costs the same
+    /// however long the text is.
+    /// </summary>
+    internal string Start(string text, int length)
+    {
+        if (text.Length <= length)
+        {
+            return text;
+        }
+
+        var cut = length;
+        for (var i = 0; i < _secrets.Length; i++)
+        {
+            var secret = _secrets[i];
+            var from = Math.Max(0, cut - secret.Length + 1);
+            var around = text.AsSpan(from, Math.Min(text.Length, cut + secret.Length - 1) - from);
+
+            // Anything found here starts before the cut and ends after it.
+            if (cut > 0 && around.IndexOf(secret, StringComparison.Ordinal) is var found and >= 0)
+            {
+                // The cut has moved, perhaps into one already looked for.
+                cut = from + found;
+                i = -1;
+            }
+        }
+
+        return text[..cut];
+    }
 
     public string Text(string text)
     {
