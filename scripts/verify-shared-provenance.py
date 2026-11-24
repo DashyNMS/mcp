@@ -8,7 +8,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import subprocess
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -38,8 +37,15 @@ if args.for_publication and not (source['event'] in ('push', 'schedule', 'workfl
                                  and (source['ref'], source['refProtected']) == ('refs/heads/main', 'true')):
     raise SystemExit('Publication requires a run on protected main')
 base = ET.parse(artifacts.parent / 'Directory.Build.props').findtext('.//Version')
-if not re.fullmatch(re.escape(base) + r'(-(edge|nightly)\.[0-9]+)?', version):
-    raise SystemExit(f'{version} is not an edge, nightly or release version of {base}')
+# What this run may publish: its own edge or nightly number, or a release, which
+# only a dispatched run makes. Checks that publish nothing use edge.0.
+allowed = {f"{base}-{channel}.{os.environ['GITHUB_RUN_NUMBER']}" for channel in ('edge', 'nightly')}
+if source['event'] == 'workflow_dispatch':
+    allowed.add(base)
+if not args.for_publication:
+    allowed.add(f'{base}-edge.0')
+if version not in allowed:
+    raise SystemExit(f'{version} is not a version this run may build: {sorted(allowed)}')
 expected = f'DashyNMS.Agent.Shared.{version}.nupkg'
 if (report['package'], report['version'], report['repositoryCommit']) != (expected, version, commit):
     raise SystemExit('Provenance identity does not match the expected workflow run')

@@ -52,10 +52,10 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       sign: true
 
-  # Published only once every binary has built and passed.
+  # Last, because it moves the tags people follow.
   image:
     name: Container image
-    needs: [version, ci, binaries]
+    needs: [version, shared]
     uses: ./.github/workflows/image.yml
     permissions:
       contents: read
@@ -66,7 +66,7 @@ jobs:
 
   shared:
     name: Shared package
-    needs: [version, image]
+    needs: [version, ci, binaries]
     uses: ./.github/workflows/shared-package.yml
     permissions:
       contents: read
@@ -78,15 +78,12 @@ jobs:
 
   publish:
     name: Publish
-    needs: [version, shared]
+    needs: [version, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release and its files
       id-token: write
       attestations: write
-    concurrency:
-      group: edge-release
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -108,4 +105,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
           COMMIT: ${{ needs.version.outputs.commit }}
-        run: scripts/publish-edge.sh "$VERSION" "$COMMIT" packed/*
+        # Named for the build, so it always lists the files beside it.
+        run: |
+          mv packed/SHA256SUMS "packed/SHA256SUMS-$VERSION"
+          scripts/publish-edge.sh "$VERSION" "$COMMIT" packed/*

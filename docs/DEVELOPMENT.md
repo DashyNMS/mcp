@@ -100,7 +100,7 @@ Every DashyNMS repository builds the same way.
 | **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
 
-Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
+Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. The image goes last, because it moves the tags people follow; `edge` only moves for `main`'s newest commit. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
 
 **Releasing:** check that `docs/releases/<version>.md` reads well, then tag `main`'s newest commit and push only the tag:
 
@@ -108,7 +108,7 @@ Each also publishes the image under its exact version. The builds share `binarie
 git tag v2.0.0 origin/main && git push origin v2.0.0
 ```
 
-The tag has to match `<Version>` in `Directory.Build.props`. Don't create the release on GitHub first, because everyone watching would be told about an empty one: the build creates it at the end, with its [notes](#release-notes). A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`, so later edge and nightly builds rank above the release.
+The tag has to match `<Version>` in `Directory.Build.props`. Don't create the release on GitHub first, because everyone watching would be told about an empty one: the build creates it at the end, with its [notes](#release-notes). A release needs Core pinned to a release too, or the build stops before publishing anything. Then raise `<Version>`, so later edge and nightly builds rank above the release.
 
 If it fails there's no release:
 
@@ -147,7 +147,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 3. `scripts/publish-binary.py pack`: one archive and its SHA-256.
 4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
 
-Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Nightly and release files don't change once published; the edge release's are replaced by each build.
+Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Nightly and release files don't change once published, unless a release's build is run again to finish it; the edge release's are replaced by each build, with their checksums as `SHA256SUMS-<version>`.
 
 ## Rules for tools
 

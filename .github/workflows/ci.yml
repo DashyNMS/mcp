@@ -34,7 +34,7 @@ jobs:
       # Never published: edge builds are numbered from 1.
       - name: Work out the version
         id: version
-        run: echo "version=$(python3 scripts/build_version.py edge | sed -n 's/^version=\(.*\)\.[0-9]*$/\1.0/p')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(GITHUB_OUTPUT=/dev/null python3 scripts/build_version.py edge | sed -n 's/^version=\(.*\)\.[0-9]*$/\1.0/p')" >> "$GITHUB_OUTPUT"
 
   # The solution's build and tests, and the Shared package's checks.
   shared:
@@ -53,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:

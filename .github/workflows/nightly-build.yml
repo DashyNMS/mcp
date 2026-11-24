@@ -64,10 +64,10 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       sign: true
 
-  # Published only once every binary has built and passed.
+  # Last, because it moves the tags people follow.
   image:
     name: Container image
-    needs: [version, ci, binaries]
+    needs: [version, shared]
     uses: ./.github/workflows/image.yml
     permissions:
       contents: read
@@ -78,7 +78,7 @@ jobs:
 
   shared:
     name: Shared package
-    needs: [version, image]
+    needs: [version, ci, binaries]
     uses: ./.github/workflows/shared-package.yml
     permissions:
       contents: read
@@ -90,7 +90,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [version, shared]
+    needs: [version, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release and its files

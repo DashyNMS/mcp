@@ -32,8 +32,18 @@ jobs:
       packages: write # publishes the image; also reads DashyNMS.Core
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Builds can finish out of order. A newer commit's build moves the tag itself.
+      - name: Check main hasn't moved on
+        id: newest
+        if: inputs.channel == 'edge'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "edge=$([ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Image tags
         id: meta
@@ -42,7 +52,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=${{ inputs.version }}
-            type=raw,value=edge,enable=${{ inputs.channel == 'edge' }}
+            type=raw,value=edge,enable=${{ steps.newest.outputs.edge == 'true' }}
             type=sha,format=short,enable=${{ inputs.channel == 'edge' }}
             type=raw,value=nightly,enable=${{ inputs.channel == 'nightly' }}
             type=raw,value=latest,enable=${{ inputs.channel == 'release' }}
@@ -51,11 +61,13 @@ jobs:
             latest=false
           labels: |
             org.opencontainers.image.title=DashyNMS MCP
+            org.opencontainers.image.version=${{ inputs.version }}
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
             org.opencontainers.image.licenses=MIT
             net.dashynms.license.scope=MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md.
           annotations: |
             org.opencontainers.image.title=DashyNMS MCP
+            org.opencontainers.image.version=${{ inputs.version }}
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
             org.opencontainers.image.licenses=MIT
             net.dashynms.license.scope=MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md.

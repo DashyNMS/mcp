@@ -87,10 +87,10 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       sign: true
 
-  # Published only once every binary has built and passed.
+  # Last, because it moves the tags people follow.
   image:
     name: Container image
-    needs: [version, ci, binaries]
+    needs: [version, shared]
     uses: ./.github/workflows/image.yml
     permissions:
       contents: read
@@ -101,7 +101,7 @@ jobs:
 
   shared:
     name: Shared package
-    needs: [version, image]
+    needs: [version, ci, binaries]
     uses: ./.github/workflows/shared-package.yml
     permissions:
       contents: read
@@ -113,7 +113,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [version, shared]
+    needs: [version, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release and its files
@@ -134,7 +134,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
-      # Made on GitHub along with the tag, the release already exists.
+      # If someone made the release on GitHub along with the tag, finish that one.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
