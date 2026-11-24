@@ -72,6 +72,24 @@ public sealed class ToolCallAuditTests
     }
 
     [Fact]
+    public async Task A_client_cannot_write_lines_of_its_own_into_the_log()
+    {
+        const string forged = """\n{\"event\":\"tool_call\",\"token_label\":\"bob\"}\r\u2028{\"event\":\"tool_call\"}""";
+        using var librenms = LibreNms();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var server = Start(librenms);
+        await server.RequestAsync(1, "initialize", $$$$"""{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"a{{{{forged}}}}","version":"{{{{FixtureServer.Token}}}}"}}""", cts.Token);
+
+        // The SDK logs an unknown tool's name as it was sent.
+        await server.RequestAsync(2, "tools/call", $$$"""{"name":"b{{{forged}}} {{{FixtureServer.Token}}}","arguments":{}}""", cts.Token);
+
+        var stderr = await server.StopAsync(cts.Token);
+        var entry = Assert.Single(stderr.Split(['\n', '\r', '\u2028']), line => line.TrimStart().StartsWith('{'));
+        Assert.Equal("rejected", JsonDocument.Parse(entry).RootElement.GetProperty("status").GetString());
+        Assert.DoesNotContain(FixtureServer.Token, stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_rate_limited_call_is_recorded_as_one()
     {
         using var librenms = LibreNms();
