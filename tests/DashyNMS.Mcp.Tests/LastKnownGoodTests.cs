@@ -214,6 +214,37 @@ public sealed class LastKnownGoodTests : IDisposable
         Assert.Empty(Files());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void What_could_not_be_deleted_is_not_read_back(bool clear)
+    {
+        var answers = Answers(onDisk: true);
+        Keep(answers, "a", "1");
+        var file = Assert.Single(Files());
+        var folder = Path.GetDirectoryName(file)!;
+
+        // Something else where the file or its folder should be, which fails the same way on every platform.
+        var blocked = clear ? folder : file;
+        Directory.Move(clear ? folder : file, blocked + "-away");
+        if (clear)
+        {
+            File.WriteAllText(blocked, "in the way");
+            answers.Clear();
+            File.Delete(blocked);
+        }
+        else
+        {
+            Directory.CreateDirectory(blocked);
+            answers.Forget("a");
+            Directory.Delete(blocked);
+        }
+
+        Directory.Move(blocked + "-away", blocked);
+        Assert.Single(Files());
+        Assert.Null(answers.Find("a"));
+    }
+
     [Fact]
     public void The_folder_does_not_grow_past_what_is_kept()
     {

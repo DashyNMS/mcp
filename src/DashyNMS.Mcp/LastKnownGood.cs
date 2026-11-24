@@ -46,7 +46,7 @@ public sealed class LastKnownGood
     private readonly ILogger<LastKnownGood> _logger;
     private readonly byte[] _fileKey;
     private readonly byte[] _nameKey;
-    private readonly string? _folder;
+    private string? _folder;
     private int _characters;
     private int _generation;
     private int _written;
@@ -156,7 +156,7 @@ public sealed class LastKnownGood
         {
             _generation++;
             Remove(key);
-            OnDisk(folder => File.Delete(Path.Combine(folder, FileOf(key))));
+            Drop(folder => File.Delete(Path.Combine(folder, FileOf(key))));
         }
     }
 
@@ -169,7 +169,7 @@ public sealed class LastKnownGood
             _answers.Clear();
             _byUse.Clear();
             _characters = 0;
-            OnDisk(folder =>
+            Drop(folder =>
             {
                 foreach (var file in Directory.EnumerateFiles(folder, FilePattern))
                 {
@@ -323,17 +323,27 @@ public sealed class LastKnownGood
         }
     }
 
+    /// <summary>Deletes from the folder - and when that fails, what should have gone must not be read back, so the folder isn't used again.</summary>
+    private void Drop(Action<string> delete)
+    {
+        if (!OnDisk(delete))
+        {
+            _folder = null;
+        }
+    }
+
     /// <summary>The folder is a convenience: when it can't be used, answers are kept in memory alone, and the log says so once.</summary>
-    private void OnDisk(Action<string> use)
+    private bool OnDisk(Action<string> use)
     {
         if (_folder is null)
         {
-            return;
+            return true;
         }
 
         try
         {
             use(_folder);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -342,6 +352,8 @@ public sealed class LastKnownGood
                 _diskFailed = true;
                 _logger.LogWarning("Last known good answers can't be kept in {Setting}, so they're in memory alone: {Reason}", McpOptions.LastKnownGoodDirectoryKey, ex.Message);
             }
+
+            return false;
         }
     }
 }
