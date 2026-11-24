@@ -56,7 +56,7 @@ limits, sanitisation, deadlines and evidence ownership checks.
 
 ## Consumption status
 
-Each verified push to `main` in DashyNMS/mcp publishes `2.0.0-ci.<run-id>.<attempt>`
+Each verified commit to `main` in DashyNMS/mcp publishes `2.0.0-edge.<build>`
 to GitHub Packages (`https://nuget.pkg.github.com/DashyNMS/index.json`), with a GitHub
 build provenance attestation and the repository commit in the nuspec. Pull requests
 verify packages without publishing. `2.0.0-dev` identifies local packs and must not

@@ -52,7 +52,7 @@ updates:
     registries:
       - dashynms
     ignore:
-      # Pinned by hand to a development build of DashyNMS/core between
+      # Pinned by hand to an edge build of DashyNMS/core between
       # releases (see docs/DEVELOPMENT.md), not bumped on every merge there.
       - dependency-name: "DashyNMS.Core"
     schedule:

@@ -1,13 +1,21 @@
 name: Container image
 
-# Pull requests build and smoke-test the image without publishing it.
-# main publishes ghcr.io/dashynms/mcp:edge; a v* tag publishes the version
-# (1.2.3, 1.2) and latest.
+# Builds the image and smoke-tests it, then publishes it when asked. Called by
+# CI, and by the edge, nightly and release builds, which publish
+# ghcr.io/dashynms/mcp as their version and as:
+#   edge      edge and sha-<commit>
+#   nightly   nightly
+#   release   latest and <major>.<minor>
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      channel:
+        description: edge, nightly or release; blank builds without publishing
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -33,11 +41,14 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=edge,branch=main
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=pr
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=edge,enable=${{ inputs.channel == 'edge' }}
+            type=sha,format=short,enable=${{ inputs.channel == 'edge' }}
+            type=raw,value=nightly,enable=${{ inputs.channel == 'nightly' }}
+            type=raw,value=latest,enable=${{ inputs.channel == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ inputs.channel == 'release' }}
+          flavor: |
+            latest=false
           labels: |
             org.opencontainers.image.title=DashyNMS MCP
             org.opencontainers.image.description=Read-only MCP server for LibreNMS
@@ -55,6 +66,8 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            VERSION=${{ inputs.version }}
           platforms: linux/amd64
           load: true
           tags: dashynms-mcp:smoke
@@ -140,7 +153,7 @@ jobs:
           test "$(docker image inspect dashynms-mcp:smoke --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')" = MIT
 
       - name: Sign in to GHCR
-        if: github.event_name != 'pull_request'
+        if: inputs.channel != ''
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
@@ -151,8 +164,10 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            VERSION=${{ inputs.version }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ inputs.channel != '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}

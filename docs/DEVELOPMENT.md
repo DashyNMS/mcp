@@ -13,7 +13,7 @@
 
 ## Core
 
-The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages - the same Core the desktop and phone apps use. `Directory.Build.props` pins it (`DashyNMSCoreVersion`) to a development build of core's main (`2.0.0-ci.N`) between Core releases. Fixes to Core go to the core repository.
+The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages - the same Core the desktop and phone apps use. `Directory.Build.props` pins it (`DashyNMSCoreVersion`) to a development build of core's main (`2.0.0-edge.N`, or `2.0.0-ci.N` before those) between Core releases. Fixes to Core go to the core repository.
 
 GitHub Packages needs a login even for a public package: set `DASHYNMS_PACKAGES_TOKEN` to a token with `read:packages`. Locally, `gh auth token` works once `gh auth refresh -s read:packages` has added the scope; in Actions, `secrets.GITHUB_TOKEN` with `packages: read` (the package grants this repository read access).
 
@@ -86,24 +86,34 @@ docker build -t dashynms-mcp .
 
 The Dockerfile cross-compiles for the target architecture, so `docker buildx build --platform linux/arm64 .` is as fast as a native build. Base images are pinned by digest and kept current by Dependabot.
 
-`.github/workflows/image.yml` builds every pull request and smoke-tests it: with no settings, the image must exit with code 2 and name what's missing; over HTTP against a stand-in LibreNMS, it must answer its probes, refuse a request without a token and answer one with. It publishes to `ghcr.io/dashynms/mcp`:
+`image.yml` smoke-tests every build: with no settings, the image must exit with code 2 and name what's missing; over HTTP against a stand-in LibreNMS, it must answer its probes, refuse a request without a token and answer one with. Pull requests stop there. The builds below publish it to `ghcr.io/dashynms/mcp`.
 
-- every merge to `main` updates `edge` and adds `sha-<commit>`,
-- a `vX.Y.Z` tag publishes `X.Y.Z`, `X.Y` and `latest`,
-- a pre-release tag such as `v1.2.0-rc.1` gets its own tag only, and doesn't move `latest`.
+## Builds and releases
 
-To release, set `<Version>` in `Directory.Build.props` to the new version and merge that first: it's the version the server reports to clients. Then tag `main` with `vX.Y.Z`. The tag publishes the image and the [standalone binaries](#standalone-binaries), which check that the two versions agree.
+Every DashyNMS repository builds the same way.
+
+| Workflow | When | Version | Publishes |
+| --- | --- | --- | --- |
+| **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
+| **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on the rolling `v0.0.0-edge` prerelease |
+| **Nightly build** (`nightly-build.yml`) | 00:00 UTC if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease with notes from the commits |
+| **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
+| **CodeQL** and **Dependency submission** | as their names say | none | nothing |
+
+Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If a publish fails part way, run the build again by hand for a new number.
+
+To release, publish a GitHub release on `main`'s newest commit with the tag `v<version>`, matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while it builds and is published again when everything is ready; if something fails it stays a draft, and **Release build** can be run by hand with the tag. A release needs Core pinned to a release too, or packing Shared fails with NU5104. Then raise `<Version>`.
 
 ## Standalone binaries
 
-`.github/workflows/release-binaries.yml` builds one self-contained, single-file executable each for `win-x64`, `win-arm64`, `osx-arm64`, `osx-x64`, `linux-x64` and `linux-arm64`, with the HTTP transport. They're separate from the builds DashyNMS desktop bundles, and checked separately. Every build runs on its own platform and goes through:
+`binaries.yml` builds one self-contained, single-file executable each for `win-x64`, `win-arm64`, `osx-arm64`, `osx-x64`, `linux-x64` and `linux-arm64`, with the HTTP transport. They're separate from the builds DashyNMS desktop bundles, and checked separately. Every build runs on its own platform and goes through:
 
 1. `scripts/publish-binary.py build`: publish, fail unless the result is exactly one file, and collect the licences of what's inside it.
-2. On a `v*` tag, or a manual run on `main` with **sign** on, `scripts/macos/sign.sh` for macOS: a Developer ID signature with the hardened runtime, notarised by Apple, as desktop's are. It needs the six `MACOS_*` and `APPLE_*` secrets desktop uses in a `DashyNMS_MacOS` environment in this repository, and the release stops without them rather than publish something macOS would block. Windows builds are unsigned until there's a signing identity (DashyNMS/desktop#109).
+2. In the edge, nightly and release builds, `scripts/macos/sign.sh` for macOS: a Developer ID signature with the hardened runtime, notarised by Apple, as desktop's are. It needs the six `MACOS_*` and `APPLE_*` secrets desktop uses in a `DashyNMS_MacOS` environment in this repository, limited to `main`, and the build stops without them rather than publish something macOS would block. Windows builds are unsigned until there's a signing identity (DashyNMS/desktop#109).
 3. `scripts/publish-binary.py pack`: one archive and its SHA-256.
 4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
 
-Then every archive is checked together and `SHA256SUMS` made. Pull requests and manual runs stop there, with the result kept as the `standalone-binaries` artefact. A `v*` tag attests the archives' provenance and attaches them to the tag's GitHub release, creating a draft if there isn't one. It never replaces a file that's already attached.
+Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Nightly and release files don't change once published; the edge release's are replaced by each build.
 
 ## Rules for tools
 
@@ -316,9 +326,9 @@ acceptance remain separate consumer work; Diagnostics remains outside this migra
 
 ### Shared package for mobile
 
-`shared-package.yml` now defines a separate Shared package pipeline. It builds and
-runs solution tests, packs **the Shared package only**, inspects its metadata/licence/commit and
-restores, builds and executes a minimal package-only .NET 10 consumer in a fresh
+`shared-package.yml` runs `shared-checks.yml` and then publishes. The checks build and
+run solution tests, pack **the Shared package only**, inspect its metadata/licence/commit and
+restore, build and execute a minimal package-only .NET 10 consumer in a fresh
 NuGet package directory. The exact Shared ID maps to the local packed feed;
 `DashyNMS.*` dependencies still map to GitHub Packages. The smoke check rejects
 Agent/MCP packages and project dependencies, checks the resolved Core baseline,
@@ -326,8 +336,9 @@ and records the complete resolved library list and package SHA-256 in
 `shared-provenance.json`. This is an inventory and direct boundary check, not
 proof of mobile runtime compatibility or of the absence of dynamic loading.
 
-Package identity is `DashyNMS.Agent.Shared`, independently versioned from the MCP
-host, `2.0.0-ci.<GitHub run ID>.<run attempt>`. `2.0.0-dev` is for local
+Package identity is `DashyNMS.Agent.Shared`, with the same version as the build it
+comes from, such as `2.0.0-edge.12`. `2.0.0-ci.<run ID>.<attempt>` packages came before
+and rank below every edge package. `2.0.0-dev` is for local
 packs only. The Shared package's Version and PackageVersion share the same value; the SDK derives
 assembly and informational versions from it. CI builds with that value and repository
 commit, tests without rebuilding, then packs without building or restoring. The smoke
@@ -402,8 +413,8 @@ connection-bound wrappers, is read as before. The licence is unchanged.
 
 #### Publication
 
-Every push to protected `main` whose `verify` and `core-compatibility` jobs pass runs
-the `publish` job; pull requests never reach it. It holds the only write token
+Edge, nightly and release builds on protected `main` whose `verify` and
+`core-compatibility` jobs pass run the `publish` job; pull requests never reach it. It holds the only write token
 (`packages: write`, plus `id-token`/`attestations: write` for the attestation) and:
 
 1. downloads the package from the same run and runs
@@ -421,9 +432,8 @@ the `publish` job; pull requests never reach it. It holds the only write token
    `api.github.com`, whatever download URL the feed's service index advertises;
    storage redirects are followed without it.
 
-A run's version includes its attempt number, and the verify job's attempt fixes it.
-Re-running only the failed publish job therefore fails provenance verification on
-purpose; re-run all jobs instead, which produces a new version.
+Re-running a failed publish job fails provenance verification on purpose, because the
+verify job recorded another attempt. Run the build again by hand, for a new version.
 
 What this does and does not guarantee:
 

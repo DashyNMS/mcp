@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -32,10 +33,13 @@ source = {key: os.environ[('EXPECTED_SOURCE_' if args.for_publication else 'GITH
           for key, suffix in fields.items()}
 if report['source'] != source or source['repository'] != 'DashyNMS/mcp':
     raise SystemExit('Provenance source does not match the expected Actions run')
-if args.for_publication and (source['event'], source['ref'], source['refProtected']) != ('push', 'refs/heads/main', 'true'):
-    raise SystemExit('Publication requires a push run on protected main')
-if version != f"2.0.0-ci.{source['runId']}.{source['runAttempt']}":
-    raise SystemExit('Version does not match source run/attempt')
+# Edge builds are pushes, nightlies are scheduled, and releases are dispatched on main.
+if args.for_publication and not (source['event'] in ('push', 'schedule', 'workflow_dispatch')
+                                 and (source['ref'], source['refProtected']) == ('refs/heads/main', 'true')):
+    raise SystemExit('Publication requires a run on protected main')
+base = ET.parse(artifacts.parent / 'Directory.Build.props').findtext('.//Version')
+if not re.fullmatch(re.escape(base) + r'(-(edge|nightly)\.[0-9]+)?', version):
+    raise SystemExit(f'{version} is not an edge, nightly or release version of {base}')
 expected = f'DashyNMS.Agent.Shared.{version}.nupkg'
 if (report['package'], report['version'], report['repositoryCommit']) != (expected, version, commit):
     raise SystemExit('Provenance identity does not match the expected workflow run')
