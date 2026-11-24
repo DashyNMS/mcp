@@ -20,13 +20,19 @@ on:
       - LICENSE
       - NOTICES.md
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign and notarise the macOS builds, to try the signing setup before a release (main only)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   packages: read
 
 env:
-  DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # A release's builds, and main's when asked to try signing.
+  SIGN_MACOS: ${{ github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.sign && github.ref == 'refs/heads/main') }}
 
 jobs:
   version:
@@ -78,8 +84,8 @@ jobs:
           - runtime: linux-arm64
             os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # The signing secrets, for a release's macOS builds and nothing else.
-    environment: ${{ github.ref_type == 'tag' && startsWith(matrix.runtime, 'osx-') && 'DashyNMS_MacOS' || '' }}
+    # The signing secrets, for the macOS builds that are signed and nothing else.
+    environment: ${{ startsWith(matrix.runtime, 'osx-') && (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.sign && github.ref == 'refs/heads/main')) && 'DashyNMS_MacOS' || '' }}
     steps:
       # The licence evidence is checked by hash, so line endings must be as committed.
       - name: Keep line endings
@@ -97,10 +103,11 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.version.outputs.value }}
+          DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/publish-binary.py build ${{ matrix.runtime }} "$VERSION" "$GITHUB_SHA" artifacts
       # Windows builds stay unsigned, as desktop's do (DashyNMS/desktop#109).
       - name: Sign and notarise for macOS
-        if: github.ref_type == 'tag' && startsWith(matrix.runtime, 'osx-')
+        if: env.SIGN_MACOS == 'true' && startsWith(matrix.runtime, 'osx-')
         env:
           VERSION: ${{ needs.version.outputs.value }}
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}

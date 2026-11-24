@@ -40,9 +40,10 @@ codesign --verify --strict "$executable"
 
 ditto -c -k "$executable" "$work/submission.zip"
 xcrun notarytool submit "$work/submission.zip" --key "$work/key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" \
-  --wait --output-format json > "$work/notary.json"
+  --wait --timeout 30m --output-format json > "$work/notary.json"
 if [ "$(/usr/bin/plutil -extract status raw -o - "$work/notary.json")" != Accepted ]; then
-  echo "::error::Apple did not accept the notarisation."
+  echo "::error::Apple did not accept the notarisation. Its log follows."
+  xcrun notarytool log "$(/usr/bin/plutil -extract id raw -o - "$work/notary.json")" --key "$work/key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" || true
   exit 1
 fi
 echo "Signed and notarised."
