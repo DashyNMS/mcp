@@ -76,6 +76,7 @@ jobs:
             gh attestation verify "$RUNNER_TEMP/published.nupkg" --repo DashyNMS/mcp \
               --signer-workflow DashyNMS/mcp/.github/workflows/shared-package.yml --source-digest "$GITHUB_SHA"
             echo "DashyNMS.Agent.Shared $SHARED_VERSION was already published from this commit" >> "$GITHUB_STEP_SUMMARY"
+            echo "sha256=$(sha256sum "$RUNNER_TEMP/published.nupkg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
             echo "published=true" >> "$GITHUB_OUTPUT"
           elif [ "$status" != 404 ]; then
             echo "::error::GitHub Packages answered $status when asked for $SHARED_VERSION."
@@ -98,10 +99,9 @@ jobs:
           --source https://nuget.pkg.github.com/DashyNMS/index.json
           --api-key "$PUSH_TOKEN"
       - name: Confirm the feed serves the verified bytes
-        if: steps.earlier.outputs.published != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_SHARED_SHA256: ${{ needs.checks.outputs.sha256 }}
+          EXPECTED_SHARED_SHA256: ${{ steps.earlier.outputs.sha256 || needs.checks.outputs.sha256 }}
         run: python3 scripts/verify-published-shared.py
       - name: Summary
         if: steps.earlier.outputs.published != 'true'

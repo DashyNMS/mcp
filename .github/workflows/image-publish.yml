@@ -1,0 +1,76 @@
+name: Publish container image
+
+# Copies the already built OCI archive, including its SBOM and provenance.
+# Callers wait for every build before entering this workflow.
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      channel:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/dashynms/mcp
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'DashyNMS/mcp'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: container-image
+          path: image
+      - name: Install the OCI copy tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The caller serializes edge builds. Check freshness inside that lock.
+      - name: Check main hasn't moved on
+        id: newest
+        if: inputs.channel == 'edge'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "edge=$([ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=edge,enable=${{ steps.newest.outputs.edge == 'true' }}
+            type=sha,format=short,enable=${{ inputs.channel == 'edge' }}
+            type=raw,value=nightly,enable=${{ inputs.channel == 'nightly' }}
+            type=raw,value=latest,enable=${{ inputs.channel == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ inputs.channel == 'release' }}
+          flavor: |
+            latest=false
+      - name: Publish the built image without rebuilding
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          skopeo copy --all --preserve-digests --authfile "$HOME/.docker/config.json" \
+            --digestfile image/digest "oci-archive:image/image.tar" "docker://$IMAGE:$VERSION"
+          digest=$(cat image/digest)
+          while IFS= read -r tag; do
+            if [ "$tag" != "$IMAGE:$VERSION" ]; then
+              skopeo copy --all --preserve-digests --authfile "$HOME/.docker/config.json" \
+                "docker://$IMAGE@$digest" "docker://$tag"
+            fi
+          done <<< "$TAGS"

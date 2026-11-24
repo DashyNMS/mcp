@@ -70,7 +70,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      packages: write # for the image job, which only pull requests run
+      packages: read
 
   binaries:
     name: Standalone binaries
@@ -87,11 +87,18 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       sign: true
 
-  # Last, because it moves the tags people follow.
-  image:
-    name: Container image
-    needs: [version, shared]
+  image-build:
+    name: Build container image
+    needs: [version, ci]
     uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: release
+
+  image:
+    name: Publish container image
+    needs: [version, shared, image-build]
+    uses: ./.github/workflows/image-publish.yml
     permissions:
       contents: read
       packages: write
@@ -101,7 +108,7 @@ jobs:
 
   shared:
     name: Shared package
-    needs: [version, ci, binaries]
+    needs: [version, ci, binaries, image-build]
     uses: ./.github/workflows/shared-package.yml
     permissions:
       contents: read
@@ -120,6 +127,9 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: standalone-binaries
@@ -143,7 +153,7 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" packed/* --clobber
+            python3 scripts/upload-missing-release-assets.py "$TAG" packed
             gh release edit "$TAG" --title "$VERSION" --notes-file notes.md --draft=false --latest
           else
             gh release create "$TAG" packed/* --verify-tag --title "$VERSION" --notes-file notes.md --latest

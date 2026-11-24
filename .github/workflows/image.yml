@@ -1,6 +1,6 @@
 name: Container image
 
-# Builds the image and smoke-tests it, then publishes it when asked. Called by
+# Builds and smoke-tests the image, then retains an OCI archive. Called by
 # CI, and by the edge, nightly and release builds, which publish
 # ghcr.io/dashynms/mcp as their version and as:
 #   edge      edge and sha-<commit>
@@ -13,7 +13,7 @@ on:
         type: string
         required: true
       channel:
-        description: edge, nightly or release; blank builds without publishing
+        description: edge, nightly or release; used for image metadata
         type: string
         default: ""
 
@@ -25,25 +25,17 @@ env:
 
 jobs:
   image:
-    name: Build and publish
+    name: Build and test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # publishes the image; also reads DashyNMS.Core
+      packages: read # reads DashyNMS.Core
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      # Builds can finish out of order. A newer commit's build moves the tag itself.
-      - name: Check main hasn't moved on
-        id: newest
-        if: inputs.channel == 'edge'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo "edge=$([ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Image tags
         id: meta
@@ -52,7 +44,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=${{ inputs.version }}
-            type=raw,value=edge,enable=${{ steps.newest.outputs.edge == 'true' }}
+            type=raw,value=edge,enable=${{ inputs.channel == 'edge' }}
             type=sha,format=short,enable=${{ inputs.channel == 'edge' }}
             type=raw,value=nightly,enable=${{ inputs.channel == 'nightly' }}
             type=raw,value=latest,enable=${{ inputs.channel == 'release' }}
@@ -164,22 +156,14 @@ jobs:
           test -s "$out/third-party/inventory.json"
           test "$(docker image inspect dashynms-mcp:smoke --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')" = MIT
 
-      - name: Sign in to GHCR
-        if: inputs.channel != ''
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and publish
+      - name: Build the multi-platform image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           build-args: |
             VERSION=${{ inputs.version }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ inputs.channel != '' }}
+          outputs: type=oci,dest=${{ runner.temp }}/image.tar
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
@@ -189,3 +173,16 @@ jobs:
           secrets: |
             packages=${{ secrets.GITHUB_TOKEN }}
           sbom: true
+      # Exercise the same OCI reader used by publication before any publisher runs.
+      - name: Verify the OCI archive can be copied with its digests intact
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+          skopeo copy --all --preserve-digests "oci-archive:$RUNNER_TEMP/image.tar" "oci:$RUNNER_TEMP/image-check:checked"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-image
+          path: ${{ runner.temp }}/image.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 2

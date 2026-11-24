@@ -11,6 +11,12 @@ permissions:
   contents: read
   packages: read
 
+# Covers image aliases and the rolling release without nested locks.
+concurrency:
+  group: edge-build
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   version:
     name: Version
@@ -35,7 +41,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      packages: write # for the image job, which only pull requests run
+      packages: read
 
   binaries:
     name: Standalone binaries
@@ -52,11 +58,18 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       sign: true
 
-  # Last, because it moves the tags people follow.
-  image:
-    name: Container image
-    needs: [version, shared]
+  image-build:
+    name: Build container image
+    needs: [version, ci]
     uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: edge
+
+  image:
+    name: Publish container image
+    needs: [version, shared, image-build]
+    uses: ./.github/workflows/image-publish.yml
     permissions:
       contents: read
       packages: write
@@ -66,7 +79,7 @@ jobs:
 
   shared:
     name: Shared package
-    needs: [version, ci, binaries]
+    needs: [version, ci, binaries, image-build]
     uses: ./.github/workflows/shared-package.yml
     permissions:
       contents: read

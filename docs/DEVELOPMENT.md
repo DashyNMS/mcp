@@ -100,7 +100,7 @@ Every DashyNMS repository builds the same way.
 | **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
 
-Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml` and `shared-package.yml` (with `shared-checks.yml`), and nothing is published until CI and every binary have passed. The image goes last, because it moves the tags people follow; `edge` only moves for `main`'s newest commit. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand.
+Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml`, `image-publish.yml` and `shared-package.yml` with `shared-checks.yml`. Nothing is published until CI, every binary and the image build have passed. The image goes last, because it moves the tags people follow; `edge` only moves for `main`'s newest commit. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand. Release retries preserve existing assets and upload only missing files. Existing files and the checksum manifest must match the retry's bytes; otherwise finish from the original build artifacts.
 
 **Releasing:** check that `docs/releases/<version>.md` reads well, then tag `main`'s newest commit and push only the tag:
 
@@ -456,6 +456,12 @@ MCP and the Shared package use the same pin, with updated licence evidence.
 
 #### Publication
 
+Every channel builds and smoke-tests the multi-platform image into an OCI archive
+before Shared publication. `image-publish.yml` copies that archive to GHCR without
+rebuilding, preserving its digests, SBOM and provenance. Edge builds share one
+workflow concurrency group, including image tags and the rolling binary release.
+They queue without cancelling an in-progress publisher.
+
 Edge, nightly and release builds on protected `main` whose `verify` and
 `core-compatibility` jobs pass run the `publish` job; pull requests never reach it. It holds the only write token
 (`packages: write`, plus `id-token`/`attestations: write` for the attestation) and:
@@ -466,10 +472,11 @@ Edge, nightly and release builds on protected `main` whose `verify` and
    the verify job's output;
 2. creates a GitHub build provenance attestation for the exact `.nupkg`
    (`gh attestation verify <file> --repo DashyNMS/mcp` checks it);
-3. pushes it to `https://nuget.pkg.github.com/DashyNMS` **without**
-   `--skip-duplicate`, so an existing version fails the job rather than being
-   reported as published;
-4. downloads it back through the feed and fails unless the bytes match, then checks
+3. accepts an existing version only after verifying its attestation and source commit,
+   or pushes it to `https://nuget.pkg.github.com/DashyNMS` **without**
+   `--skip-duplicate`, so an unexplained existing version fails the job;
+4. downloads the new or accepted package through the feed and fails unless the bytes
+   match the verified package, then checks
    the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-shared.py`).
    The token is only ever sent over HTTPS to `nuget.pkg.github.com` and
    `api.github.com`, whatever download URL the feed's service index advertises;
@@ -494,10 +501,10 @@ What this does and does not guarantee:
   New GitHub packages can start private, and GitHub has no API to change a
   package's visibility, so the workflow cannot fix it. If the first publish job
   fails on visibility, an organisation owner sets `DashyNMS.Agent.Shared` to public
-  in its package settings (this cannot be undone), then re-runs all jobs or merges
-  again, which publishes a new version that passes. Do not pin a version whose
-  publish job failed, including the private first one, which becomes visible when
-  the package turns public.
+  in its package settings (this cannot be undone), then starts the build again by
+  hand. Edge and nightly builds get a new version. A release keeps an existing
+  package only after verifying its attestation, source commit, feed bytes and
+  consumer access. Do not pin a version until its publication checks pass.
 - The visibility check fails closed. GitHub documents the packages REST API for
   classic personal access tokens only, so the Actions token may be refused package
   metadata. Then the job checks anonymously instead: a private package's page is a
