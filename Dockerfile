@@ -16,7 +16,7 @@
 #
 # Base images are pinned by digest (the multi-arch index, so every platform
 # still resolves) and kept current by Dependabot.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:8c6edfb26c85153f236d26efebd9ad349aec403583f343f201ee67838b23658d AS build
 ARG TARGETARCH
 WORKDIR /src
 # Build-stage legal evidence collector; cached independently of source.
