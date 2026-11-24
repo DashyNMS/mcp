@@ -117,7 +117,7 @@ You can also build it yourself from source; see the [developer guide](docs/DEVEL
 - Docker, or the .NET 10 SDK to build from source.
 - Optionally, Unimus (1.7 or later) and Graylog (2.1 or later, tested up to 7.2), for `what_changed` and `search_logs`.
 
-LibreNMS only gives its network-wide sensor list to users with **global read** access. Without it, `device_sensors` still works, reading one device at a time, and `health_overview` works when it's narrowed to a device group or location of up to 25 devices.
+**Give that user global read** for network-wide sensor questions ("is anything running hot?"). LibreNMS only gives its network-wide sensor list to users with its global read role or, on versions with custom roles, one with the `sensor.view` permission. Without it, `device_sensors` still works, and `health_overview` reads devices one by one: up to 25 in a device group or location in full, and a larger scope for about 20 seconds at a time, alerting devices first. The answer then says how many devices it covers, and asking again within a few minutes carries on from there. A new permission is noticed within 10 minutes.
 
 ## Set it up
 

@@ -51,6 +51,8 @@ internal static class ServerSetup
         {
             MaxResultBytes = options.MaxResultBytes,
             MaxConcurrentRequests = options.MaxConcurrentRequests,
+            // Inside the minute most clients give a tool call, with room for the rest of it.
+            SensorSweepBudget = TimeSpan.FromSeconds(20),
             ServerTimestampsAreUtc = options.TimestampsAreUtc,
             GraylogQueryField = options.GraylogField,
             GraylogMatchAnyAddress = options.GraylogMatchAnyAddress,

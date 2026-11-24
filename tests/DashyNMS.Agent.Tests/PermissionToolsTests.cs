@@ -13,7 +13,7 @@ public sealed class PermissionToolsTests
 
     private DeviceTools Devices() => new(_nms.Client, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Options);
 
-    private HealthTools Health() => new(_nms.Sensors, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner);
+    private HealthTools Health() => new(_nms.Sensors, _nms.Directory, _nms.Resolver, _nms.Scope, _nms.Runner, _nms.Client);
 
     private GraphTools Graphs() => new(_nms.Client, _nms.Transport, _nms.Sensors, _nms.Resolver, _nms.Runner, _nms.Time);
 

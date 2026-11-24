@@ -5,6 +5,7 @@ using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Health;
 using DashyNMS.Agent.Summaries;
+using DesktopNMS.Core.Api;
 using ModelContextProtocol.Server;
 
 namespace DashyNMS.Agent.Tools;
@@ -16,7 +17,8 @@ public sealed class HealthTools(
     DeviceDirectory directory,
     DeviceResolver resolver,
     DeviceScope scopes,
-    ToolRunner runner)
+    ToolRunner runner,
+    ILibreNmsClient client)
 {
     public const int DefaultReadings = 50;
     public const int MaxReadings = 100;
@@ -62,7 +64,7 @@ public sealed class HealthTools(
 
     private async Task<JsonObject> OverviewAsync(string? typeText, bool onlyProblems, string? group, string? location, int offset, int limit, CancellationToken cancellationToken)
     {
-        var result = await new HealthOverview(sensorSource, directory, scopes, runner.Options, runner.Redactor)
+        var result = await new HealthOverview(sensorSource, directory, scopes, runner.Options, runner.Redactor, ct => client.Alerts.ListAsync(AlertQuery.Open, ct))
             .ReadAsync(new(typeText, onlyProblems, group, location, offset, limit), cancellationToken).ConfigureAwait(false);
         return ToolResult.Ok(result.Summary, result.Data);
     }
