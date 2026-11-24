@@ -61,6 +61,7 @@ public sealed class McpOptions
     public const string HttpTokensKey = "MCP_HTTP_TOKENS";
     public const string HttpAllowedOriginsKey = "MCP_HTTP_ALLOWED_ORIGINS";
     public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
+    public const string ResourcesDirectoryKey = "MCP_RESOURCES_DIR";
     public const string LastKnownGoodKey = "MCP_LAST_KNOWN_GOOD";
     public const string LastKnownGoodDirectoryKey = "MCP_LAST_KNOWN_GOOD_DIR";
     public const string LastKnownGoodHoursKey = "MCP_LAST_KNOWN_GOOD_HOURS";
@@ -171,6 +172,9 @@ public sealed class McpOptions
 
     /// <summary>The most tool calls one client may make in a minute, or null - the default - for no limit (#38).</summary>
     public int? RateLimitPerMinute { get; private init; }
+
+    /// <summary>The folder of reference files offered as resources, or null for none (#20).</summary>
+    public string? ResourcesDirectory { get; private init; }
 
     /// <summary>How old an answer may be given when LibreNMS can't be reached, or null to give none (#39).</summary>
     public TimeSpan? LastKnownGood { get; private init; }
@@ -322,6 +326,13 @@ public sealed class McpOptions
         var lastKnownGood = ParseBool(lookup, LastKnownGoodKey, fallback: true, problems);
         var lastKnownGoodHours = ParseInt(lookup, LastKnownGoodHoursKey, DefaultLastKnownGoodHours, minimum: 1, problems, MaximumLastKnownGoodHours);
         var lastKnownGoodDirectory = ParseDirectory(lookup, LastKnownGoodDirectoryKey, problems);
+        var resourcesDirectory = ParseDirectory(lookup, ResourcesDirectoryKey, problems);
+        if (resourcesDirectory is not null && !Directory.Exists(resourcesDirectory))
+        {
+            // The operator meant the model to have it, so going without isn't a detail.
+            problems.Add($"{ResourcesDirectoryKey}: there's no such folder, or the server can't see it.");
+        }
+
         var tools = ParseTools(lookup, problems);
         var transport = ParseTransport(lookup, problems);
         var http = transport == McpTransport.Http;
@@ -359,6 +370,7 @@ public sealed class McpOptions
             HasUnusedHttpSettings = !http && new[] { HttpPortKey, HttpTokensKey, HttpAllowedOriginsKey }.Any(key => Value(lookup, key) is not null),
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
+            ResourcesDirectory = resourcesDirectory,
             LastKnownGood = lastKnownGood ? TimeSpan.FromHours(lastKnownGoodHours) : null,
             LastKnownGoodDirectory = lastKnownGood ? lastKnownGoodDirectory : null,
         };

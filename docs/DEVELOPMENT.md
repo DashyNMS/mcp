@@ -57,6 +57,12 @@ Requests to LibreNMS, Unimus and Graylog each pass a `RequestLimiter`, which Cor
 
 Log through `AddDashyNmsLogging`. It writes each entry as one escaped, redacted line: the SDK logs client and tool names as they were sent, and stderr also carries the audit trail.
 
+### Prompts and resources
+
+`InvestigationPrompts` holds the prompts. A step names its tool, so one that's off is left out, and a prompt whose main tool is off isn't offered; `PromptTests` fails if a step names a tool that doesn't exist. What a person types goes into the text as a JSON string, one line and 200 characters at most. Review the wording like a tool's description.
+
+`ResourceFolder` serves `MCP_RESOURCES_DIR`. A request's URI is only ever compared with the ones listed, so it can't become a path, and links are skipped whole. Reading one is logged with the client's label; prompts and resources aren't tool calls, so they leave no audit entry.
+
 ### HTTP
 
 - `BearerGate` comes before every endpoint and lets only `/health` and `/ready` through without a token. A new endpoint needs one without doing anything.
