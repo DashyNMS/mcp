@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DashyNMS.Agent.Devices;
 using DashyNMS.Agent.Events;
 using DashyNMS.Agent.Tools;
 using DesktopNMS.Core.Api;
@@ -278,21 +279,25 @@ public sealed class SharedEventLookupsTests
     {
         var routes = Routes();
         using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(Folder, "incomplete.json")));
-        var count = fixture.RootElement.GetProperty("events").GetInt32();
         var timestamp = fixture.RootElement.GetProperty("timestamp").GetString();
-        routes["logs/eventlog"] = new(200, JsonSerializer.Serialize(new
+
+        // More events in one second than a call reads, so there's no getting past it.
+        using var server = new FixtureServer(path => routes.GetValueOrDefault(path), request => request.Url!.AbsolutePath != "/api/v0/logs/eventlog" ? null : new(200, JsonSerializer.Serialize(new
         {
-            status = "ok", logs = Enumerable.Range(1, count).Select(i => new { event_id = i, device_id = 1, datetime = timestamp, message = "Synthetic event" }),
-        }));
-        using var server = new FixtureServer(path => routes.GetValueOrDefault(path));
+            status = "ok",
+            logs = Enumerable.Range(1, int.Parse(request.QueryString["limit"]!, System.Globalization.CultureInfo.InvariantCulture))
+                .Select(i => new { event_id = i, device_id = 1, datetime = timestamp, message = "Synthetic event" }),
+        })));
         using var provider = Connected(server.Root);
         using var host = Host(provider);
         var result = (await host.ReadNetworkAsync(new(Hours: 24, Limit: 1))).Result!;
         Assert.False(result.Data.Window.WindowComplete);
         Assert.NotNull(result.Data.Window.CoveredSince);
         Assert.Contains("start of the window isn't covered", result.Summary, StringComparison.Ordinal);
-        Assert.Equal(3, server.Requests.Count(p => p == "logs/eventlog"));
-        Assert.Equal(count, result.Data.Page.Total);
+        Assert.Equal("read_limit", result.Data.Window.NotCovered!.Reason);
+        Assert.Equal(result.Data.Window.CoveredSince, result.Data.Window.NotCovered.Until);
+        Assert.Equal(4, server.Requests.Count(p => p == "logs/eventlog"));
+        Assert.Equal(LogReads.MaxPage, result.Data.Page.Total);
         Assert.Single(result.Data.Entries);
         host.Dispose();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ReadDeviceAsync(new(1)));

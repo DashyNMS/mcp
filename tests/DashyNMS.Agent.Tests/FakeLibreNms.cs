@@ -99,7 +99,7 @@ internal sealed class FakeLibreNms
         Directory = new DeviceDirectory(Client, Time);
         Resolver = new DeviceResolver(Directory);
         Runner = new ToolRunner(new Redactor(), Options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check };
-        Timeline = new DeviceTimeline(Client, Options);
+        Timeline = new DeviceTimeline(Client, Options, Time);
         Scope = new DeviceScope(Client, Directory, Time);
         Fleet = new FleetCache(Client, Time);
         Sensors = new SensorSource(Fleet.GetSensorsAsync, Transport, Time);

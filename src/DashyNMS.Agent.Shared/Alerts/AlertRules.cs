@@ -194,7 +194,7 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var rulesTask = fleet.GetRulesAsync(cancellationToken);
         var templates = Sources.TryAsync(() => fleet.GetTemplatesAsync(cancellationToken), cancellationToken);
         var open = Sources.TryAsync(() => client.Alerts.ListAsync(AlertQuery.Open, cancellationToken), cancellationToken);
-        var raisedLog = DeviceTimeline.ReadBackAsync(depth => client.Logs.ListAlertLogAsync(null, depth, cancellationToken), a => Sources.Utc(a.TimeLogged, options), recent, cancellationToken);
+        var raisedLog = new LogReads(options, time).AlertsAsync(client.Logs, null, recent, keep: null, cancellationToken);
         var groups = Sources.TryAsync(() => scopes.ListGroupsAsync(cancellationToken), cancellationToken);
         var locations = Sources.TryAsync(() => fleet.GetLocationsAsync(cancellationToken), cancellationToken);
         var system = Sources.TryAsync(() => client.System.GetAsync(cancellationToken), cancellationToken);

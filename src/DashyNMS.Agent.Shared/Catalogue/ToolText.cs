@@ -459,8 +459,9 @@ public static class ToolText
             "\"what happened between 2 and 4 last night?\". " +
             WindowHelp +
             " " +
-            "Paged: 50 entries by default; pass the next_offset from page for more. If LibreNMS's logs don't reach back to the window's start, " +
-            "window_complete is false and covered_since says how far they did reach. Config changes and syslog aren't included; what_changed adds those.";
+            "Paged: 50 entries by default; pass the next_offset from page for more. If the whole window couldn't be read, " +
+            "window_complete is false and covered_since says how far back it was; not_covered then says which part is missing and why, and it can be " +
+            "asked for on its own with until. Config changes and syslog aren't included; what_changed adds those.";
 
         /// <summary>Each parameter's description, named after the parameter.</summary>
         public static class Args
@@ -495,7 +496,8 @@ public static class ToolText
             "or \"anything rebooted today?\". The event log has interface changes, reboots, discovery and user actions; the alert log has every alert state change. " +
             WindowHelp +
             " Filter by event type, severity, device, device group or location. Paged: 50 by default, up to 100. " +
-            "If LibreNMS's logs don't reach back to the window's start, window_complete is false. For one device, device_events also adds its outages.";
+            "Filters reach further back on a busy network. If the whole window couldn't be read, window_complete is false and not_covered says which part " +
+            "is missing and why: filter more, or ask for that part on its own with until. For one device, device_events also adds its outages.";
 
         /// <summary>Each parameter's description, named after the parameter.</summary>
         public static class Args
