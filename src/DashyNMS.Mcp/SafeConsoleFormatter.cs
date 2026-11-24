@@ -38,18 +38,17 @@ internal sealed class SafeConsoleFormatter(AuditRedactor redactor) : ConsoleForm
 
     internal string OneLine(string text)
     {
-        // Cut before the patterns run, so a huge name costs no more than a long one.
-        string clean;
-        if (text.Length <= MaxLength)
+        // Cut before the patterns run, so a huge name costs no more than a long
+        // one, and again after, as a redaction can be longer than what it hides.
+        var clean = redactor.Scrub(redactor.Start(text, MaxLength));
+        if (clean.Length > MaxLength)
         {
-            clean = redactor.Scrub(text);
+            clean = clean[..MaxLength];
         }
-        else
+
+        if (text.Length > MaxLength)
         {
-            // A credential the cut goes through isn't whole, so it isn't found:
-            // leave out as much of the end as there could be of one.
-            clean = redactor.Scrub(text[..MaxLength]);
-            clean = clean[..Math.Max(0, clean.Length - redactor.LongestSecret)] + "…";
+            clean += "…";
         }
 
         var line = new StringBuilder(clean.Length);

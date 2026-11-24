@@ -23,7 +23,7 @@ public sealed class SafeConsoleFormatterTests
             var line = _formatter.OneLine(new string('x', before) + Secret + new string('y', 100));
 
             Assert.DoesNotContain("synt", line, StringComparison.Ordinal);
-            Assert.True(line.Length <= SafeConsoleFormatter.MaxLength, $"{line.Length} characters");
+            Assert.True(line.Length <= SafeConsoleFormatter.MaxLength + 1, $"{line.Length} characters");
         }
     }
 
@@ -33,5 +33,38 @@ public sealed class SafeConsoleFormatterTests
         var text = string.Concat(Enumerable.Repeat(Secret + " ", 500));
 
         Assert.DoesNotContain("synt", _formatter.OneLine(text), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Credentials_inside_and_beside_each_other_are_cut_out_whole()
+    {
+        const string inner = "abcdef";
+        const string outer = "UNIQUEVALUE" + inner + inner + inner + inner + inner;
+        const string beside = "SEPARATE" + "UNIQUE";
+        var formatter = new SafeConsoleFormatter(new AuditRedactor(new Redactor(), [inner, outer, beside]));
+
+        for (var before = SafeConsoleFormatter.MaxLength - outer.Length - beside.Length - 2; before <= SafeConsoleFormatter.MaxLength + 2; before++)
+        {
+            foreach (var credentials in new[] { outer, beside + outer, outer + beside, inner + outer })
+            {
+                var line = formatter.OneLine(new string('x', before) + credentials + new string('y', 100));
+
+                Assert.DoesNotContain("UNIQ", line, StringComparison.Ordinal);
+                Assert.DoesNotContain("SEPA", line, StringComparison.Ordinal);
+                Assert.DoesNotContain("abc", line, StringComparison.Ordinal);
+                Assert.True(line.Length <= SafeConsoleFormatter.MaxLength + 1, $"{line.Length} characters");
+            }
+        }
+    }
+
+    [Fact]
+    public void Redactions_longer_than_what_they_hide_do_not_make_the_line_longer()
+    {
+        var formatter = new SafeConsoleFormatter(new AuditRedactor(new Redactor(), ["abcdef"]));
+
+        var line = formatter.OneLine(string.Concat(Enumerable.Repeat("abcdef ", 3000)));
+
+        Assert.DoesNotContain("abc", line, StringComparison.Ordinal);
+        Assert.Equal(SafeConsoleFormatter.MaxLength + 1, line.Length);
     }
 }
