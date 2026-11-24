@@ -64,6 +64,19 @@ public sealed class AuditRedactorTests
         Assert.Equal("""{"limit":"[redacted]","device":"10[redacted]","query":7392,"levels":["[redacted]",5]}""", recorded.ToJsonString());
     }
 
+    [Theory]
+    [InlineData("UNIQUEVALUEabcdefghijSECRETSUFFIX", "[redacted]")]
+    [InlineData("a UNIQUEVALUEabcdefghij b abcdefghijSECRETSUFFIX c", "a [redacted] b [redacted] c")]
+    [InlineData("abcdefghijSECRETSUFFIXabcdefghijSECRETSUFFIX", "[redacted][redacted]")]
+    [InlineData("aaaaaaaaa", "[redacted]")]
+    [InlineData("SECRETSUFFIX", "SECRETSUFFIX")]
+    public void Credentials_that_overlap_are_hidden_together(string text, string expected)
+    {
+        var redactor = new AuditRedactor(new Redactor(), ["UNIQUEVALUEabcdefghij", "abcdefghijSECRETSUFFIX", "aaaaaa"]);
+
+        Assert.Equal(expected, redactor.Text(text));
+    }
+
     [Fact]
     public void Long_text_is_recorded_by_its_length()
     {
