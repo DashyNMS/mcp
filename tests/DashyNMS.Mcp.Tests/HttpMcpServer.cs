@@ -95,8 +95,9 @@ internal sealed class HttpMcpServer : IDisposable
                 try
                 {
                     using var answer = await server._http.GetAsync("health", cancellationToken);
-                    if (answer.IsSuccessStatusCode)
+                    if (answer.IsSuccessStatusCode && server.Stderr.Contains("Application started", StringComparison.Ordinal))
                     {
+                        // It said so itself, so the answer wasn't another test's server on the same port.
                         return server;
                     }
                 }

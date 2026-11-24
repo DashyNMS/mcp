@@ -206,7 +206,7 @@ With `AUDIT_GELF_URL` set, entries also go to Graylog, as GELF messages with the
 
 If nothing reads stderr, entries queue and then, past 1000, are lost rather than hold up a call. The next line that gets through is preceded by `{"event":"audit_lost","count":…}`, saying how many.
 
-A request refused before it's a call at all - no valid token, or not a valid MCP message - isn't a tool call and leaves no entry.
+A request refused before it's a call at all - no valid token, not a valid MCP message, or a protocol version the server doesn't support - isn't a tool call and leaves no entry.
 
 What a tool returned is never recorded. Arguments still name your devices and say what was searched for, so treat the trail as you would any other log of your network.
 

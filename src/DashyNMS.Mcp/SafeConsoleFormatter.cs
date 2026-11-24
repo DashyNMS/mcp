@@ -52,12 +52,17 @@ internal sealed class SafeConsoleFormatter(AuditRedactor redactor) : ConsoleForm
         }
 
         var line = new StringBuilder(clean.Length);
-        foreach (var c in clean)
+        foreach (var rune in clean.EnumerateRunes())
         {
-            // Control characters, line and paragraph separators, and the invisible ones that reorder text.
-            line.Append(CharUnicodeInfo.GetUnicodeCategory(c) is UnicodeCategory.Control or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator or UnicodeCategory.Format
-                ? ' '
-                : c);
+            // Control characters, line and paragraph separators, and the invisible ones that reorder or hide text.
+            if (Rune.GetUnicodeCategory(rune) is UnicodeCategory.Control or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator or UnicodeCategory.Format)
+            {
+                line.Append(' ');
+            }
+            else
+            {
+                line.Append(rune.ToString());
+            }
         }
 
         return line.ToString();

@@ -53,7 +53,14 @@ public sealed class StderrAuditSink : IHostedService, IAuditSink
             _ => Interlocked.Increment(ref _lost));
     }
 
-    public void Write(AuditEntry entry) => _queue.Writer.TryWrite(entry);
+    public void Write(AuditEntry entry)
+    {
+        // Refused once stopped; when it's full the queue takes it and counts it lost itself.
+        if (!_queue.Writer.TryWrite(entry))
+        {
+            Interlocked.Increment(ref _lost);
+        }
+    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -79,7 +86,15 @@ public sealed class StderrAuditSink : IHostedService, IAuditSink
             while (_queue.Reader.TryRead(out var entry))
             {
                 WriteLost();
-                WriteLine(entry.ToJson());
+                try
+                {
+                    WriteLine(entry.ToJson());
+                }
+                catch (Exception)
+                {
+                    // One entry that can't be written mustn't end the trail.
+                    Interlocked.Increment(ref _lost);
+                }
             }
         }
 
