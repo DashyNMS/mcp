@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Redaction;
@@ -41,13 +42,13 @@ public sealed class AuditRedactor
     private readonly Redactor _redactor;
     private readonly string[] _secrets;
 
-    /// <param name="secrets">The server's own credentials. Longest first, so one that contains another goes whole.</param>
+    /// <param name="secrets">The server's own credentials.</param>
     public AuditRedactor(Redactor redactor, IEnumerable<string?> secrets)
     {
         ArgumentNullException.ThrowIfNull(redactor);
         ArgumentNullException.ThrowIfNull(secrets);
         _redactor = redactor;
-        _secrets = secrets.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct(StringComparer.Ordinal).OrderByDescending(s => s.Length).ToArray();
+        _secrets = secrets.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct(StringComparer.Ordinal).ToArray();
     }
 
     /// <summary>
@@ -94,17 +95,44 @@ public sealed class AuditRedactor
     }
 
     /// <summary>The same redaction for text of any length, with no limit on it and no whole-value match.</summary>
-    internal string Scrub(string text)
+    internal string Scrub(string text) => _redactor.Redact(HideSecrets(text));
+
+    /// <summary>
+    /// Found all together in the text as it came, so that hiding one can't
+    /// leave part of another that overlaps it.
+    /// </summary>
+    private string HideSecrets(string text)
     {
-        foreach (var secret in _secrets)
+        var found = new List<(int Start, int End)>();
+        foreach (var secret in _secrets.Where(s => s.Length >= MinimumEmbeddedSecret))
         {
-            if (secret.Length >= MinimumEmbeddedSecret)
+            for (var at = text.IndexOf(secret, StringComparison.Ordinal); at >= 0; at = text.IndexOf(secret, at + 1, StringComparison.Ordinal))
             {
-                text = text.Replace(secret, Marker, StringComparison.Ordinal);
+                found.Add((at, at + secret.Length));
             }
         }
 
-        return _redactor.Redact(text);
+        if (found.Count == 0)
+        {
+            return text;
+        }
+
+        found.Sort();
+        var hidden = new StringBuilder();
+        var done = 0;
+        for (var i = 0; i < found.Count;)
+        {
+            var (start, end) = found[i];
+            for (i++; i < found.Count && found[i].Start < end; i++)
+            {
+                end = Math.Max(end, found[i].End);
+            }
+
+            hidden.Append(text, done, start - done).Append(Marker);
+            done = end;
+        }
+
+        return hidden.Append(text, done, text.Length - done).ToString();
     }
 
     /// <summary>The arguments a tool declares, fit to record, and how many it doesn't.</summary>
