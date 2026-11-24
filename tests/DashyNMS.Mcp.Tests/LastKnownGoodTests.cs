@@ -27,13 +27,15 @@ public sealed class LastKnownGoodTests : IDisposable
 
     private string[] Files() => Directory.Exists(_directory) ? Directory.GetFiles(_directory, "*", SearchOption.AllDirectories) : [];
 
+    private static void Keep(LastKnownGood answers, string question, string json) => answers.Keep(question, json, answers.Generation);
+
     [Fact]
     public void The_last_answer_to_a_question_is_given_with_when_it_was_true()
     {
         var answers = Answers();
-        answers.Keep("a", "first");
+        Keep(answers, "a", "first");
         _clock.Advance(TimeSpan.FromHours(1));
-        answers.Keep("a", "second");
+        Keep(answers, "a", "second");
         var asOf = _clock.GetUtcNow();
         _clock.Advance(TimeSpan.FromHours(1));
 
@@ -47,7 +49,7 @@ public sealed class LastKnownGoodTests : IDisposable
     public void An_answer_too_old_or_from_the_future_is_not_given(bool onDisk)
     {
         var answers = Answers(onDisk: onDisk);
-        answers.Keep("a", "old");
+        Keep(answers, "a", "old");
 
         _clock.Advance(Lifetime - TimeSpan.FromSeconds(1));
         Assert.NotNull(answers.Find("a"));
@@ -64,17 +66,17 @@ public sealed class LastKnownGoodTests : IDisposable
         var answers = Answers();
         for (var i = 0; i < LastKnownGood.MaxAnswers; i++)
         {
-            answers.Keep($"{i}", "x");
+            Keep(answers, $"{i}", "x");
         }
 
         Assert.NotNull(answers.Find("0"));
-        answers.Keep("one more", "x");
+        Keep(answers, "one more", "x");
 
         Assert.NotNull(answers.Find("0"));
         Assert.Null(answers.Find("1"));
         Assert.NotNull(answers.Find("one more"));
 
-        answers.Keep("huge", new string('x', LastKnownGood.MaxCharacters));
+        Keep(answers, "huge", new string('x', LastKnownGood.MaxCharacters));
         Assert.Null(answers.Find("0"));
         Assert.NotNull(answers.Find("huge"));
     }
@@ -82,7 +84,7 @@ public sealed class LastKnownGoodTests : IDisposable
     [Fact]
     public void Without_a_folder_nothing_is_written()
     {
-        Answers().Keep("a", "answer");
+        Keep(Answers(), "a", "answer");
 
         Assert.Empty(Files());
         Assert.False(Answers().HasStoredAnswers);
@@ -92,7 +94,7 @@ public sealed class LastKnownGoodTests : IDisposable
     public void With_one_they_outlast_the_server()
     {
         Assert.False(Answers(onDisk: true).HasStoredAnswers);
-        Answers(onDisk: true).Keep("find_device\nquery=\"core\"", "answer");
+        Keep(Answers(onDisk: true), "find_device\nquery=\"core\"", "answer");
 
         var next = Answers(onDisk: true);
 
@@ -104,7 +106,7 @@ public sealed class LastKnownGoodTests : IDisposable
     [Fact]
     public void Neither_the_question_nor_the_answer_can_be_read_from_the_folder()
     {
-        Answers("token-of-the-account", onDisk: true).Keep("find_device\nquery=\"core-sw1.example.net\"", """{"hostname":"core-sw1.example.net"}""");
+        Keep(Answers("token-of-the-account", onDisk: true), "find_device\nquery=\"core-sw1.example.net\"", """{"hostname":"core-sw1.example.net"}""");
 
         var file = Assert.Single(Files());
         foreach (var secret in new[] { "core-sw1", "find_device", "token-of-the-account", "hostname" })
@@ -122,14 +124,14 @@ public sealed class LastKnownGoodTests : IDisposable
     [Fact]
     public void Another_account_or_configuration_gets_nothing_even_from_a_copied_file()
     {
-        Answers("one", onDisk: true).Keep("a", "answer");
+        Keep(Answers("one", onDisk: true), "a", "answer");
         var other = Answers("two", onDisk: true);
         Assert.False(other.HasStoredAnswers);
         Assert.Null(other.Find("a"));
 
         // Put where the other would look for its own answer to the same question.
         var taken = Assert.Single(Files());
-        other.Keep("a", "theirs");
+        Keep(other, "a", "theirs");
         var theirs = Assert.Single(Files(), f => f != taken);
         File.Copy(taken, theirs, overwrite: true);
 
@@ -145,7 +147,7 @@ public sealed class LastKnownGoodTests : IDisposable
     public void A_file_that_is_not_as_it_was_written_is_ignored(string how)
     {
         var answers = Answers(onDisk: true);
-        answers.Keep("a", "answer");
+        Keep(answers, "a", "answer");
         var file = Assert.Single(Files());
         var bytes = File.ReadAllBytes(file);
         switch (how)
@@ -161,7 +163,7 @@ public sealed class LastKnownGoodTests : IDisposable
                 break;
             default:
                 // Another question's answer, whole and from the same account.
-                answers.Keep("b", "another");
+                Keep(answers, "b", "another");
                 bytes = File.ReadAllBytes(Assert.Single(Files(), f => f != file));
                 break;
         }
@@ -177,8 +179,8 @@ public sealed class LastKnownGoodTests : IDisposable
     public void Forgetting_one_leaves_the_rest_and_clearing_leaves_none(bool onDisk)
     {
         var answers = Answers(onDisk: onDisk);
-        answers.Keep("a", "1");
-        answers.Keep("b", "2");
+        Keep(answers, "a", "1");
+        Keep(answers, "b", "2");
 
         answers.Forget("a");
         Assert.Null(answers.Find("a"));
@@ -190,10 +192,64 @@ public sealed class LastKnownGoodTests : IDisposable
         Assert.False(answers.HasStoredAnswers);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_answer_from_before_anything_was_dropped_is_not_kept_after(bool clear)
+    {
+        var answers = Answers(onDisk: true);
+        var before = answers.Generation;
+        if (clear)
+        {
+            answers.Clear();
+        }
+        else
+        {
+            answers.Forget("a");
+        }
+
+        answers.Keep("a", "late", before);
+
+        Assert.Null(answers.Find("a"));
+        Assert.Empty(Files());
+    }
+
+    [Fact]
+    public void The_folder_does_not_grow_past_what_is_kept()
+    {
+        var answers = Answers(onDisk: true);
+        for (var i = 0; i < LastKnownGood.MaxAnswers + 100; i++)
+        {
+            Keep(answers, $"{i}", "x");
+        }
+
+        Assert.Equal(LastKnownGood.MaxAnswers, Files().Length);
+    }
+
+    [Fact]
+    public void A_folder_nothing_could_still_use_is_deleted_and_no_other()
+    {
+        Keep(Answers("one", onDisk: true), "a", "1");
+        Keep(Answers("two", onDisk: true), "a", "2");
+        Directory.CreateDirectory(Path.Combine(_directory, "not ours"));
+        var old = Path.GetDirectoryName(Files()[0])!;
+        var kept = Path.GetDirectoryName(Files()[1])!;
+        var longAgo = _clock.GetUtcNow().UtcDateTime - TimeSpan.FromHours(McpOptions.MaximumLastKnownGoodHours + 1);
+        File.SetLastWriteTimeUtc(Files()[0], longAgo);
+        Directory.SetLastWriteTimeUtc(old, longAgo);
+        Directory.SetLastWriteTimeUtc(Path.Combine(_directory, "not ours"), longAgo);
+
+        _ = Answers("three", onDisk: true);
+
+        Assert.False(Directory.Exists(old));
+        Assert.True(Directory.Exists(kept));
+        Assert.True(Directory.Exists(Path.Combine(_directory, "not ours")));
+    }
+
     [Fact]
     public void Files_too_old_to_give_are_deleted_at_startup()
     {
-        Answers(onDisk: true).Keep("a", "1");
+        Keep(Answers(onDisk: true), "a", "1");
         File.SetLastWriteTimeUtc(Assert.Single(Files()), _clock.GetUtcNow().UtcDateTime - Lifetime);
 
         Assert.False(Answers(onDisk: true).HasStoredAnswers);
@@ -208,7 +264,7 @@ public sealed class LastKnownGoodTests : IDisposable
         try
         {
             var answers = Answers(onDisk: true);
-            answers.Keep("a", "answer");
+            Keep(answers, "a", "answer");
 
             Assert.Equal("answer", answers.Find("a")!.Json);
             Assert.False(answers.HasStoredAnswers);

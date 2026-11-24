@@ -34,7 +34,10 @@ public sealed class LibreNmsStartup(ILibreNmsClient client, ILogger<LibreNmsStar
             }
 
             client.Connect(connection, startOnBackup: false);
-            logger.LogWarning("{Failure} Starting with the last known good answers until it can be reached.", Describe(connection, result));
+            logger.LogWarning(
+                "LibreNMS at {Host} couldn't be reached: {Reason} Starting with the last known good answers until it can be.",
+                connection.WebRoot.Host,
+                result.ErrorMessage);
             return null;
         }
 

@@ -158,6 +158,21 @@ public sealed class StaleAnswerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_device_that_is_no_longer_there_is_not_given_from_before()
+    {
+        using var server = Start();
+        await server.InitializeAsync(_cts.Token);
+        Assert.Equal("ok", (await server.CallToolAsync(2, "device_events", """{"device":"core-sw1"}""", _cts.Token)).GetProperty("status").GetString());
+
+        // Gone for the same question, asked of a different name: the device list is kept for a minute.
+        Assert.Equal("error", (await server.CallToolAsync(3, "device_events", """{"device":"edge-sw9"}""", _cts.Token)).GetProperty("status").GetString());
+
+        _state = "down";
+        Assert.False((await server.CallToolAsync(4, "device_events", """{"device":"edge-sw9"}""", _cts.Token)).TryGetProperty("stale", out _));
+        Assert.True((await server.CallToolAsync(5, "device_events", """{"device":"core-sw1"}""", _cts.Token)).GetProperty("stale").GetBoolean());
+    }
+
+    [Fact]
     public async Task An_answer_anything_was_redacted_from_is_not_kept()
     {
         _sysName = "password=synthetic-secret";
