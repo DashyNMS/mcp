@@ -36,6 +36,10 @@ hostname, display name, sysName or IP address) in MCP's tiers, under the same ru
 `Found` with the redacted device, `Ambiguous` with up to five redacted candidates and the rest
 counted, or `NoMatch`. A device list that can't be read is a `HostFailure`, never no match.
 
+`DashyNMS.Agent.Help.HelpLookup` answers how-to questions from the DashyNMS user guides bundled in
+the package (`HelpLibrary`), with the product and release of each result. It needs no client or
+connection, and requests nothing unless the host turns refreshing on.
+
 `DashyNMS.Agent.Catalogue.ToolCatalogue` lists every MCP tool with its name, title, description
 and parameters (type, required, default, documented values or range, description), and the other
 tools each description names. MCP's own attributes read the same text, so a host describing a tool
@@ -68,7 +72,7 @@ check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuG
 lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
 feed and restore with a token that has `packages: read`.
 
-The package is built against Core `2.0.0-nightly.1` (MCP's pin; mobile moves to it from `2.0.0-ci.76` before adopting this release) and
+The package is built against Core `2.0.0-nightly.3` (MCP's pin; mobile moves to it before adopting this release) and
 declares it as a minimum. Before publication, CI runs the Shared tests on the exact
 packed binary with that Core. That is plain .NET
 evidence: a consumer must still verify its own restore, Release trimming/AOT and

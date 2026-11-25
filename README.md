@@ -71,6 +71,9 @@ For any alert, open or acknowledged: what the rule matched and the values that t
 **What's configured, and what changed?**
 With Unimus connected: a device's config backup, newest or any earlier one, a diff between any two, and every device whose config changed in a window, across the network. Secrets are redacted first, you can choose to send no config text at all, and it tells you when a device's backups have stopped. *(`config_backup`, `config_diff`, `recent_config_changes`)*
 
+**How do I do that in DashyNMS?**
+How-to questions about DashyNMS Desktop, DashyNMS Mobile and this server, answered from their user guides, with the product and release each answer describes. It needs no LibreNMS. *(`dashynms_help`)*
+
 **Where do I start?**
 Three prompts in your client's prompt menu walk the assistant through the right tools in order: *Investigate this device*, *Morning check: what's down and why* and *What changed before this alert?* With a folder of your own runbooks, naming conventions or site notes ([`MCP_RESOURCES_DIR`](#your-own-reference-files)), your client can attach those too.
 
@@ -183,7 +186,7 @@ When the server starts, it checks its settings and tests your LibreNMS address a
 
 ## Settings
 
-All settings are environment variables.
+All settings are environment variables. The LibreNMS address and token are required, unless `MCP_TOOLS_ALLOW` is just `dashynms_help`, which needs neither.
 
 | Variable | Required | Default | What it's for |
 | --- | --- | --- | --- |
@@ -215,6 +218,7 @@ All settings are environment variables.
 | `MCP_LAST_KNOWN_GOOD_DIR` | No | | A folder to keep them in as well as in memory, encrypted, so they outlast a restart. A full path; in the container, mount a volume at `/data` and set it to `/data`. |
 | `MCP_TOOLS_ALLOW` | No | | Offer only these tools, by name and comma-separated, such as `find_device,device_health`. Unset, every tool is on. |
 | `MCP_TOOLS_DENY` | No | | Turn these tools off, by name and comma-separated, such as `config_backup,config_diff,recent_config_changes,what_changed` for every one that can return something from Unimus. It wins over `MCP_TOOLS_ALLOW`. A tool that's off isn't listed and can't be called. A name that isn't a tool stops the server at startup, and the startup log says which tools are on. |
+| `MCP_HELP_REFRESH` | No | `false` | Whether `dashynms_help` may fetch the user guides for each product's release from `raw.githubusercontent.com`. Off, it uses the copies that come with the server. Nothing about your network or a question is in the request; GitHub sees this server's IP address, as any website would. |
 | `AUDIT_GELF_URL` | No | | A Graylog GELF input that gets [the audit trail](#the-audit-trail) as well: `https://` or `http://` for a GELF HTTP input (`/gelf` unless you give a path), or `udp://` for a GELF UDP one (port 12201 unless you give one) |
 | `AUDIT_GELF_TRUSTED_CERTS` | No | | As `LIBRENMS_TRUSTED_CERTS`, for `AUDIT_GELF_URL` |
 | `MCP_MAX_RESULT_BYTES` | No | `16384` | The most JSON one tool call returns. It's sent twice, as text and as structured content, so the message is up to about twice as long. |
@@ -331,6 +335,7 @@ claude mcp add --transport http dashynms https://mcp.example.net/mcp --header "A
 
 ## Help and feedback
 
+- [User guide](docs/guide/README.md): installing, connecting an assistant, sharing it with a team and troubleshooting.
 - [Help and support](https://dashynms.pckp.net/mcp/support/): setting it up, and answers to common questions.
 - Found a bug or have an idea? [Open an issue](https://github.com/DashyNMS/mcp/issues). Planned work is tracked there too, under the [milestones](https://github.com/DashyNMS/mcp/milestones).
 

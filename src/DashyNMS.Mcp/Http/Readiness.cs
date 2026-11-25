@@ -23,6 +23,12 @@ internal sealed class Readiness(ILibreNmsClient client, McpOptions options, Time
 
     public async Task<bool> IsReadyAsync(CancellationToken cancellationToken)
     {
+        // Help alone is ready as soon as it's running.
+        if (!options.HasConnection)
+        {
+            return true;
+        }
+
         await _checking.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {

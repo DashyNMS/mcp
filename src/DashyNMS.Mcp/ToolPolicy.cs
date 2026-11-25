@@ -26,6 +26,13 @@ public sealed class ToolPolicy
     /// <summary>The rest, in the catalogue's order.</summary>
     public IReadOnlyList<string> Off { get; }
 
+    /// <summary>
+    /// Whether any tool that's on reads LibreNMS. Help doesn't, so a server that
+    /// offers nothing else needs no address or token (#164). With no tools on at
+    /// all the lists are wrong, and what's missing is reported as always.
+    /// </summary>
+    public bool NeedsLibreNms => On.Count == 0 || On.Any(tool => tool != ToolText.DashynmsHelp.Name);
+
     public bool IsOn(string tool) => On.Contains(tool, StringComparer.Ordinal);
 
     /// <summary>Reads both lists (null when unset), adding a line to <paramref name="problems"/> for anything wrong.</summary>

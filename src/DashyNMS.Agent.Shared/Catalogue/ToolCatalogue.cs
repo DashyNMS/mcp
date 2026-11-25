@@ -76,7 +76,7 @@ public sealed record ToolDefinition(
 /// </remarks>
 public static class ToolCatalogue
 {
-    /// <summary>Every tool, in the order a person meets them: finding and overview first, integrations and graphs last.</summary>
+    /// <summary>Every tool, in the order a person meets them: finding and overview first, integrations, graphs and help last.</summary>
     public static IReadOnlyList<ToolDefinition> Tools { get; } =
     [
         new(ToolText.FindDevice.Name, ToolText.FindDevice.Title, ToolText.FindDevice.Description,
@@ -276,6 +276,15 @@ public static class ToolCatalogue
                 new("legend", ToolParameterType.Boolean, ToolText.Graph.Args.Legend) { Default = true },
             ],
             [ToolText.DeviceHealth.Name, ToolText.DeviceSensors.Name, ToolText.PortStatus.Name]),
+        new(ToolText.DashynmsHelp.Name, ToolText.DashynmsHelp.Title, ToolText.DashynmsHelp.Description,
+            [
+                new("query", ToolParameterType.String, ToolText.DashynmsHelp.Args.Query),
+                new("product", ToolParameterType.String, ToolText.DashynmsHelp.Args.Product) { AllowedValues = ["desktop", "mobile", "mcp"] },
+                new("page", ToolParameterType.String, ToolText.DashynmsHelp.Args.Page),
+                new("section", ToolParameterType.String, ToolText.DashynmsHelp.Args.Section),
+                new("limit", ToolParameterType.Integer, ToolText.DashynmsHelp.Args.Limit) { Default = 5, Minimum = 1, Maximum = 10 },
+            ],
+            []),
     ];
 
     private static readonly Dictionary<string, ToolDefinition> ByName = Tools.ToDictionary(t => t.Name, StringComparer.Ordinal);

@@ -99,6 +99,7 @@ Every DashyNMS repository builds the same way.
 | **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease |
 | **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
 | **CodeQL** and **Dependency submission** | as their names say | none | nothing |
+| **Wiki** (`wiki.yml`) | the guide changes on `main` | none | the [repository wiki](https://github.com/DashyNMS/mcp/wiki) |
 
 Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml`, `image-publish.yml` and `shared-package.yml` with `shared-checks.yml`. Nothing is published until CI, every binary and the image build have passed. The image goes last, because it moves the tags people follow; `edge` only moves for `main`'s newest commit. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand. Release retries preserve existing assets and upload only missing files. Existing files and the checksum manifest must match the retry's bytes; otherwise finish from the original build artifacts.
 
@@ -148,6 +149,32 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
 
 Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Published files don't change. A release's build that's run again only adds the ones that are missing.
+
+## User guide and wiki
+
+The user guide is in [`docs/guide`](guide/README.md): getting started, installation, how-to pages and reference. It's for people who run the server or use it through an app, so keep developer material here instead. Keep installation pages in `installation/`, user tasks in `how-to/` and reference pages in `reference/`. Use relative Markdown links, images with alt text and simple Markdown.
+
+**Any change to what the server does must also be made in the user guide, in the same PR.** That covers a new tool or setting, a changed default, a limit, what's sent or kept, and anything in `reference/tools.md` or `reference/settings.md`. The README is the short version; keep the two saying the same thing.
+
+`docs/guide` is the source and the wiki is only where people read it, matching DashyNMS/desktop (#163). The **Wiki** workflow copies the guide to the [repository wiki](https://github.com/DashyNMS/mcp/wiki) whenever it changes on `main`. `scripts/Publish-WikiGuide.py`, the same script as Desktop's, names each page after its first heading, turns `README.md` into Home, rewrites links, and builds the sidebar from the order of `README.md`'s links, grouped under its level-two headings. Wiki pages are flat, so each page needs a unique title, and every page must be linked from `README.md`. Pull requests that touch the guide run the same conversion as a link check. Edits made in the wiki itself are replaced the next time it's published.
+
+Use synthetic data, `example.net` and documentation address ranges only. To preview the pages:
+
+```bash
+python3 scripts/Publish-WikiGuide.py docs/guide /tmp/wiki --repository DashyNMS/mcp
+```
+
+### The guides the help tool reads
+
+`dashynms_help` (#164) answers from guides embedded in `DashyNMS.Agent.Shared`: this repository's `docs/guide`, and copies of Desktop's and Mobile's under `src/DashyNMS.Agent.Shared/Help/Guides`. `guides.json` records the version and commit of each copy, and every result says the product and release it describes. Copy a guide with:
+
+```bash
+python3 scripts/update-guides.py desktop <commit>
+```
+
+Do it for both when a release is prepared, with the commits being released, after taking out wording such as "until 2.0 is released" here and there, and whenever a feature people will ask about changes. `HelpLookup` in Shared does the work, so other hosts run it in process: it needs no client, and `HelpLibrary` requests nothing unless its host turns refreshing on (`MCP_HELP_REFRESH` here). Say so in an app's privacy notice before turning it on there. Guide text goes through the redactor and counts as data, like anything else a tool returns.
+
+`MCP_TOOLS_ALLOW=dashynms_help` is the one configuration that starts without LibreNMS.
 
 ## Rules for tools
 
@@ -394,8 +421,8 @@ The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), a
 declares that as a minimum, so a host that pins a newer Core gets that one instead.
 The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
 and mobile's (`DashyNMSCoreVersion` in mobile's `Directory.Build.props`) share one entry,
-`2.0.0-nightly.1`: Shared now needs that Core, so mobile moves from `2.0.0-ci.76` to it
-before pinning this Shared. For each entry it:
+`2.0.0-nightly.3`: Shared now needs that Core, so mobile moves to it before pinning this
+Shared. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -453,6 +480,10 @@ unchanged.
 
 The move to `2.0.0-nightly.1` uses Core's first nightly for 2.0.0.
 MCP and the Shared package use the same pin, with updated licence evidence.
+
+The move from `2.0.0-nightly.1` to `2.0.0-nightly.3` (core#90 Batch 8) holds core#118, the
+guide loader the help tool is built on, and build script changes. Nothing MCP already called
+has changed, so its other output is unchanged. The licence is unchanged.
 
 #### Publication
 

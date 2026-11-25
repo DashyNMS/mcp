@@ -34,7 +34,7 @@ public sealed class StdioSmokeTests
 
         var list = await server.RequestAsync(2, "tools/list", "{}", cts.Token);
         var tools = list.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
-        Assert.Equal(24, tools.Count);
+        Assert.Equal(25, tools.Count);
         ListedTools.AssertUnchanged(list.GetProperty("result").GetProperty("tools"));
         CatalogueMatch.AssertEqual(list.GetProperty("result").GetProperty("tools"));
         Assert.All(tools, tool =>
