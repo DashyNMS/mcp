@@ -109,7 +109,7 @@ public sealed class ToolPolicyTests
         Assert.Equal("ok", allowed.GetProperty("status").GetString());
 
         var stderr = await server.StopAsync(cts.Token);
-        Assert.Contains("22 of 24 tools are on", stderr, StringComparison.Ordinal);
+        Assert.Contains("23 of 25 tools are on", stderr, StringComparison.Ordinal);
         Assert.Contains("Off: ", stderr, StringComparison.Ordinal);
     }
 
@@ -125,6 +125,30 @@ public sealed class ToolPolicyTests
         Assert.Equal("find_device", Assert.Single(list.GetProperty("result").GetProperty("tools").EnumerateArray()).GetProperty("name").GetString());
         var call = await server.RequestAsync(3, "tools/call", """{"name":"active_alerts","arguments":{}}""", cts.Token);
         Assert.True(call.TryGetProperty("error", out _));
+    }
+
+    [Theory]
+    [InlineData("dashynms_help", null, false)]
+    [InlineData("dashynms_help,find_device", "find_device", false)]
+    [InlineData("dashynms_help,find_device", null, true)]
+    [InlineData(null, null, true)]
+    [InlineData("not_a_tool", null, true)]
+    public void Only_help_needs_no_LibreNMS(string? allow, string? deny, bool needs)
+        => Assert.Equal(needs, Parse(allow, deny, out _).NeedsLibreNms);
+
+    [Fact]
+    public async Task Help_alone_runs_without_LibreNMS()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var server = StdioServer.Start(new Dictionary<string, string?> { [McpOptions.ToolsAllow] = "dashynms_help" });
+        await server.InitializeAsync(cts.Token);
+
+        var list = await server.RequestAsync(2, "tools/list", "{}", cts.Token);
+        Assert.Equal("dashynms_help", Assert.Single(list.GetProperty("result").GetProperty("tools").EnumerateArray()).GetProperty("name").GetString());
+        var answer = await server.CallToolAsync(3, "dashynms_help", "{\"query\":\"choose which alerts notify me\",\"product\":\"desktop\"}", cts.Token);
+        Assert.Equal("ok", answer.GetProperty("status").GetString());
+        Assert.Equal("desktop", answer.GetProperty("data").GetProperty("matches")[0].GetProperty("product").GetString());
+        Assert.Contains("LibreNMS isn't set up", await server.StopAsync(cts.Token), StringComparison.Ordinal);
     }
 
     [Fact]

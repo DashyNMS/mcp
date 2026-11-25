@@ -65,6 +65,7 @@ public sealed class McpOptions
     public const string LastKnownGoodKey = "MCP_LAST_KNOWN_GOOD";
     public const string LastKnownGoodDirectoryKey = "MCP_LAST_KNOWN_GOOD_DIR";
     public const string LastKnownGoodHoursKey = "MCP_LAST_KNOWN_GOOD_HOURS";
+    public const string HelpRefreshKey = "MCP_HELP_REFRESH";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
@@ -96,8 +97,10 @@ public sealed class McpOptions
     internal static bool HasHttp => false;
 #endif
 
+    private readonly LibreNmsConnection? _connection;
+
     private McpOptions(
-        LibreNmsConnection connection,
+        LibreNmsConnection? connection,
         bool timestampsAreUtc,
         UnimusConnection? unimus,
         string? unimusMyDomain,
@@ -107,7 +110,7 @@ public sealed class McpOptions
         int maxResultBytes,
         DashyNMS.Agent.ConfigText configText, AppSettings sensorSettings)
     {
-        Connection = connection;
+        _connection = connection;
         TimestampsAreUtc = timestampsAreUtc;
         Unimus = unimus;
         UnimusMyDomain = unimusMyDomain;
@@ -128,7 +131,13 @@ public sealed class McpOptions
     /// the desktop repo). There is deliberately no accept-everything switch.
     /// The same goes for Unimus and Graylog.
     /// </summary>
-    public LibreNmsConnection Connection { get; }
+    public LibreNmsConnection Connection => _connection ?? throw new InvalidOperationException("LibreNMS isn't set up.");
+
+    /// <summary>Whether LibreNMS is set up. It's only left out when help is the only tool on (#164).</summary>
+    public bool HasConnection => _connection is not null;
+
+    /// <summary>Whether the user guides may be refreshed from GitHub. Off unless the operator asks (#164).</summary>
+    public bool HelpRefresh { get; private init; }
 
     /// <summary>Thresholds owned by this standalone host, never read from app settings files.</summary>
     public AppSettings SensorSettings { get; }
@@ -231,7 +240,7 @@ public sealed class McpOptions
     /// as the username.
     /// </summary>
     internal IReadOnlyList<string> Secrets
-        => new[] { Connection.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().Concat(HttpTokens?.Values ?? []).ToArray();
+        => new[] { _connection?.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().Concat(HttpTokens?.Values ?? []).ToArray();
 
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
@@ -252,8 +261,8 @@ public sealed class McpOptions
                 }
             }
 
-            Check(Connection.WebRoot, LibreNmsUrl, "LibreNMS API token");
-            Check(Connection.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
+            Check(_connection?.WebRoot, LibreNmsUrl, "LibreNMS API token");
+            Check(_connection?.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
             Check(Unimus?.WebRoot, UnimusUrl, "Unimus API token");
             Check(Graylog?.Root, GraylogUrl, "Graylog password");
             if (AuditGelf?.IsUnencrypted == true)
@@ -288,9 +297,16 @@ public sealed class McpOptions
         ArgumentNullException.ThrowIfNull(lookup);
         var problems = new List<string>();
 
+        var tools = ParseTools(lookup, problems);
         Uri? webRoot = null;
         var url = Value(lookup, LibreNmsUrl);
-        if (url is null)
+        var token = Value(lookup, LibreNmsToken);
+        var withoutLibreNms = url is null && token is null && !tools.NeedsLibreNms;
+        if (withoutLibreNms)
+        {
+            // Help is the only tool, and it reads the bundled guides.
+        }
+        else if (url is null)
         {
             problems.Add($"{LibreNmsUrl} is not set. Set it to the address of your LibreNMS server, e.g. https://librenms.example.com.");
         }
@@ -299,8 +315,7 @@ public sealed class McpOptions
             problems.Add($"{LibreNmsUrl}: {urlError}");
         }
 
-        var token = Value(lookup, LibreNmsToken);
-        if (token is null)
+        if (token is null && !withoutLibreNms)
         {
             problems.Add($"{LibreNmsToken} is not set. Create an API token for a read-only LibreNMS user and set it here.");
         }
@@ -326,6 +341,7 @@ public sealed class McpOptions
         var lastKnownGood = ParseBool(lookup, LastKnownGoodKey, fallback: true, problems);
         var lastKnownGoodHours = ParseInt(lookup, LastKnownGoodHoursKey, DefaultLastKnownGoodHours, minimum: 1, problems, MaximumLastKnownGoodHours);
         var lastKnownGoodDirectory = ParseDirectory(lookup, LastKnownGoodDirectoryKey, problems);
+        var helpRefresh = ParseBool(lookup, HelpRefreshKey, fallback: false, problems);
         var resourcesDirectory = ParseDirectory(lookup, ResourcesDirectoryKey, problems);
         if (resourcesDirectory is not null && !Directory.Exists(resourcesDirectory))
         {
@@ -333,7 +349,6 @@ public sealed class McpOptions
             problems.Add($"{ResourcesDirectoryKey}: there's no such folder, or the server can't see it.");
         }
 
-        var tools = ParseTools(lookup, problems);
         var transport = ParseTransport(lookup, problems);
         var http = transport == McpTransport.Http;
         var httpPort = http ? ParseInt(lookup, HttpPortKey, DefaultHttpPort, minimum: 1, problems, maximum: 65535) : DefaultHttpPort;
@@ -350,7 +365,7 @@ public sealed class McpOptions
             return null;
         }
 
-        var connection = new LibreNmsConnection(
+        var connection = withoutLibreNms ? null : new LibreNmsConnection(
             webRoot!,
             token!,
             allowUntrustedCertificate: true,
@@ -371,8 +386,9 @@ public sealed class McpOptions
             MaxConcurrentRequests = maxConcurrentRequests,
             RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
             ResourcesDirectory = resourcesDirectory,
-            LastKnownGood = lastKnownGood ? TimeSpan.FromHours(lastKnownGoodHours) : null,
-            LastKnownGoodDirectory = lastKnownGood ? lastKnownGoodDirectory : null,
+            LastKnownGood = lastKnownGood && !withoutLibreNms ? TimeSpan.FromHours(lastKnownGoodHours) : null,
+            LastKnownGoodDirectory = lastKnownGood && !withoutLibreNms ? lastKnownGoodDirectory : null,
+            HelpRefresh = helpRefresh,
         };
     }
 

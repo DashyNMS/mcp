@@ -15,7 +15,7 @@ public sealed class ToolCatalogueTests
     [Fact]
     public void It_holds_every_tool_once()
     {
-        string[] expected = ["active_alerts", "alert_details", "alert_rules", "config_backup", "config_diff", "device_details", "device_events", "device_health", "device_neighbours", "device_sensors", "find_device", "graph", "health_overview", "list_groups_and_locations", "network_events", "network_overview", "port_status", "recent_config_changes", "search_logs", "top_devices", "top_errors", "top_interfaces", "trace_endpoint", "what_changed"];
+        string[] expected = ["active_alerts", "alert_details", "alert_rules", "config_backup", "config_diff", "dashynms_help", "device_details", "device_events", "device_health", "device_neighbours", "device_sensors", "find_device", "graph", "health_overview", "list_groups_and_locations", "network_events", "network_overview", "port_status", "recent_config_changes", "search_logs", "top_devices", "top_errors", "top_interfaces", "trace_endpoint", "what_changed"];
 
         Assert.Equal(expected, ToolCatalogue.Names.Order(StringComparer.Ordinal));
         Assert.Equal(ToolCatalogue.Tools.Select(t => t.Name), ToolCatalogue.Names);

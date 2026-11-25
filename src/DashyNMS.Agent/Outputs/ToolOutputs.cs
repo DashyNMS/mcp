@@ -6,6 +6,7 @@ using DashyNMS.Agent.Events;
 using DashyNMS.Agent.Graphs;
 using DashyNMS.Agent.Graylog;
 using DashyNMS.Agent.Health;
+using DashyNMS.Agent.Help;
 using DashyNMS.Agent.Overview;
 using DashyNMS.Agent.Ports;
 using DashyNMS.Agent.Rankings;
@@ -33,6 +34,7 @@ internal static class ToolOutputs
         [ToolText.AlertRules.Name] = [typeof(ListedRulesData)],
         [ToolText.ConfigBackup.Name] = [typeof(ConfigBackupData)],
         [ToolText.ConfigDiff.Name] = [typeof(ConfigDiffData)],
+        [ToolText.DashynmsHelp.Name] = [typeof(HelpSearchData), typeof(HelpPageData), typeof(HelpContentsData)],
         [ToolText.DeviceDetails.Name] = [typeof(DeviceDetailsData)],
         [ToolText.DeviceEvents.Name] = [typeof(DeviceEventsData)],
         [ToolText.DeviceHealth.Name] = [typeof(DeviceHealthData)],

@@ -17,7 +17,7 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
 {
     /// <summary>
     /// Tools whose answers aren't kept. Config and log text is the likeliest to
-    /// hold a secret the redactor doesn't know, and a graph is an image.
+    /// hold a secret the redactor doesn't know, a graph is an image, and help never needs LibreNMS.
     /// </summary>
     public static readonly IReadOnlySet<string> NotKept = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -27,6 +27,7 @@ public sealed class LastKnownGoodFilter(LastKnownGood answers, Redactor redactor
         ToolText.WhatChanged.Name,
         ToolText.SearchLogs.Name,
         ToolText.Graph.Name,
+        ToolText.DashynmsHelp.Name,
     };
 
     /// <summary>How <see cref="ToolResult"/> starts every answer.</summary>

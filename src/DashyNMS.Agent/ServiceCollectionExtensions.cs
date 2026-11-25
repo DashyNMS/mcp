@@ -1,4 +1,5 @@
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Help;
 using DashyNMS.Agent.Redaction;
 using DashyNMS.Agent.Requests;
 using DesktopNMS.Core.Api;
@@ -67,6 +68,7 @@ public static class ServiceCollectionExtensions
             sp.GetService<DesktopNMS.Core.Sensors.SensorDefinitionStore>(),
             sp.GetRequiredService<DeviceDirectory>()));
         services.AddSingleton<UnimusDirectory>();
+        services.TryAddSingleton(_ => new HelpLibrary());
 
         return services;
     }

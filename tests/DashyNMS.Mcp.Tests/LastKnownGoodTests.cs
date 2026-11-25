@@ -332,9 +332,9 @@ public sealed class LastKnownGoodTests : IDisposable
     }
 
     [Fact]
-    public void Config_logs_and_images_are_never_kept()
+    public void Config_logs_images_and_help_are_never_kept()
         => Assert.Equal(
-            ["config_backup", "config_diff", "graph", "recent_config_changes", "search_logs", "what_changed"],
+            ["config_backup", "config_diff", "dashynms_help", "graph", "recent_config_changes", "search_logs", "what_changed"],
             LastKnownGoodFilter.NotKept.Order(StringComparer.Ordinal));
 
     private sealed class Clock : TimeProvider

@@ -137,6 +137,32 @@ public sealed class McpOptionsTests
     }
 
     [Fact]
+    public void Help_alone_needs_neither_address_nor_token_and_half_of_them_is_still_a_mistake()
+    {
+        var options = Load(new() { [McpOptions.ToolsAllow] = "dashynms_help", [McpOptions.LastKnownGoodKey] = "true" }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.False(options!.HasConnection);
+        Assert.Null(options.LastKnownGood);
+        Assert.Empty(options.Secrets);
+        Assert.Empty(options.Warnings);
+
+        Assert.Null(Load(new() { [McpOptions.ToolsAllow] = "dashynms_help", [McpOptions.LibreNmsUrl] = "https://librenms.example.net" }, out errors));
+        Assert.Contains("LIBRENMS_TOKEN is not set", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("true", true)]
+    public void Guides_are_refreshed_only_when_asked(string? value, bool expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.HelpRefreshKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.HelpRefresh);
+    }
+
+    [Fact]
     public void Minimal_settings_use_defaults()
     {
         var options = Load(Minimal(), out var errors);

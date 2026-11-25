@@ -31,6 +31,8 @@ RUN --mount=type=secret,id=packages,env=DASHYNMS_PACKAGES_TOKEN \
     dotnet restore src/DashyNMS.Mcp -a $TARGETARCH
 
 COPY src/ src/
+# The server's own user guide, which the help tool reads.
+COPY docs/guide/ docs/guide/
 COPY scripts/collect-dependency-notices.py scripts/
 COPY docs/dependency-licences/ docs/dependency-licences/
 # Collect legal files from the exact restored packages, including transitives.

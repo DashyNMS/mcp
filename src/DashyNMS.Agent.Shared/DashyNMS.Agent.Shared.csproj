@@ -31,6 +31,20 @@
     <None Include="LICENSE" Pack="true" PackagePath="/" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+  <!--
+    The user guides the help tool reads (#164): this repository's own, and the
+    copies scripts/update-guides.py takes of Desktop's and Mobile's. Text only.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Help/Guides/desktop/**/*.md" LogicalName="DashyNMS.Agent.Help/desktop/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Help/Guides/mobile/**/*.md" LogicalName="DashyNMS.Agent.Help/mobile/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../docs/guide/**/*.md" LogicalName="DashyNMS.Agent.Help/mcp/docs/guide/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Help/Guides/guides.json" LogicalName="DashyNMS.Agent.Help/guides.json" />
+  </ItemGroup>
+  <!-- A build without one would ship a help tool that knows nothing about it. -->
+  <Target Name="RequireGuides" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('../../docs/guide/README.md') Or !Exists('Help/Guides/desktop/docs/guide/README.md') Or !Exists('Help/Guides/mobile/docs/guide/README.md')" Text="A user guide the help tool reads is missing. See scripts/update-guides.py." />
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="DashyNMS.Agent" />
     <InternalsVisibleTo Include="DashyNMS.Agent.Tests" />
