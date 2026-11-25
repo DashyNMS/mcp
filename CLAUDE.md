@@ -11,6 +11,7 @@ Read-only MCP server that lets Claude (and other MCP clients) answer questions a
 - Configuration comes only from environment variables. Never log or echo a token or password.
 - PR titles, commits and issue titles: `type(scope): what changes, in plain words`. One issue per PR, `Closes #NN` in the description, issue titles worded as the result the fix delivers. Full standard and scopes: docs/DEVELOPMENT.md, "Commits, pull requests and issues".
 - Commits, PRs and release notes carry no AI attribution or Co-Authored-By lines. "PRSMNCA" means open a PR, then squash-merge it with no co-author; larger branches whose commits are worth keeping are rebase-merged instead.
+- User guide: any change to what the server does is also made in `docs/guide`, in the same PR; it's published to the wiki. Read docs/DEVELOPMENT.md, "User guide and wiki", first.
 - Release notes: a change users would notice adds or updates its line in `docs/releases/<version>.md` (the `<Version>` in `Directory.Build.props`) in the same PR. Never write a GitHub release's notes by hand. Read docs/DEVELOPMENT.md, "Release notes", first.
 - Match desktop's style: British spelling in user-facing text, XML doc comments explaining *why*, sealed classes.
 - Never put real device names, hostnames, addresses or other identifiable network data in issues, PRs, commits or test fixtures.
