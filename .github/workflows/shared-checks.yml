@@ -78,9 +78,9 @@ jobs:
       matrix:
         include:
           # MCP's own pin (Directory.Build.props), which mobile moves to before it
-          # pins this Shared: it's on 2.0.0-ci.76, and Shared needs ci.84 or later.
+          # pins this Shared: the help lookup needs Core's guide loader.
           - consumer: mcp and mobile
-            core: 2.0.0-nightly.1
+            core: 2.0.0-nightly.3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
