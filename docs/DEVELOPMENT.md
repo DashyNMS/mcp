@@ -152,6 +152,9 @@ Then every archive is checked together and `SHA256SUMS` made. Pull requests stop
 
 ## User guide and wiki
 
+Use inline Markdown links and fenced code blocks in `docs/guide`. The shared
+wiki converter does not support reference-style links or indented code blocks.
+
 The user guide is in [`docs/guide`](guide/README.md): getting started, installation, how-to pages and reference. It's for people who run the server or use it through an app, so keep developer material here instead. Keep installation pages in `installation/`, user tasks in `how-to/` and reference pages in `reference/`. Use relative Markdown links, images with alt text and simple Markdown.
 
 **Any change to what the server does must also be made in the user guide, in the same PR.** That covers a new tool or setting, a changed default, a limit, what's sent or kept, and anything in `reference/tools.md` or `reference/settings.md`. The README is the short version; keep the two saying the same thing.
