@@ -11,6 +11,7 @@ import os
 import subprocess
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from package_xml import parse_metadata
 import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -36,7 +37,8 @@ if report['source'] != source or source['repository'] != 'DashyNMS/mcp':
 if args.for_publication and not (source['event'] in ('push', 'schedule', 'workflow_dispatch')
                                  and (source['ref'], source['refProtected']) == ('refs/heads/main', 'true')):
     raise SystemExit('Publication requires a run on protected main')
-base = ET.parse(artifacts.parent / 'Directory.Build.props').findtext('.//Version')
+# version-controlled local build configuration.
+base = ET.parse(artifacts.parent / 'Directory.Build.props').findtext('.//Version')  # nosec B314
 # What this run may publish: its own edge or nightly number, or a release, which
 # only a dispatched run makes. Checks that publish nothing use edge.0.
 allowed = {f"{base}-{channel}.{os.environ['GITHUB_RUN_NUMBER']}" for channel in ('edge', 'nightly')}
@@ -58,7 +60,7 @@ with zipfile.ZipFile(packages[0]) as archive:
     ns = {'n': 'http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd'}
     if archive.namelist().count('DashyNMS.Agent.Shared.nuspec') != 1:
         raise SystemExit('Expected one Shared nuspec')
-    metadata = ET.fromstring(archive.read('DashyNMS.Agent.Shared.nuspec')).find('n:metadata', ns)
+    metadata = parse_metadata(archive.read('DashyNMS.Agent.Shared.nuspec')).find('n:metadata', ns)
     repository = metadata.find('n:repository', ns)
     if (metadata.findtext('n:id', namespaces=ns), metadata.findtext('n:version', namespaces=ns)) != ('DashyNMS.Agent.Shared', version):
         raise SystemExit('Nuspec identity/version mismatch')

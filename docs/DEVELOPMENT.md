@@ -187,6 +187,8 @@ Do it for both when a release is prepared, with the commits being released, afte
 
 ## Commits, pull requests and issues
 
+Dependabot uses `build(deps): ...` for every ecosystem. Its generated dependency names and grouped summaries may exceed the usual title length.
+
 Every change goes through a branch and a pull request into `main`, one issue per PR, and is squash-merged, so the PR title becomes the commit on `main`. PR titles, commit messages and issue titles follow [Conventional Commits](https://www.conventionalcommits.org/) in plain words, the same standard as every DashyNMS repository:
 
 ```
@@ -988,3 +990,8 @@ A second unescaped `<` inside an unfinished tag is treated as unknown syntax.
 Diff masking then keeps subsequent text hidden, including when the first tag
 was a common non-secret line, so a later secret opener cannot be discarded
 while its body remains visible.
+
+## Repository standards
+
+See [Repository standards](REPOSITORY-STANDARDS.md) for security gates, shared
+policy ownership, contribution files and the procedure for updating copied helpers.

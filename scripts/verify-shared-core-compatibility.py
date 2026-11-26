@@ -33,7 +33,8 @@ properties = [f'-p:SharedPackageVersion={version}', f'-p:DashyNMSCoreVersion={co
 
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)
-    config = ET.parse(root / 'nuget.config')
+    # version-controlled local build configuration.
+    config = ET.parse(root / 'nuget.config')  # nosec B314
     config.find('packageSources').append(ET.Element('add', key='shared-artefact', value=str(package.parent)))
     # The exact ID is more specific than DashyNMS.*, so only the Shared package comes from the artefact.
     mapping = ET.SubElement(config.find('packageSourceMapping'), 'packageSource', key='shared-artefact')

@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 import sys
 import urllib.request
-import xml.etree.ElementTree as ET
+from package_xml import parse_metadata
 import zipfile
 
 # Upstream legal files per source repository. The first entry is the licence;
@@ -38,11 +38,14 @@ supplements = Path(__file__).resolve().parents[1] / 'docs/dependency-licences'
 
 
 def download(url, token=None):
+    if not url.startswith(('https://api.nuget.org/', 'https://nuget.pkg.github.com/', 'https://raw.githubusercontent.com/')):
+        raise ValueError('Only the reviewed HTTPS package and source hosts are permitted')
     request = urllib.request.Request(url)
     if token:
         # Unredirected: GitHub Packages redirects to signed storage, which rejects it.
         request.add_unredirected_header('Authorization', 'Basic ' + base64.b64encode(f'x:{token}'.encode()).decode())
-    with urllib.request.urlopen(request) as response:
+    # reviewed HTTPS hosts above.
+    with urllib.request.urlopen(request, timeout=60) as response:  # nosec B310
         return response.read()
 
 
@@ -56,7 +59,7 @@ for argument in sys.argv[1:]:
         archive_bytes = download(url)
     with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
         nuspec = next(name for name in archive.namelist() if name.endswith('.nuspec'))
-        metadata = ET.fromstring(archive.read(nuspec))
+        metadata = parse_metadata(archive.read(nuspec))
         embedded = {name.rsplit('/', 1)[-1].lower() for name in archive.namelist()}
     for element in metadata.iter():
         element.tag = element.tag.rsplit('}', 1)[-1]

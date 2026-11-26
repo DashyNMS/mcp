@@ -16,6 +16,9 @@ registries:
 
 updates:
   - package-ecosystem: github-actions
+    commit-message:
+      prefix: build
+      include: scope
     directory: /
     schedule:
       interval: weekly
@@ -30,6 +33,9 @@ updates:
   # digest-only bump is none of those. The SDK and runtime images must move
   # together. A major framework migration is reviewed separately.
   - package-ecosystem: docker
+    commit-message:
+      prefix: build
+      include: scope
     directory: /
     ignore:
       # global.json and the application target .NET 10; keep digest updates
@@ -46,6 +52,9 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: nuget
+    commit-message:
+      prefix: build
+      include: scope
     directories:
       - /src/*
       - /tests/*

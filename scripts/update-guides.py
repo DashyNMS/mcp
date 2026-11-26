@@ -58,7 +58,8 @@ def write(product, commit, pages, version, guides):
 def main(product, commit):
     assert re.fullmatch(r'[0-9a-f]{40}', commit), 'Give the full commit, so the copy can be traced.'
     address = f'https://codeload.github.com/{REPOSITORIES[product]}/tar.gz/{commit}'
-    with urllib.request.urlopen(address, timeout=120) as response:
+    # fixed GitHub HTTPS codeload endpoint.
+    with urllib.request.urlopen(address, timeout=120) as response:  # nosec B310
         pages, version = read(response.read())
     write(product, commit, pages, version, GUIDES)
     print(f'{product} {version} at {commit}: {len(pages)} pages')

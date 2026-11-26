@@ -344,3 +344,11 @@ claude mcp add --transport http dashynms https://mcp.example.net/mcp --header "A
 <sub>DashyNMS isn't affiliated with LibreNMS, Graylog, Unimus or Anthropic. LibreNMS, Graylog, Unimus and Claude are trademarks of their respective owners.<br>
 Project-owned code and assets are MIT licensed; see [LICENSE](LICENSE) and [notices](NOTICES.md). The container image carries both, plus its dependencies' licences in `/app/third-party`.<br>
 Found a security problem? See [SECURITY.md](SECURITY.md). Technical notes are in the [developer guide](docs/DEVELOPMENT.md).</sub>
+
+
+## Contributing and accessibility
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reports, proposed changes and validation,
+[ACCESSIBILITY.md](ACCESSIBILITY.md) for barriers and supported environments, and
+[the code of conduct](CODE_OF_CONDUCT.md) for community participation.
+Report vulnerabilities privately under [SECURITY.md](SECURITY.md).

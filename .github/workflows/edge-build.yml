@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   packages: read
 
 # In order, so the edge image tag never moves back.
