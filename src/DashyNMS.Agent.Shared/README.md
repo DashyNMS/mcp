@@ -2,8 +2,7 @@
 
 Typed, read-only LibreNMS operations over a host-owned `DashyNMS.Core` client, shared
 by the DashyNMS MCP server and the DashyNMS apps. It holds the typed operations behind every read-only MCP network tool and the
-shared tool catalogue. MCP retains protocol discovery, formatting and byte caps. It replaces
-`DashyNMS.Agent.Search` (`0.1.0-ci.*`), which is no longer published.
+shared tool catalogue. MCP retains protocol discovery, formatting and byte caps.
 Targets .NET 10. Reference this package rather than `DashyNMS.Agent` (the MCP
 adapter). The direct dependency is Core; Core's own dependencies remain transitive.
 Namespaces retain the `DashyNMS.Agent` prefix for source compatibility.
@@ -37,17 +36,20 @@ hostname, display name, sysName or IP address) in MCP's tiers, under the same ru
 `Found` with the redacted device, `Ambiguous` with up to five redacted candidates and the rest
 counted, or `NoMatch`. A device list that can't be read is a `HostFailure`, never no match.
 
+`DashyNMS.Agent.Help.HelpLookup` answers how-to questions from the DashyNMS user guides bundled in
+the package (`HelpLibrary`), with the product and release of each result. It needs no client or
+connection, and requests nothing unless the host turns refreshing on.
+
 `DashyNMS.Agent.Catalogue.ToolCatalogue` lists every MCP tool with its name, title, description
 and parameters (type, required, default, documented values or range, description), and the other
 tools each description names. MCP's own attributes read the same text, so a host describing a tool
 from the catalogue tells its model exactly what MCP tells a client. Leave out what a host doesn't
 support; don't reword it.
 
-Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
-(`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
-flags, so an omitted flag reads as down and an ignored device as up or down. `State`
-is Core's `ReportedState`: `Unknown` when LibreNMS left a flag out, and `Ignored`
-on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
+Each `DeviceSummary` gives a device's state two ways, both from Core's
+`ReportedState`. `Status` is MCP's word (`up`, `down`, `disabled`, `ignored` or
+`unknown`, also the status filter). `State` is the typed value: `Unknown` when
+LibreNMS left a flag out, and `Ignored` on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
 views to maintenance; a failed check preserves the reported state and leaves
 `UnderMaintenance` null, rather than claiming it is off. Other device summaries
 do not request maintenance. `State` is left out of JSON.
@@ -58,7 +60,7 @@ limits, sanitisation, deadlines and evidence ownership checks.
 
 ## Consumption status
 
-Each verified push to `main` in DashyNMS/mcp publishes `2.0.0-ci.<run-id>.<attempt>`
+Each verified commit to `main` in DashyNMS/mcp publishes `2.0.0-edge.<build>`
 to GitHub Packages (`https://nuget.pkg.github.com/DashyNMS/index.json`), with a GitHub
 build provenance attestation and the repository commit in the nuspec. Pull requests
 verify packages without publishing. `2.0.0-dev` identifies local packs and must not
@@ -70,11 +72,10 @@ check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuG
 lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
 feed and restore with a token that has `packages: read`.
 
-The package is built against Core `2.0.0-ci.64` (MCP's pin, and mobile's) and
-declares it as a minimum. Before publication, CI runs the Shared tests on the exact
-packed binary with that Core. That is plain .NET
-evidence: a consumer must still verify its own restore, Release trimming/AOT and
-runtime behaviour in its CI.
+Shared builds against Core `2.0.0-nightly.3` and declares it as its minimum.
+Before publication, CI tests the packed binary with that version and with the
+standalone server's Core pin, `2.0.0-nightly.5`. Consumers still verify their own
+restore, Release trimming and runtime behaviour in their CI.
 
 ## Licence
 
@@ -115,3 +116,20 @@ Graph results use Core's image byte limit and return PNG bytes separately from
 metadata. Image pixels are not redacted. Hosts must disclose source failures,
 coverage gaps, sampling and omissions when compacting results, and must decide
 whether their model can receive an image before passing it through.
+
+## Exact Spotlight identities
+
+`HostObjectResolver.Create(client)` revalidates a Core
+`IntelligenceObjectReference` on the host-owned immutable connection before a
+chat changes scope. Device, group and location IDs are exact; sensor and port
+IDs also require their device, and alerts/faults require the source and any
+supplied rule ID. Alerts are checked in every state, including recovered.
+No name matching, parent-device fallback, cache or model-facing tool is added.
+
+A successful outcome contains the original identity and a redacted display
+name; missing or mismatched identities return `HostFailure.NotFound`. Source
+failures have fixed categories without exception text. Hosts provide a deadline,
+retire the resolver on connection/account changes, and recheck connection and
+chat ownership after awaiting before applying a result. IDs do not carry a
+server/account identity, so callers must never submit references from another
+connection. Retirement and caller cancellation propagate as cancellation.

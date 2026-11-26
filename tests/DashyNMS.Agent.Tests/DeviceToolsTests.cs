@@ -67,6 +67,20 @@ public sealed class DeviceToolsTests
         Assert.Contains("resources/ip/arp/aa:bb:cc:dd:ee:ff", _nms.Transport.Requests);
     }
 
+    /// <summary>A device record without its flags is neither up nor down (#121).</summary>
+    [Theory]
+    [InlineData("\"status\":1", "Device state wasn't reported")]
+    [InlineData("\"status\":1,\"disabled\":0,\"ignore\":1", "Device is ignored")]
+    public async Task Health_says_when_the_device_state_is_unknown_or_ignored(string flags, string start)
+    {
+        _nms.Transport.On("devices/1", $$"""
+            {"status":"ok","devices":[{"device_id":1,"hostname":"core-sw1.example.com","sysName":"core-sw1","ip":"10.0.0.1",{{flags}}}]}
+            """);
+        var root = FakeLibreNms.Parse(await Tools().DeviceHealth("core-sw1", cancellationToken: CancellationToken.None));
+
+        Assert.StartsWith(start + ",", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Health_combines_state_alerts_sensors_and_ports()
     {

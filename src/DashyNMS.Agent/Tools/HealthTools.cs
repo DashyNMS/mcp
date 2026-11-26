@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Health;
 using DashyNMS.Agent.Summaries;
+using DesktopNMS.Core.Api;
 using ModelContextProtocol.Server;
 
 namespace DashyNMS.Agent.Tools;
@@ -15,7 +17,8 @@ public sealed class HealthTools(
     DeviceDirectory directory,
     DeviceResolver resolver,
     DeviceScope scopes,
-    ToolRunner runner)
+    ToolRunner runner,
+    ILibreNmsClient client)
 {
     public const int DefaultReadings = 50;
     public const int MaxReadings = 100;
@@ -53,12 +56,7 @@ public sealed class HealthTools(
         var readings = result.Readings;
 
         var shown = ToolResult.Take(readings, MaxReadings, out var omitted);
-        var data = new
-        {
-            device = DeviceBrief.From(device),
-            types = result.Types.Select(t => new { type = t.Type, count = t.Count }).ToList(),
-            readings = shown,
-        };
+        var data = new DeviceSensorsData(DeviceBrief.From(device), result.Types, shown);
 
         var type = SensorReading.ParseType(typeText);
         return ToolResult.Ok(Sentence(readings, readings.Count == 0 ? (type is null ? "No sensors on this device." : "No sensors of that type on this device.") : null), data, omitted);
@@ -66,7 +64,7 @@ public sealed class HealthTools(
 
     private async Task<JsonObject> OverviewAsync(string? typeText, bool onlyProblems, string? group, string? location, int offset, int limit, CancellationToken cancellationToken)
     {
-        var result = await new HealthOverview(sensorSource, directory, scopes, runner.Options, runner.Redactor)
+        var result = await new HealthOverview(sensorSource, directory, scopes, runner.Options, runner.Redactor, ct => client.Alerts.ListAsync(AlertQuery.Open, ct))
             .ReadAsync(new(typeText, onlyProblems, group, location, offset, limit), cancellationToken).ConfigureAwait(false);
         return ToolResult.Ok(result.Summary, result.Data);
     }

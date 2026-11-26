@@ -197,7 +197,7 @@ public sealed class DeviceSearchTests
         var nms = new FakeLibreNms();
         nms.Transport.On("devices", """
             {"devices":[{"device_id":7,"hostname":"sw.example.net","display":"password=synthetic-secret",
-            "sysName":"switch","ip":"192.0.2.7","os":"test-os","hardware":"test-model","location":"Lab","status":1}]}
+            "sysName":"switch","ip":"192.0.2.7","os":"test-os","hardware":"test-model","location":"Lab","status":1,"disabled":0,"ignore":0}]}
             """);
         var tools = new DeviceTools(nms.Client, nms.Directory, nms.Resolver, nms.Scope, nms.Runner, nms.Options);
         var raw = await tools.FindDevice("sw", verbose: verbose);
@@ -260,7 +260,7 @@ public sealed class DeviceSearchTests
             "ipv4_address":"password=synthetic-ip","mac_address":"token=synthetic-mac"}]}
             """);
         var redactor = new Redactor();
-        var runner = new ToolRunner(redactor, nms.Options, NullLogger<ToolRunner>.Instance);
+        var runner = new ToolRunner(redactor, nms.Options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check };
         Assert.Same(redactor, runner.Redactor);
         var search = DeviceSearch.Create(nms.Client, nms.Time, nms.Options, redactor);
         var match = Assert.Single((await search.FindDevicesAsync(new("aa:bb:cc:dd:ee:ff"))).Matches);

@@ -21,7 +21,7 @@ public sealed class LibreNmsStartupTests
         _client.TestAsync(Connection, Arg.Any<CancellationToken>())
             .Returns(ConnectionTestResult.Success(new SystemInfo { LocalVersion = "26.9.0" }));
 
-        var failure = await Startup().ConnectAsync(Connection, CancellationToken.None);
+        var failure = await Startup().ConnectAsync(Connection, canWait: false, CancellationToken.None);
 
         Assert.Null(failure);
         _client.Received(1).Connect(Connection, false);
@@ -33,7 +33,7 @@ public sealed class LibreNmsStartupTests
         _client.TestAsync(Connection, Arg.Any<CancellationToken>())
             .Returns(ConnectionTestResult.Success(new SystemInfo(), usedBackupAddress: true));
 
-        await Startup().ConnectAsync(Connection, CancellationToken.None);
+        await Startup().ConnectAsync(Connection, canWait: false, CancellationToken.None);
 
         _client.Received(1).Connect(Connection, true);
     }
@@ -44,10 +44,28 @@ public sealed class LibreNmsStartupTests
         _client.TestAsync(Connection, Arg.Any<CancellationToken>())
             .Returns(ConnectionTestResult.Failure("The server did not answer."));
 
-        var failure = await Startup().ConnectAsync(Connection, CancellationToken.None);
+        var failure = await Startup().ConnectAsync(Connection, canWait: false, CancellationToken.None);
 
         Assert.Equal("Couldn't connect to LibreNMS at https://librenms.example.com/: The server did not answer.", failure);
         _client.DidNotReceive().Connect(Arg.Any<LibreNmsConnection>(), Arg.Any<bool>());
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public async Task With_answers_from_before_only_an_unreachable_server_is_waited_for(bool refused, bool untrusted, bool starts)
+    {
+        var certificate = untrusted
+            ? new CertificateDetails("librenms.example.com", "AB:CD:EF", "CN=a", "CN=b", DateTime.UnixEpoch, DateTime.UnixEpoch, SslPolicyErrors.RemoteCertificateChainErrors, false)
+            : null;
+        _client.TestAsync(Connection, Arg.Any<CancellationToken>())
+            .Returns(ConnectionTestResult.Failure("The server did not answer.", refused, certificate));
+
+        var failure = await Startup().ConnectAsync(Connection, canWait: true, CancellationToken.None);
+
+        Assert.Equal(starts, failure is null);
+        _client.Received(starts ? 1 : 0).Connect(Connection, false);
     }
 
     [Fact]

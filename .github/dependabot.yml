@@ -36,7 +36,7 @@ updates:
       # enabled without mixing a new SDK major with the current runtime.
       - dependency-name: "dotnet/sdk"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "dotnet/runtime"
+      - dependency-name: "dotnet/aspnet"
         update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly
@@ -52,7 +52,7 @@ updates:
     registries:
       - dashynms
     ignore:
-      # Pinned by hand to a development build of DashyNMS/core between
+      # Pinned by hand to an edge build of DashyNMS/core between
       # releases (see docs/DEVELOPMENT.md), not bumped on every merge there.
       - dependency-name: "DashyNMS.Core"
     schedule:

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
@@ -97,9 +98,9 @@ public sealed class GraphTools(
         var summary = result.Summary;
         if (result.Unavailable.Count > 0 && result.Image is not null)
             summary += " Some graph listings couldn't be read, so the available types are incomplete.";
-        var response = ToolResult.Ok(summary, result.Data, result.Omitted);
-        if (result.Unavailable.Count > 0)
-            response["data"]!["unavailable"] = System.Text.Json.JsonSerializer.SerializeToNode(result.Unavailable, ToolResult.Json);
+        var d = result.Data;
+        var response = ToolResult.Ok(summary, new GraphData(d.Device, d.Graph, d.Sensor, d.Port, d.OtherTypes, d.AvailableTypes,
+            result.Unavailable.Count > 0 ? result.Unavailable : null), result.Omitted);
         return (response, result.Image?.Data);
     }
 

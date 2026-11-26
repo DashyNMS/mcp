@@ -194,7 +194,7 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var rulesTask = fleet.GetRulesAsync(cancellationToken);
         var templates = Sources.TryAsync(() => fleet.GetTemplatesAsync(cancellationToken), cancellationToken);
         var open = Sources.TryAsync(() => client.Alerts.ListAsync(AlertQuery.Open, cancellationToken), cancellationToken);
-        var raisedLog = DeviceTimeline.ReadBackAsync(depth => client.Logs.ListAlertLogAsync(null, depth, cancellationToken), a => Sources.Utc(a.TimeLogged, options), recent, cancellationToken);
+        var raisedLog = new LogReads(options, time).AlertsAsync(client.Logs, null, recent, keep: null, toNow: true, cancellationToken);
         var groups = Sources.TryAsync(() => scopes.ListGroupsAsync(cancellationToken), cancellationToken);
         var locations = Sources.TryAsync(() => fleet.GetLocationsAsync(cancellationToken), cancellationToken);
         var system = Sources.TryAsync(() => client.System.GetAsync(cancellationToken), cancellationToken);
@@ -202,11 +202,11 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         await Task.WhenAll(rulesTask, templates, open, raisedLog, groups, locations, system, devicesTask).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Which device columns this server has removed (LibreNMS 26.10, #78); unknown keeps them.
+        // Which columns this server has removed (LibreNMS 26.10 #78, 26.11 #156); an unknown version flags any that might be gone.
         var serverVersion = LibreNmsVersion.Parse(system.Result.Value?.LocalVersion);
 
         var unavailable = new List<Unavailable>();
-        foreach (var (source, error) in new[] { ("templates", templates.Result.Error), ("open alerts", open.Result.Error), ("alert log", raisedLog.Result.Error), ("device groups", groups.Result.Error), ("locations", locations.Result.Error) })
+        foreach (var (source, error) in new[] { ("templates", templates.Result.Error), ("open alerts", open.Result.Error), ("alert log", raisedLog.Result.Error), ("device groups", groups.Result.Error), ("locations", locations.Result.Error), ("system", system.Result.Error) })
         {
             if (error is not null)
             {
@@ -272,7 +272,10 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         var needReview = sorted.Count(x => RemovedColumns(x.Rule, serverVersion) is not null);
         var summary = $"{Devices.DeviceHealth.Count(rules.Count, "rule")}" + (includeDisabled ? string.Empty : " enabled") +
             (name is null && severity is null ? "." : " match.") +
-            (needReview == 0 ? string.Empty : $" {(needReview == 1 ? "1 rule uses" : $"{needReview} rules use")} device columns LibreNMS 26.10 removed, so won't match as before - see removed_columns.") +
+            (needReview == 0 ? string.Empty
+                : serverVersion is null
+                    ? $" LibreNMS's version couldn't be read, so {(needReview == 1 ? "1 rule uses columns that" : $"{needReview} rules use columns that")} may have been removed - see removed_columns and each one's removed_in."
+                    : $" {(needReview == 1 ? "1 rule uses" : $"{needReview} rules use")} columns this LibreNMS version removed, so won't match as before - see removed_columns.") +
             (raisedComplete || raisedByRule is null ? string.Empty : " The 7-day raised counts only cover as far back as LibreNMS's alert log reaches.") +
             (info.NextOffset is not null || info.Offset > 0 ? " " + Paging.Describe(info, "rule", "rules") : string.Empty);
 
@@ -291,10 +294,15 @@ public sealed class AlertRules(ILibreNmsClient client, FleetCache fleet, DeviceD
         true => "Each fault is notified and acknowledged on its own while a device has no more than the server's default limit open (20 unless changed in LibreNMS); beyond that, acknowledging one acknowledges them all.",
     };
 
-    /// <summary>The removed device columns a rule's conditions or SQL use, with what to use instead - null when none.</summary>
+    /// <summary>
+    /// The removed columns a rule's conditions or SQL use, with what to use
+    /// instead - null when none. With no server version every removal counts,
+    /// as Core's compatibility rules do: a column that may be gone is worth
+    /// the warning.
+    /// </summary>
     private static IReadOnlyList<RemovedRuleColumn>? RemovedColumns(AlertRule rule, Version? serverVersion)
     {
-        var removed = AlertRuleCompatibility.FindRemovedColumns(rule, serverVersion ?? LibreNmsVersion.Faults);
+        var removed = AlertRuleCompatibility.FindRemovedColumns(rule, serverVersion);
         return removed.Count == 0
             ? null
             : removed.Select(c => new RemovedRuleColumn(c.Field, c.RemovedIn.ToString(3), c.Replacement, c.Advice)).ToList();

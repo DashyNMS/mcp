@@ -23,6 +23,18 @@
     <ProjectReference Include="../../src/DashyNMS.Mcp/DashyNMS.Mcp.csproj" />
   </ItemGroup>
 
+  <!--
+    The Agent tests' loopback server and synthetic Unimus fixture, shared so the
+    stdio discovery-domain tests (DashyNMS/mcp#157) read the same backups and
+    diff as the in-process ones rather than a second copy that could drift.
+  -->
+  <ItemGroup>
+    <Compile Include="../DashyNMS.Agent.Tests/FixtureServer.cs" Link="FixtureServer.cs" />
+    <!-- What holds a result to its output schema (DashyNMS/mcp#40). -->
+    <Compile Include="../DashyNMS.Agent.Tests/JsonSchemaCheck.cs" Link="JsonSchemaCheck.cs" />
+    <None Include="../DashyNMS.Agent.Tests/Fixtures/ConfigLookups/routes.json" Link="Fixtures/ConfigLookups/routes.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The tool list MCP clients receive, held byte for byte (DashyNMS/mcp#130). -->
   <ItemGroup>
     <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />

@@ -61,7 +61,7 @@ public sealed class WhatChanged(ILibreNmsClient client, IUnimusApi unimus, IGray
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         return new(client, unimus, graylog, new UnimusDirectory(unimus, options, time), new DeviceDirectory(client, time),
-            new DeviceTimeline(client, options), options, time, new Redactor());
+            new DeviceTimeline(client, options, time), options, time, new Redactor());
     }
     public async Task<WhatChangedResult> ReadAsync(WhatChangedRequest request, CancellationToken cancellationToken = default)
     {

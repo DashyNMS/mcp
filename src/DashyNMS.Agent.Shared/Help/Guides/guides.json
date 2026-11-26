@@ -1,0 +1,10 @@
+{
+  "desktop": {
+    "version": "2.0.0",
+    "reference": "b6bf60abcfb8bdfa51e981e7bfc46e3a14c27e80"
+  },
+  "mobile": {
+    "version": "2.0.0",
+    "reference": "97da96925eaff2e1268073e6e993a770a89e520f"
+  }
+}

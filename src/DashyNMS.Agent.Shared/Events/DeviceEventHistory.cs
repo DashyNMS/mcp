@@ -21,7 +21,7 @@ public sealed class DeviceEventHistory(DeviceDirectory directory, DeviceTimeline
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
-        return new(new DeviceDirectory(client, time), new DeviceTimeline(client, options), options, time, new Redactor());
+        return new(new DeviceDirectory(client, time), new DeviceTimeline(client, options, time), options, time, new Redactor());
     }
     public async Task<DeviceEventsResult> ReadAsync(DeviceEventsRequest request, CancellationToken cancellationToken = default)
     {

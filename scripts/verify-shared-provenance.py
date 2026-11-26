@@ -32,10 +32,20 @@ source = {key: os.environ[('EXPECTED_SOURCE_' if args.for_publication else 'GITH
           for key, suffix in fields.items()}
 if report['source'] != source or source['repository'] != 'DashyNMS/mcp':
     raise SystemExit('Provenance source does not match the expected Actions run')
-if args.for_publication and (source['event'], source['ref'], source['refProtected']) != ('push', 'refs/heads/main', 'true'):
-    raise SystemExit('Publication requires a push run on protected main')
-if version != f"2.0.0-ci.{source['runId']}.{source['runAttempt']}":
-    raise SystemExit('Version does not match source run/attempt')
+# Edge builds are pushes, nightlies are scheduled, and releases are dispatched on main.
+if args.for_publication and not (source['event'] in ('push', 'schedule', 'workflow_dispatch')
+                                 and (source['ref'], source['refProtected']) == ('refs/heads/main', 'true')):
+    raise SystemExit('Publication requires a run on protected main')
+base = ET.parse(artifacts.parent / 'Directory.Build.props').findtext('.//Version')
+# What this run may publish: its own edge or nightly number, or a release, which
+# only a dispatched run makes. Checks that publish nothing use edge.0.
+allowed = {f"{base}-{channel}.{os.environ['GITHUB_RUN_NUMBER']}" for channel in ('edge', 'nightly')}
+if source['event'] == 'workflow_dispatch':
+    allowed.add(base)
+if not args.for_publication:
+    allowed.add(f'{base}-edge.0')
+if version not in allowed:
+    raise SystemExit(f'{version} is not a version this run may build: {sorted(allowed)}')
 expected = f'DashyNMS.Agent.Shared.{version}.nupkg'
 if (report['package'], report['version'], report['repositoryCommit']) != (expected, version, commit):
     raise SystemExit('Provenance identity does not match the expected workflow run')

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Devices;
@@ -92,22 +93,22 @@ public sealed class NetworkTools(
         var p = result.Ports;
         var summary = $"{d.Total} devices visible to this account: {d.Up} up, {d.Down} down" +
             (d.Disabled > 0 ? $", {d.Disabled} disabled" : string.Empty) +
+            (d.Ignored > 0 ? $", {d.Ignored} ignored" : string.Empty) +
+            // LibreNMS left these devices' state out: they're neither up nor down (#121).
+            (d.Unknown > 0 ? $", {d.Unknown} with no reported state" : string.Empty) +
             (a is null ? "; open alerts couldn't be read." : $"; {a.Describe()} ({a.Critical} critical, {a.Warning} warning).");
-        return ToolResult.Ok(summary, new
-        {
-            devices = new { total = d.Total, up = d.Up, down = d.Down, disabled = d.Disabled, ignored = d.Ignored },
-            most_down_by_location = result.DownLocations.Select(l => new { location = l.Location, down = l.Down }),
-            alerts = a is null ? null : new { open = a.AlertGroups, faults = a.Faults, critical = a.Critical, warning = a.Warning,
-                acknowledged = a.Acknowledged, partly_acknowledged = a.PartlyAcknowledged, devices_alerting = a.Devices },
-            ports = p is null ? null : new { total = p.Total, down_while_enabled = p.DownWhileEnabled, counting_errors = p.CountingErrors },
-            librenms_version = result.LibreNmsVersion,
-            unavailable = result.Unavailable.Count == 0 ? null : result.Unavailable.Select(u => new { source = u.Source, error = "This source is unavailable." }),
-            down_devices = result.DownDevices,
-            alert_groups = result.AlertGroups,
-            down_devices_omitted = result.DownDevicesOmitted,
-            alert_groups_omitted = result.AlertGroupsOmitted,
-            down_locations_omitted = result.DownLocationsOmitted,
-        });
+        return ToolResult.Ok(summary, new NetworkOverviewData(
+            d,
+            result.DownLocations,
+            a is null ? null : new OverviewAlerts(a.AlertGroups, a.Faults, a.Critical, a.Warning, a.Acknowledged, a.PartlyAcknowledged, a.Devices),
+            p,
+            result.LibreNmsVersion,
+            result.Unavailable.Count == 0 ? null : result.Unavailable.Select(u => new OverviewSource(u.Source, "This source is unavailable.")).ToList(),
+            result.DownDevices,
+            result.AlertGroups,
+            result.DownDevicesOmitted,
+            result.AlertGroupsOmitted,
+            result.DownLocationsOmitted));
     }
 
     private async Task<JsonObject> TopPortsAsync(bool errors, string? byText, int limit, string? group, string? location, CancellationToken cancellationToken)

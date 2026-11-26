@@ -7,9 +7,29 @@
     <AssemblyName>dashynms-mcp</AssemblyName>
   </PropertyGroup>
 
+  <!--
+    The HTTP transport (DashyNMS/mcp#17) needs ASP.NET Core. DashyNMS desktop
+    bundles the server to run it over stdio only, and publishes it with
+    McpHttpTransport=false: its installers stay smaller, and what it ships
+    can't open a port.
+  -->
+  <PropertyGroup>
+    <McpHttpTransport Condition="'$(McpHttpTransport)' == ''">true</McpHttpTransport>
+    <DefineConstants Condition="'$(McpHttpTransport)' == 'true'">$(DefineConstants);MCP_HTTP</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
     <PackageReference Include="ModelContextProtocol" Version="2.4.0" />
+  </ItemGroup>
+
+  <!-- ASP.NET Core's shared framework has the generic host in it. -->
+  <ItemGroup Condition="'$(McpHttpTransport)' == 'true'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(McpHttpTransport)' != 'true'">
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
+    <Compile Remove="Http/**" />
   </ItemGroup>
 
   <ItemGroup>

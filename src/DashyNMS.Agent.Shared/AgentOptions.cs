@@ -30,6 +30,22 @@ public sealed class AgentOptions
     /// </summary>
     public int MaxResultBytes { get; init; } = DefaultMaxResultBytes;
 
+    public const int DefaultMaxConcurrentRequests = 8;
+
+    /// <summary>
+    /// The most requests the MCP adapter has in flight to each source
+    /// (LibreNMS, Unimus, Graylog) at once; more queue (#38). Other hosts own
+    /// their clients, so it doesn't apply to them.
+    /// </summary>
+    public int MaxConcurrentRequests { get; init; } = DefaultMaxConcurrentRequests;
+
+    /// <summary>
+    /// How long one network sensor question may spend reading devices one by one
+    /// when LibreNMS refuses the token its network-wide list (#71). Null refuses
+    /// a scope too big to read that way in full, as it does for every host but MCP.
+    /// </summary>
+    public TimeSpan? SensorSweepBudget { get; init; }
+
     /// <summary>
     /// Whether LibreNMS's zone-less timestamps are UTC (desktop's "Server
     /// stores timestamps in UTC", on by default) or the server's local time.
