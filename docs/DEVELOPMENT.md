@@ -13,7 +13,7 @@
 
 ## Core
 
-The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages - the same Core the desktop and phone apps use. `Directory.Build.props` pins it (`DashyNMSCoreVersion`) to a development build of core's main (`2.0.0-edge.N`, or `2.0.0-ci.N` before those) between Core releases. Fixes to Core go to the core repository.
+The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages. Between releases, `Directory.Build.props` pins the server to a nightly or edge build via `DashyNMSCoreVersion`. The Shared package declares its minimum separately in `DashyNMSSharedCoreVersion`. Fixes to Core go to the Core repository.
 
 GitHub Packages needs a login even for a public package: set `DASHYNMS_PACKAGES_TOKEN` to a token with `read:packages`. Locally, `gh auth token` works once `gh auth refresh -s read:packages` has added the scope; in Actions, `secrets.GITHUB_TOKEN` with `packages: read` (the package grants this repository read access).
 
@@ -435,6 +435,7 @@ Update the matching matrix entry when either pin changes. Add a consumer's
 exact Core version if the existing entries do not cover it. A failing entry
 blocks publication. Review changes to the standalone pin for their effects
 on alert and tool behaviour.
+
 The move from `2.0.0-ci.34` to `2.0.0-ci.64` (for the reported device state) was
 reviewed that way: MCP calls none of the changed alert actions or graph legends, the
 new transport members default or pass through, and Core's compatibility flags still
