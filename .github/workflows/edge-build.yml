@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   packages: read
 
 # In order, so the edge image tag never moves back.
@@ -46,6 +47,7 @@ jobs:
     name: CI
     uses: ./.github/workflows/ci.yml
     permissions:
+      issues: read
       contents: read
       packages: read
 

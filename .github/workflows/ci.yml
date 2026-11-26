@@ -4,10 +4,12 @@ name: CI
 # is published from a commit that hasn't passed. "CI result" is the required check.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_call:
 
 permissions:
   contents: read
+  issues: read
   packages: read
 
 concurrency:
@@ -102,10 +104,14 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
 
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
   result:
     name: CI result
     if: always()
-    needs: [version, shared, stdio-only, image, binaries]
+    needs: [version, shared, stdio-only, image, binaries, security]
     runs-on: ubuntu-latest
     steps:
       # Only success counts: a job no runner ever took is neither a failure nor

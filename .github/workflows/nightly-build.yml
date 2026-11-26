@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   packages: read
 
 concurrency:
@@ -46,6 +47,7 @@ jobs:
     if: needs.version.outputs.changed == 'true'
     uses: ./.github/workflows/ci.yml
     permissions:
+      issues: read
       contents: read
       packages: read
 

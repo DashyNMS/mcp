@@ -1,17 +1,32 @@
 # DashyNMS MCP
 
-Read-only MCP server that lets Claude (and other MCP clients) answer questions about LibreNMS, reusing DashyNMS desktop's Core library.
+Read-only MCP server for LibreNMS that uses DashyNMS Core.
 
-- Core (the LibreNMS client and models) is the `DashyNMS.Core` package from DashyNMS/core on GitHub Packages, pinned in `Directory.Build.props`. Restoring needs `DASHYNMS_PACKAGES_TOKEN` (for example `gh auth token`); set `DASHYNMS_LOCAL_CORE` to build against a local core checkout. Core fixes go to the core repo.
-- `src/DashyNMS.Agent` is the MCP tool layer and `src/DashyNMS.Mcp` is the host (a console app). Both stay here, so MCP runs standalone for any MCP client.
-- `src/DashyNMS.Agent.Shared` is the package other hosts run in process; DashyNMS mobile pins it and never references `DashyNMS.Agent`. It holds typed operations over a host-owned Core client, with no `ModelContextProtocol` reference. A change made for another host leaves MCP's tool output unchanged unless every MCP client wants it.
-- Build and test: `dotnet build DashyNMS.Mcp.slnx` and `dotnet test DashyNMS.Mcp.slnx`. Warnings are errors in this repo's own projects.
-- Every tool is read-only. Don't register a write tool without an approval step, and run every string a tool returns through the redactor.
-- stdout carries the MCP protocol over stdio: log to stderr only.
-- Configuration comes only from environment variables. Never log or echo a token or password.
-- PR titles, commits and issue titles: `type(scope): what changes, in plain words`. One issue per PR, `Closes #NN` in the description, issue titles worded as the result the fix delivers. Full standard and scopes: docs/DEVELOPMENT.md, "Commits, pull requests and issues".
-- Commits, PRs and release notes carry no AI attribution or Co-Authored-By lines. "PRSMNCA" means open a PR, then squash-merge it with no co-author; larger branches whose commits are worth keeping are rebase-merged instead.
-- User guide: any change to what the server does is also made in `docs/guide`, in the same PR; it's published to the wiki. Read docs/DEVELOPMENT.md, "User guide and wiki", first.
-- Release notes: a change users would notice adds or updates its line in `docs/releases/<version>.md` (the `<Version>` in `Directory.Build.props`) in the same PR. Never write a GitHub release's notes by hand. Read docs/DEVELOPMENT.md, "Release notes", first.
-- Match desktop's style: British spelling in user-facing text, XML doc comments explaining *why*, sealed classes.
-- Never put real device names, hostnames, addresses or other identifiable network data in issues, PRs, commits or test fixtures.
+- Core is the pinned `DashyNMS.Core` package from [DashyNMS/core](https://github.com/DashyNMS/core). Restoring needs `DASHYNMS_PACKAGES_TOKEN` with `read:packages`; set `DASHYNMS_LOCAL_CORE` to build against a local checkout. Core fixes go to the Core repository.
+- `src/DashyNMS.Agent` is the MCP tool layer and `src/DashyNMS.Mcp` is the console host. Both stay here, so the server runs standalone for any MCP client.
+- `src/DashyNMS.Agent.Shared` supplies typed operations over a host-owned Core client, without a `ModelContextProtocol` reference. Mobile pins this package and never references `DashyNMS.Agent`. A change for another host leaves MCP's output unchanged unless every MCP client wants it.
+- Every tool is read-only. Adding a write tool requires an approval step. Run every returned string through the redactor.
+- stdout carries the stdio MCP protocol; log to stderr only. Configuration comes only from environment variables. Never log or echo a token or password.
+- Use sealed classes and XML doc comments explaining why.
+
+## Repository conventions
+
+- Before changing build, test or publication workflows, read [the developer guide](docs/DEVELOPMENT.md). Before changing release notes, read its [Release notes](docs/DEVELOPMENT.md#release-notes) section.
+- Before changing shared conventions or security checks, read [Repository standards](docs/REPOSITORY-STANDARDS.md); update the canonical source and every affected consumer.
+- Create or find an issue describing the bug or intended change before opening any PR, including dependency, documentation and CI changes. Every PR must reference its issue.
+- Work on a branch; use one issue per PR into `main`, then squash-merge. The PR title becomes the commit subject on `main`.
+- PR titles, branch commits and issue titles use `type(scope): what changes, as the user would notice it`. Read [Commits, pull requests and issues](docs/DEVELOPMENT.md#commits-pull-requests-and-issues) for this repository's types, scopes and examples.
+- Start the description in lower case, omit the final full stop and aim for a complete subject under 72 characters. Separate two scopes with a comma; omit the scope when there is no single area. Document a new scope in the developer guide in the same PR.
+- Word issue titles as the result the fixing PR delivers. Epics end with `(epic)`. Keep issue numbers out of titles; start the PR body with `Closes #NN` when resolving an issue, then explain what changes and how it was checked.
+- Mark breaking changes with `!` and explain the migration and version implications for affected consumers.
+- Dependabot uses `build(deps): ...` for every ecosystem. Its generated dependency names and grouped summaries may exceed the usual title length.
+- Use British spelling in user-facing text. Keep real device names, hostnames, addresses, credentials and other identifiable network data out of issues, PRs, commits, logs, screenshots and fixtures. Use `example.net` and documentation address ranges.
+- Commits, PRs and release notes carry no AI attribution or `Co-Authored-By` lines.
+- Read `LICENSE` before changing or redistributing repository material. Preserve third-party licences, copyright notices and provenance.
+
+## Validation and releases
+
+- Run `dotnet build DashyNMS.Mcp.slnx` and `dotnet test DashyNMS.Mcp.slnx`. Warnings are errors in this repository's own projects.
+- Changes to server behaviour also update `docs/guide` in the same PR. Before editing the guide or wiki publishing, read [User guide and wiki](docs/DEVELOPMENT.md#user-guide-and-wiki).
+- A change users would notice adds or updates its line in `docs/releases/<version>.md`, using the version in `Directory.Build.props`, in the same PR. GitHub release notes come from that file.
+- `PRSMNCA` means open a PR, then squash-merge it with no co-author.

@@ -152,6 +152,9 @@ Then every archive is checked together and `SHA256SUMS` made. Pull requests stop
 
 ## User guide and wiki
 
+Use inline Markdown links and fenced code blocks in `docs/guide`. The shared
+wiki converter does not support reference-style links or indented code blocks.
+
 The user guide is in [`docs/guide`](guide/README.md): getting started, installation, how-to pages and reference. It's for people who run the server or use it through an app, so keep developer material here instead. Keep installation pages in `installation/`, user tasks in `how-to/` and reference pages in `reference/`. Use relative Markdown links, images with alt text and simple Markdown.
 
 **Any change to what the server does must also be made in the user guide, in the same PR.** That covers a new tool or setting, a changed default, a limit, what's sent or kept, and anything in `reference/tools.md` or `reference/settings.md`. The README is the short version; keep the two saying the same thing.
@@ -186,6 +189,8 @@ Do it for both when a release is prepared, with the commits being released, afte
 - Logs go to stderr only, and never include a token or password.
 
 ## Commits, pull requests and issues
+
+Dependabot uses `build(deps): ...` for every ecosystem. Its generated dependency names and grouped summaries may exceed the usual title length.
 
 Every change goes through a branch and a pull request into `main`, one issue per PR, and is squash-merged, so the PR title becomes the commit on `main`. PR titles, commit messages and issue titles follow [Conventional Commits](https://www.conventionalcommits.org/) in plain words, the same standard as every DashyNMS repository:
 
@@ -988,3 +993,8 @@ A second unescaped `<` inside an unfinished tag is treated as unknown syntax.
 Diff masking then keeps subsequent text hidden, including when the first tag
 was a common non-secret line, so a later secret opener cannot be discarded
 while its body remains visible.
+
+## Repository standards
+
+See [Repository standards](REPOSITORY-STANDARDS.md) for security gates, shared
+policy ownership, contribution files and the procedure for updating copied helpers.

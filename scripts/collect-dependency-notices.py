@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 import re
 import struct
 import sys
-import xml.etree.ElementTree as ET
+from package_xml import parse_metadata
 import zipfile
 
 
@@ -109,7 +109,7 @@ for identity, library in sorted(assets['libraries'].items()):
         if len(nuspecs) != 1:
             raise ValueError(f'{identity}: ambiguous nuspec')
         nuspec = archive.read(nuspecs[0])
-        metadata = ET.fromstring(nuspec)
+        metadata = parse_metadata(nuspec)
         # Strip the optional NuGet XML namespace for consistent metadata access.
         for element in metadata.iter():
             element.tag = element.tag.rsplit('}', 1)[-1]
