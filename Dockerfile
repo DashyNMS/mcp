@@ -16,7 +16,7 @@
 #
 # Base images are pinned by digest (the multi-arch index, so every platform
 # still resolves) and kept current by Dependabot.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:8c6edfb26c85153f236d26efebd9ad349aec403583f343f201ee67838b23658d AS build
 ARG TARGETARCH
 WORKDIR /src
 # Build-stage legal evidence collector; cached independently of source.
@@ -57,7 +57,7 @@ RUN mkdir /data
 
 # Ubuntu chiseled: the .NET and ASP.NET Core runtimes (the HTTP transport) and
 # CA certificates, no shell or package manager, and a non-root user by default.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:bcdfe6b8e923ad3d05f01dfa805ab97c99d742823ce030856002a6db38122712
 WORKDIR /app
 LABEL org.opencontainers.image.licenses="MIT" \
       net.dashynms.license.scope="MIT applies to DashyNMS project-owned material only; dependencies and base layers retain their own licences. See /app/NOTICES.md."
