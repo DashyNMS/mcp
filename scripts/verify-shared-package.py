@@ -54,7 +54,7 @@ with zipfile.ZipFile(package) as archive:
     dependency_root = metadata.find('n:dependencies', ns)
     assert list(dependency_root) == groups, 'Ungrouped dependencies'
     dependencies = list(groups[0])
-    core = ET.parse(root / 'Directory.Build.props').findtext('.//DashyNMSCoreVersion')
+    core = ET.parse(root / 'Directory.Build.props').findtext('.//DashyNMSSharedCoreVersion')
     # NuGet may serialise a minimum dependency as a bare version or [version, ).
     assert len(dependencies) == 1
     dependency = dependencies[0]

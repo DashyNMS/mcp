@@ -417,12 +417,11 @@ the image build does (see `docs/dependency-licences`).
 
 #### Core compatibility
 
-The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
-declares that as a minimum, so a host that pins a newer Core gets that one instead.
-The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
-and mobile's (`DashyNMSCoreVersion` in mobile's `Directory.Build.props`) share one entry,
-`2.0.0-nightly.3`: Shared now needs that Core, so mobile moves to it before pinning this
-Shared. For each entry it:
+The standalone server uses `DashyNMSCoreVersion` in `Directory.Build.props`. Shared
+builds and declares its minimum dependency using `DashyNMSSharedCoreVersion`. A
+host that pins a newer Core can use it with the same Shared package. The
+`core-compatibility` job checks the Shared minimum and the standalone server's
+pin. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -432,9 +431,10 @@ Shared. For each entry it:
   the verified package, and runs `DashyNMS.Agent.Shared.Tests` on that combination
   (`scripts/verify-shared-core-compatibility.py`). This is the binary a host runs.
 
-When mobile moves Core, update its matrix entry first; a failing entry blocks
-publication. Moving MCP's own pin can change alert and tool behaviour well beyond
-search, so each move needs its own review of what the Core range changes for MCP.
+Update the matching matrix entry when either pin changes. Add a consumer's
+exact Core version if the existing entries do not cover it. A failing entry
+blocks publication. Review changes to the standalone pin for their effects
+on alert and tool behaviour.
 The move from `2.0.0-ci.34` to `2.0.0-ci.64` (for the reported device state) was
 reviewed that way: MCP calls none of the changed alert actions or graph legends, the
 new transport members default or pass through, and Core's compatibility flags still
@@ -484,6 +484,11 @@ MCP and the Shared package use the same pin, with updated licence evidence.
 The move from `2.0.0-nightly.1` to `2.0.0-nightly.3` (core#90 Batch 8) holds core#118, the
 guide loader the help tool is built on, and build script changes. Nothing MCP already called
 has changed, so its other output is unchanged. The licence is unchanged.
+
+Batch 10 moves the standalone server to `2.0.0-nightly.5` for Desktop. Core #121
+adds instructions for Intelligence providers that cannot search the web. MCP tools
+do not use those instructions. Shared's minimum remains `2.0.0-nightly.3`.
+The Core licence is unchanged.
 
 #### Publication
 

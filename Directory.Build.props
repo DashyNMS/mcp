@@ -17,11 +17,13 @@
     <!--
       DesktopNMS.Core lives in DashyNMS/core and comes in as the DashyNMS.Core
       package from GitHub Packages (see nuget.config), pinned to a nightly or edge
-      package of Core's main between Core releases - the same Core
-      the desktop app pins. Set DASHYNMS_LOCAL_CORE to a checkout of
-      DashyNMS/core to build against that instead.
+      package of Core's main between Core releases. The standalone MCP server
+      uses the same pin as Desktop. Shared has its own minimum so hosts can
+      keep using their current Core package. Set DASHYNMS_LOCAL_CORE to a
+      Core checkout to build against that instead.
     -->
     <DashyNMSCoreVersion>2.0.0-nightly.5</DashyNMSCoreVersion>
+    <DashyNMSSharedCoreVersion>2.0.0-nightly.3</DashyNMSSharedCoreVersion>
   </PropertyGroup>
 
 </Project>
