@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from package_xml import parse_metadata
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
@@ -23,7 +24,7 @@ assembly_version = ', '.join((*match.groups(), '0'))
 package = root / 'artifacts' / f'DashyNMS.Agent.Shared.{version}.nupkg'
 ns = {'n': 'http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd'}
 with zipfile.ZipFile(package) as archive:
-    metadata = ET.fromstring(archive.read('DashyNMS.Agent.Shared.nuspec')).find('n:metadata', ns)
+    metadata = parse_metadata(archive.read('DashyNMS.Agent.Shared.nuspec')).find('n:metadata', ns)
     assert metadata.findtext('n:id', namespaces=ns) == 'DashyNMS.Agent.Shared'
     assert metadata.findtext('n:version', namespaces=ns) == version
     repository = metadata.find('n:repository', ns)
@@ -54,7 +55,8 @@ with zipfile.ZipFile(package) as archive:
     dependency_root = metadata.find('n:dependencies', ns)
     assert list(dependency_root) == groups, 'Ungrouped dependencies'
     dependencies = list(groups[0])
-    core = ET.parse(root / 'Directory.Build.props').findtext('.//DashyNMSSharedCoreVersion')
+    # version-controlled local build configuration.
+    core = ET.parse(root / 'Directory.Build.props').findtext('.//DashyNMSSharedCoreVersion')  # nosec B314
     # NuGet may serialise a minimum dependency as a bare version or [version, ).
     assert len(dependencies) == 1
     dependency = dependencies[0]
@@ -65,7 +67,8 @@ with zipfile.ZipFile(package) as archive:
 
 with tempfile.TemporaryDirectory() as directory:
     smoke = Path(directory)
-    config = ET.parse(root / 'nuget.config')
+    # version-controlled local build configuration.
+    config = ET.parse(root / 'nuget.config')  # nosec B314
     config.find('packageSources').append(ET.Element('add', key='shared-smoke', value=str(package.parent)))
     mapping = ET.SubElement(config.find('packageSourceMapping'), 'packageSource', key='shared-smoke')
     ET.SubElement(mapping, 'package', pattern='DashyNMS.Agent.Shared')

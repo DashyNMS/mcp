@@ -33,7 +33,7 @@ RUN --mount=type=secret,id=packages,env=DASHYNMS_PACKAGES_TOKEN \
 COPY src/ src/
 # The server's own user guide, which the help tool reads.
 COPY docs/guide/ docs/guide/
-COPY scripts/collect-dependency-notices.py scripts/
+COPY scripts/collect-dependency-notices.py scripts/package_xml.py scripts/
 COPY docs/dependency-licences/ docs/dependency-licences/
 # Collect legal files from the exact restored packages, including transitives.
 # Python is a build-stage tool only; it is not copied into the runtime image.

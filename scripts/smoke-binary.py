@@ -46,7 +46,8 @@ def unpack(archive, into):
     assert expected == [hashlib.sha256(archive.read_bytes()).hexdigest(), archive.name], 'The checksum does not match.'
     if archive.suffix == '.zip':
         with zipfile.ZipFile(archive) as packed:
-            packed.extractall(into)
+            # ZipFile sanitises absolute/parent paths; tar uses the data filter below.
+            packed.extractall(into)  # nosec B202
     else:
         with tarfile.open(archive) as packed:
             packed.extractall(into, filter='data')
