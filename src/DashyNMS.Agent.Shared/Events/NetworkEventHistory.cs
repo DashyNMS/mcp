@@ -45,12 +45,14 @@ public sealed class NetworkEventHistory(ILibreNmsClient client, FleetCache fleet
 
         bool Wanted(int id) => (deviceId is null || id == deviceId) && scope.Includes(id, devices);
 
-        var events = log is "events" or "both"
-            ? DeviceTimeline.ReadBackAsync(depth => client.Logs.ListEventLogAsync(deviceId, depth, cancellationToken), e => Sources.Utc(e.Timestamp, options), window, cancellationToken)
-            : null;
-        var alerts = log is "alerts" or "both"
-            ? DeviceTimeline.ReadBackAsync(depth => client.Logs.ListAlertLogAsync(deviceId, depth, cancellationToken), a => Sources.Utc(a.TimeLogged, options), window, cancellationToken)
-            : null;
+        bool Matches(EventLogEntry e) => Sources.Utc(e.Timestamp, options) is { } at && window.Contains(at) && Wanted(e.DeviceId)
+            && (type is null || e.Type?.Contains(type.Trim(), StringComparison.OrdinalIgnoreCase) == true)
+            && (minimum is null || (e.Severity ?? 0) >= minimum);
+
+        // Filtered as they're read, so the filters reach further back on a busy network (#70).
+        var logs = new LogReads(options, time);
+        var events = log is "events" or "both" ? logs.EventsAsync(client.Logs, deviceId, window, Matches, cancellationToken) : null;
+        var alerts = log is "alerts" or "both" ? logs.AlertsAsync(client.Logs, deviceId, window, a => Wanted(a.DeviceId), toNow: false, cancellationToken) : null;
         var rules = alerts is null ? null : Sources.TryAsync(() => fleet.GetRulesAsync(cancellationToken), cancellationToken);
         await Task.WhenAll(new Task?[] { events, alerts, rules }.Where(t => t is not null)!).ConfigureAwait(false);
 
@@ -68,9 +70,7 @@ public sealed class NetworkEventHistory(ILibreNmsClient client, FleetCache fleet
 
         foreach (var e in events?.Result.Value?.Items ?? [])
         {
-            if (Sources.Utc(e.Timestamp, options) is { } at && window.Contains(at) && Wanted(e.DeviceId)
-                && (type is null || e.Type?.Contains(type.Trim(), StringComparison.OrdinalIgnoreCase) == true)
-                && (minimum is null || (e.Severity ?? 0) >= minimum))
+            if (Matches(e) && Sources.Utc(e.Timestamp, options) is { } at)
             {
                 rows.Add(new NetworkEvent(at, "eventlog", e.DeviceId, devices.GetValueOrDefault(e.DeviceId)?.Hostname ?? e.Hostname, DeviceSummary.DisplayOf(devices.GetValueOrDefault(e.DeviceId)), e.Type, EventSeverityName(e.Severity), null, e.Message,
                     string.IsNullOrWhiteSpace(e.Username) ? null : e.Username));
@@ -95,6 +95,7 @@ public sealed class NetworkEventHistory(ILibreNmsClient client, FleetCache fleet
         var covered = new[] { events?.Result.Value?.CoveredSince, alerts?.Result.Value?.CoveredSince }
             .Where(t => t is not null).Select(t => t!.Value).DefaultIfEmpty(window.Since).Max();
         var complete = covered <= window.Since;
+        var stopped = events?.Result.Value?.StoppedAt(covered) ?? alerts?.Result.Value?.StoppedAt(covered);
 
         var lead = EventWindowText.Describe(window, time.GetUtcNow().UtcDateTime);
         var counts = log switch
@@ -104,10 +105,10 @@ public sealed class NetworkEventHistory(ILibreNmsClient client, FleetCache fleet
             _ => DeviceHealth.Count(ordered.Count, "event"),
         };
         var summary = $"{lead}: {counts} on {DeviceHealth.Count(ordered.Select(r => r.DeviceId).Distinct().Count(), "device")}." +
-            (complete ? string.Empty : $" LibreNMS's logs only reach back to {covered:yyyy-MM-dd HH:mm} UTC, so the start of the window isn't covered.") +
+            (complete ? string.Empty : " " + EventWindowText.Shortfall("logs", covered, stopped)) +
             (info.NextOffset is not null || info.Offset > 0 ? " " + Paging.Describe(info, "entry", "entries") : string.Empty);
 
-        return new(summary, new NetworkEventsData(new(window.Since, window.Until, complete, complete ? null : covered),
+        return new(summary, new NetworkEventsData(EventWindowInfo.For(window, complete, covered, stopped),
             page.Select(CleanEntry).ToList(), info), rules?.Result.Error is not null);
     }
 

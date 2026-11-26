@@ -16,7 +16,7 @@ internal sealed class StdioServer : IDisposable
     /// inherited environment so a developer's own configuration can't leak into
     /// a test and quietly change what it proves.
     /// </summary>
-    private static readonly string[] SettingPrefixes = ["LIBRENMS_", "UNIMUS_", "GRAYLOG_", "MCP_"];
+    private static readonly string[] SettingPrefixes = ["LIBRENMS_", "UNIMUS_", "GRAYLOG_", "MCP_", "AUDIT_"];
 
     private readonly Process _process;
     private readonly StringBuilder _stderr = new();
@@ -52,6 +52,10 @@ internal sealed class StdioServer : IDisposable
 
     /// <summary>Starts the server with only <paramref name="settings"/> configured; a null value leaves that setting unset.</summary>
     public static StdioServer Start(IReadOnlyDictionary<string, string?> settings)
+        => new(Process.Start(StartInfo(settings))!);
+
+    /// <summary>The server process as a test starts it, whichever transport it's to use.</summary>
+    internal static ProcessStartInfo StartInfo(IReadOnlyDictionary<string, string?> settings)
     {
         var start = new ProcessStartInfo("dotnet", $"\"{Path.Combine(AppContext.BaseDirectory, "dashynms-mcp.dll")}\"")
         {
@@ -75,7 +79,14 @@ internal sealed class StdioServer : IDisposable
             }
         }
 
-        return new StdioServer(Process.Start(start)!);
+        return start;
+    }
+
+    /// <summary>Sends one message as it is, without waiting for anything.</summary>
+    public async Task SendAsync(string message, CancellationToken cancellationToken)
+    {
+        await _process.StandardInput.WriteLineAsync(message);
+        await _process.StandardInput.FlushAsync(cancellationToken);
     }
 
     /// <summary>Sends a request and returns the response with the same ID, skipping any notifications in between.</summary>
@@ -110,6 +121,35 @@ internal sealed class StdioServer : IDisposable
         var response = await RequestAsync(id, "tools/call", $$"""{"name":"{{name}}","arguments":{{arguments}}}""", cancellationToken);
         var text = response.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
         return JsonDocument.Parse(text).RootElement;
+    }
+
+    /// <summary>
+    /// Sends every call without waiting for the answers, as an agent calling
+    /// tools in parallel does, and returns each call's JSON document by ID in
+    /// whatever order the answers come.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<int, JsonElement>> CallToolsAsync(IReadOnlyList<(int Id, string Name, string Arguments)> calls, CancellationToken cancellationToken)
+    {
+        foreach (var (id, name, arguments) in calls)
+        {
+            await _process.StandardInput.WriteLineAsync($$$"""{"jsonrpc":"2.0","id":{{{id}}},"method":"tools/call","params":{"name":"{{{name}}}","arguments":{{{arguments}}}}}""");
+        }
+
+        await _process.StandardInput.FlushAsync(cancellationToken);
+        var results = new Dictionary<int, JsonElement>();
+        while (results.Count < calls.Count)
+        {
+            var line = await _process.StandardOutput.ReadLineAsync(cancellationToken)
+                ?? throw new InvalidOperationException($"Server exited. stderr:\n{Stderr}");
+            var message = JsonDocument.Parse(line).RootElement;
+            if (message.TryGetProperty("id", out var id))
+            {
+                var text = message.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
+                results.Add(id.GetInt32(), JsonDocument.Parse(text).RootElement);
+            }
+        }
+
+        return results;
     }
 
     /// <summary>

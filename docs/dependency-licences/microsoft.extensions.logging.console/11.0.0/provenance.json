@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.logging.console/11.0.0",
+  "packageSha256": "283e98672d5d7e48a26da76d69008c65c83139dffe791dca0778e1b379f8a0ec",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

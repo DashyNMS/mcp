@@ -47,6 +47,121 @@ public sealed class McpOptionsTests
         Assert.NotEmpty(errors);
     }
 
+    [Theory]
+    [InlineData(null, null, 24)]
+    [InlineData("true", "1", 1)]
+    [InlineData("on", "168", 168)]
+    [InlineData("off", null, null)]
+    [InlineData("off", "12", null)]
+    public void Last_known_good_answers_are_on_for_a_day_unless_told_otherwise(string? on, string? hours, int? expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.LastKnownGoodKey] = on, [McpOptions.LastKnownGoodHoursKey] = hours }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.LastKnownGood?.TotalHours);
+        Assert.Null(options.LastKnownGoodDirectory);
+    }
+
+    [Theory]
+    [InlineData(McpOptions.LastKnownGoodKey, "sometimes")]
+    [InlineData(McpOptions.LastKnownGoodHoursKey, "0")]
+    [InlineData(McpOptions.LastKnownGoodHoursKey, "169")]
+    [InlineData(McpOptions.LastKnownGoodDirectoryKey, "answers")]
+    public void Bad_last_known_good_settings_are_refused(string key, string value)
+    {
+        Assert.Null(Load(new(Minimal()) { [key] = value }, out var errors));
+        Assert.StartsWith(key, Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Answers_belong_to_an_account_and_the_settings_that_shape_them()
+    {
+        string Identity(string key, string value) => Load(new(Minimal()) { [key] = value }, out _)!.AnswerIdentity;
+        var usual = Load(Minimal(), out _)!.AnswerIdentity;
+
+        Assert.Equal(usual, Load(Minimal(), out _)!.AnswerIdentity);
+        foreach (var (key, value) in new[]
+        {
+            (McpOptions.LibreNmsUrl, "other.example.com"),
+            (McpOptions.LibreNmsToken, "another-token"),
+            (McpOptions.LibreNmsTimestampsUtc, "false"),
+            (McpOptions.MaxResultBytesKey, "2048"),
+            ("MCP_TEMPERATURE_HIGH_WARNING", "51"),
+            ("MCP_OVERRIDE_SENSOR_LIMITS", "true"),
+        })
+        {
+            Assert.NotEqual(usual, Identity(key, value));
+        }
+    }
+
+    [Theory]
+    [InlineData(null, 8)]
+    [InlineData("1", 1)]
+    [InlineData("256", 256)]
+    public void Concurrent_requests_are_capped(string? value, int expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.MaxConcurrentRequestsKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.MaxConcurrentRequests);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("257")]
+    [InlineData("-1")]
+    [InlineData("lots")]
+    public void A_cap_that_is_not_one_is_refused(string value)
+    {
+        Assert.Null(Load(new(Minimal()) { [McpOptions.MaxConcurrentRequestsKey] = value }, out var errors));
+        Assert.Contains("is not a whole number from 1 to 256", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("0", null)]
+    [InlineData("60", 60)]
+    public void Tool_calls_are_unlimited_until_a_rate_is_set(string? value, int? expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.RateLimitPerMinuteKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.RateLimitPerMinute);
+    }
+
+    [Fact]
+    public void A_rate_that_is_not_one_is_refused()
+    {
+        Assert.Null(Load(new(Minimal()) { [McpOptions.RateLimitPerMinuteKey] = "10001" }, out var errors));
+        Assert.Contains("is not a whole number from 0 to 10000", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Help_alone_needs_neither_address_nor_token_and_half_of_them_is_still_a_mistake()
+    {
+        var options = Load(new() { [McpOptions.ToolsAllow] = "dashynms_help", [McpOptions.LastKnownGoodKey] = "true" }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.False(options!.HasConnection);
+        Assert.Null(options.LastKnownGood);
+        Assert.Empty(options.Secrets);
+        Assert.Empty(options.Warnings);
+
+        Assert.Null(Load(new() { [McpOptions.ToolsAllow] = "dashynms_help", [McpOptions.LibreNmsUrl] = "https://librenms.example.net" }, out errors));
+        Assert.Contains("LIBRENMS_TOKEN is not set", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("true", true)]
+    public void Guides_are_refreshed_only_when_asked(string? value, bool expected)
+    {
+        var options = Load(new(Minimal()) { [McpOptions.HelpRefreshKey] = value }, out var errors);
+
+        Assert.Empty(errors);
+        Assert.Equal(expected, options!.HelpRefresh);
+    }
+
     [Fact]
     public void Minimal_settings_use_defaults()
     {

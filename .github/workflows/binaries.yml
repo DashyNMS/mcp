@@ -1,0 +1,137 @@
+name: Standalone binaries
+
+# One self-contained executable per platform, for people without Docker or the
+# .NET SDK (#36). Called by CI, unsigned, and by the edge, nightly and release
+# builds, which sign the macOS ones. Leaves everything in one artifact,
+# standalone-binaries, for the caller to publish.
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      sign:
+        description: Sign and notarise the macOS builds (main only)
+        type: boolean
+        default: false
+    secrets:
+      MACOS_CERTIFICATE_BASE64:
+        required: false
+      MACOS_CERTIFICATE_PASSWORD:
+        required: false
+      MACOS_SIGNING_IDENTITY:
+        required: false
+      APPLE_API_KEY:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER_ID:
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each on its own platform, so the smoke test runs the real thing.
+        include:
+          - runtime: win-x64
+            os: windows-latest
+          - runtime: win-arm64
+            os: windows-11-arm
+          - runtime: osx-arm64
+            os: macos-latest
+          - runtime: osx-x64
+            os: macos-15-intel
+          - runtime: linux-x64
+            os: ubuntu-24.04
+          - runtime: linux-arm64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    # The signing secrets, for the macOS builds that are signed and nothing else.
+    environment: ${{ inputs.sign && github.ref == 'refs/heads/main' && startsWith(matrix.runtime, 'osx-') && 'DashyNMS_MacOS' || '' }}
+    steps:
+      # The licence evidence is checked by hash, so line endings must be as committed.
+      - name: Keep line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Build
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          DASHYNMS_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/publish-binary.py build ${{ matrix.runtime }} "$VERSION" "$GITHUB_SHA" artifacts
+      # Windows builds stay unsigned, as desktop's do (DashyNMS/desktop#109).
+      - name: Sign and notarise for macOS
+        if: inputs.sign && github.ref == 'refs/heads/main' && startsWith(matrix.runtime, 'osx-')
+        env:
+          VERSION: ${{ inputs.version }}
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: scripts/macos/sign.sh "artifacts/dashynms-mcp-$VERSION-${{ matrix.runtime }}/dashynms-mcp"
+      - name: Pack
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: python scripts/publish-binary.py pack ${{ matrix.runtime }} "$VERSION" artifacts artifacts/packed
+      - name: Smoke test
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          PYTHONUTF8: "1"
+        run: |
+          archive=$(find artifacts/packed -name '*.zip' -o -name '*.tar.gz')
+          python scripts/smoke-binary.py "$archive" "$VERSION"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binary-${{ matrix.runtime }}
+          path: artifacts/packed/
+          if-no-files-found: error
+          retention-days: 14
+
+  # One folder of everything, checked as a whole, whether or not it's published.
+  collect:
+    name: Checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: binary-*
+          path: packed
+          merge-multiple: true
+      - name: Check every platform is here, once, as it was packed
+        working-directory: packed
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          printf '%s\n' dashynms-mcp-"$VERSION"-{linux-arm64,linux-x64,osx-arm64,osx-x64}.tar.gz dashynms-mcp-"$VERSION"-{win-arm64,win-x64}.zip > ../expected
+          ls | grep -v '\.sha256$' | diff ../expected -
+          cat ./*.sha256 > ../SHA256SUMS
+          sha256sum --check --strict ../SHA256SUMS
+          rm ./*.sha256
+          mv ../SHA256SUMS .
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: standalone-binaries
+          path: packed/
+          if-no-files-found: error
+          retention-days: 14

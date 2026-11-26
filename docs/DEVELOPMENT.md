@@ -6,14 +6,14 @@
 | --- | --- |
 | `src/DashyNMS.Agent` | The MCP tool layer: tools, redaction, result caps, device lookup. It stays in this repo with the host, so MCP runs standalone. Apps reference `DashyNMS.Agent.Shared` instead. |
 | `src/DashyNMS.Agent.Shared` | Typed, read-only operations over a host-owned Core client, published as the `DashyNMS.Agent.Shared` package for in-process hosts such as DashyNMS mobile. No `ModelContextProtocol` reference. See [Shared package for mobile](#shared-package-for-mobile). |
-| `src/DashyNMS.Mcp` | The host: settings, the startup check, and MCP over stdio |
+| `src/DashyNMS.Mcp` | The host: settings, the startup check, tool policy, audit, and MCP over stdio or HTTP |
 | `tests/DashyNMS.Agent.Shared.Tests` | The shared package's operations and its host contract |
 | `tests/DashyNMS.Agent.Tests` | Tools against recorded LibreNMS JSON through Core's real APIs, plus redaction and caps |
-| `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and an end-to-end stdio test against a stand-in LibreNMS |
+| `tests/DashyNMS.Mcp.Tests` | Settings, the startup check, and end-to-end tests over stdio and HTTP against a stand-in LibreNMS |
 
 ## Core
 
-The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages - the same Core the desktop and phone apps use. `Directory.Build.props` pins it (`DashyNMSCoreVersion`) to a development build of core's main (`2.0.0-ci.N`) between Core releases. Fixes to Core go to the core repository.
+The LibreNMS client, models and alerting logic come from [DashyNMS/core](https://github.com/DashyNMS/core) as the `DashyNMS.Core` package on GitHub Packages. Between releases, `Directory.Build.props` pins the server to a nightly or edge build via `DashyNMSCoreVersion`. The Shared package declares its minimum separately in `DashyNMSSharedCoreVersion`. Fixes to Core go to the Core repository.
 
 GitHub Packages needs a login even for a public package: set `DASHYNMS_PACKAGES_TOKEN` to a token with `read:packages`. Locally, `gh auth token` works once `gh auth refresh -s read:packages` has added the scope; in Actions, `secrets.GITHUB_TOKEN` with `packages: read` (the package grants this repository read access).
 
@@ -40,6 +40,44 @@ dotnet publish src/DashyNMS.Mcp -c Release -o publish
 
 Don't use `dotnet run` in a client's configuration. It can write build output to stdout, which carries the MCP protocol.
 
+## Transports and the tool call pipeline
+
+`ServerSetup` registers everything that doesn't depend on the transport. `Program` adds stdio, or hands over to `Http/HttpServer` for `MCP_TRANSPORT=http`. Keep it that way round: a tool, cap or filter registered in one transport's branch would be missing from the other's.
+
+Every tool call goes through, in this order:
+
+1. **`ToolCallAudit`**, outermost, so it records exactly one entry however the call ends, including calls no tool runs for. A message filter outside the request filter catches calls the SDK can't read. What the SDK or the HTTP transport refuses before dispatch, such as an unsupported protocol version, isn't a call and has no entry. Its sinks must not throw or block: stderr and GELF each have a bounded queue.
+2. **Structured content**: the result's JSON is sent as `structuredContent` too, inside the audit and outside everything that can answer for a tool.
+3. **The rate limit**, when `MCP_RATE_LIMIT_PER_MINUTE` is set, counted per `ToolCallFilters.ClientOf`: the token's label, or `stdio`.
+4. **`LastKnownGoodFilter`**, unless `MCP_LAST_KNOWN_GOOD` is off: it keeps a complete answer, and gives it back, marked stale, when LibreNMS can't be reached. `ToolRunner` tells it how the call went through `ToolCallReport`. An operation that gives a partial answer must record that: `Sources.TryAsync` and `HostBoundary` do so through `SourceOutcomes`, and anything else that leaves part of an answer out calls it itself.
+5. **The tool**, if `ToolPolicy` registered it. A tool that's off is never registered, so there's no check at invocation to forget.
+6. **`ToolRunner`**, which redacts and caps the result, and adds `throttling` when the call's requests queued for a second or more.
+
+Requests to LibreNMS, Unimus and Graylog each pass a `RequestLimiter`, which Core enters before each HTTP attempt's timeout starts (`IRequestGate`, DashyNMS/core#99).
+
+Log through `AddDashyNmsLogging`. It writes each entry as one escaped, redacted line: the SDK logs client and tool names as they were sent, and stderr also carries the audit trail.
+
+### Prompts and resources
+
+`InvestigationPrompts` holds the prompts. A step names its tool, so one that's off is left out, and a prompt whose main tool is off isn't offered; `PromptTests` fails if a step names a tool that doesn't exist. What a person types goes into the text as a JSON string, one line and 200 characters at most. Review the wording like a tool's description.
+
+`ResourceFolder` serves `MCP_RESOURCES_DIR`. A request's URI is only ever compared with the ones listed, so it can't become a path, and links are skipped whole. Reading one is logged with the client's label; prompts and resources aren't tool calls, so they leave no audit entry.
+
+### HTTP
+
+- `BearerGate` comes before every endpoint and lets only `/health` and `/ready` through without a token. A new endpoint needs one without doing anything.
+- The host is built empty and Kestrel's endpoint set in code, so `appsettings.json`, the command line and `ASPNETCORE_` variables change nothing.
+- Clients on protocol revisions before 2026-07-28 get a session, because they name themselves only once, at `initialize`. The SDK ties each session to the token's label and answers `403` to any other. Newer clients are served statelessly.
+- The readiness check is Core's connection test, outside the request cap, single-flight and kept for 15 seconds.
+
+### Building without HTTP
+
+`-p:McpHttpTransport=false` leaves out `Http/`, `ModelContextProtocol.AspNetCore` and ASP.NET Core's shared framework. DashyNMS desktop bundles the server that way: it only uses stdio, the installers stay smaller, and what it ships can't open a port. CI's `stdio-only` job publishes it as desktop does. `MCP_TRANSPORT=http` stops such a build at startup.
+
+### Audit entries
+
+`AuditRedactor` decides what is recorded of a call's arguments. When a tool gains a parameter nothing needs changing: only declared parameters are recorded, strings go through the redactor and lose the server's own credentials (`McpOptions.Secrets`, where a new credential setting must be added), and long text is recorded by its length. A result never reaches the audit at all. GELF delivery is a bounded background queue; entries are kept small enough for one UDP packet, and `GelfAuditTests` holds them to it.
+
 ## Container image
 
 ```bash
@@ -48,18 +86,101 @@ docker build -t dashynms-mcp .
 
 The Dockerfile cross-compiles for the target architecture, so `docker buildx build --platform linux/arm64 .` is as fast as a native build. Base images are pinned by digest and kept current by Dependabot.
 
-`.github/workflows/image.yml` builds every pull request and smoke-tests it: with no settings, the image must exit with code 2 and name what's missing. It publishes to `ghcr.io/dashynms/mcp`:
+`image.yml` smoke-tests every build: with no settings, the image must exit with code 2 and name what's missing; over HTTP against a stand-in LibreNMS, it must answer its probes, refuse a request without a token and answer one with. Pull requests stop there. The builds below publish it to `ghcr.io/dashynms/mcp`.
 
-- every merge to `main` updates `edge` and adds `sha-<commit>`,
-- a `vX.Y.Z` tag publishes `X.Y.Z`, `X.Y` and `latest`,
-- a pre-release tag such as `v1.2.0-rc.1` gets its own tag only, and doesn't move `latest`.
+## Builds and releases
 
-To release, set `<Version>` in `Directory.Build.props` to the new version and merge that first: it's the version the server reports to clients. Then tag `main` with `vX.Y.Z`.
+Every DashyNMS repository builds the same way.
+
+| Workflow | When | Version | Publishes |
+| --- | --- | --- | --- |
+| **CI** (`ci.yml`) | every pull request, and first in each build below | none | nothing |
+| **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` | image `edge`, `sha-<commit>`; Shared; binaries on a prerelease |
+| **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` | image `nightly`; Shared; binaries on a prerelease |
+| **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` | image `latest`, `2.0`; Shared; binaries on the release |
+| **CodeQL** and **Dependency submission** | as their names say | none | nothing |
+| **Wiki** (`wiki.yml`) | the guide changes on `main` | none | the [repository wiki](https://github.com/DashyNMS/mcp/wiki) |
+
+Each also publishes the image under its exact version. The builds share `binaries.yml`, `image.yml`, `image-publish.yml` and `shared-package.yml` with `shared-checks.yml`. Nothing is published until CI, every binary and the image build have passed. The image goes last, because it moves the tags people follow; `edge` only moves for `main`'s newest commit. `<build>` is the workflow's run number, so don't rename a build's file without raising `<Version>` at the same time. If an edge or nightly build fails part way, run it again by hand. Release retries preserve existing assets and upload only missing files. Existing files and the checksum manifest must match the retry's bytes; otherwise finish from the original build artifacts.
+
+**Releasing:** check that `docs/releases/<version>.md` reads well, then tag `main`'s newest commit and push only the tag:
+
+```bash
+git tag v2.0.0 origin/main && git push origin v2.0.0
+```
+
+The tag has to match `<Version>` in `Directory.Build.props`. Don't create the release on GitHub first, because everyone watching would be told about an empty one: the build creates it at the end, with its [notes](#release-notes). A release needs Core pinned to a release too, or the build stops before publishing anything. Then raise `<Version>`, so later edge and nightly builds rank above the release.
+
+If it fails there's no release:
+
+- **Nothing on `main` has to change:** run **Release build** by hand with the tag. The Shared package, if it was already pushed from that commit, is kept after its provenance is checked.
+- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, then move the tag: `git push --delete origin v2.0.0`, `git fetch origin`, `git tag -f v2.0.0 origin/main` and `git push origin v2.0.0`. If the Shared package was already pushed, that version is used up: raise `<Version>` first.
+
+### Release notes
+
+Every DashyNMS repository writes its release notes the same way. **`docs/releases/<version>.md` is the one set of notes for the version in `Directory.Build.props`.** It covers everything since the last release and grows as changes merge. Nothing else is written by hand: not a GitHub release's text, and not a file for each nightly.
+
+**In the pull request that makes the change:**
+
+- If a user of this repository would notice it, add or update its line in that file. A `feat`, `fix` or `perf` nearly always needs one. `ci`, `test`, `docs`, `chore`, `refactor` and dependency updates don't, unless someone would notice.
+- Put it under `## Breaking`, `## New`, `## Changed` or `## Fixed`, in that order, as a list item: `- **What it's about:** what's different now, in plain words (#NN).` Other headings fail CI.
+- Say what's true of the release as a whole. If a later change alters or undoes something that hasn't been released, edit its line rather than adding another. A fix to something that has never been released has no line.
+- Breaking changes say what the reader has to do.
+- Never edit a released version's file. Never put download tables, filenames or build numbers in it: they differ for each build.
+
+**What the builds do with it:**
+
+| Build | Notes |
+| --- | --- |
+| CI | fails if the file is missing, empty or has other headings |
+| Edge | a tag and prerelease with links to the file and to the changes since the last edge build |
+| Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
+| Release | the last step creates the release with the file as its notes |
+
+**Raising `<Version>`:** the same pull request adds `docs/releases/<new version>.md` with its first line, because CI won't pass without it.
+
+## Standalone binaries
+
+`binaries.yml` builds one self-contained, single-file executable each for `win-x64`, `win-arm64`, `osx-arm64`, `osx-x64`, `linux-x64` and `linux-arm64`, with the HTTP transport. They're separate from the builds DashyNMS desktop bundles, and checked separately. Every build runs on its own platform and goes through:
+
+1. `scripts/publish-binary.py build`: publish, fail unless the result is exactly one file, and collect the licences of what's inside it.
+2. In the edge, nightly and release builds, `scripts/macos/sign.sh` for macOS: a Developer ID signature with the hardened runtime, notarised by Apple, as desktop's are. It needs the six `MACOS_*` and `APPLE_*` secrets desktop uses in a `DashyNMS_MacOS` environment in this repository, limited to `main`, and the build stops without them rather than publish something macOS would block. Windows builds are unsigned until there's a signing identity (DashyNMS/desktop#109).
+3. `scripts/publish-binary.py pack`: one archive and its SHA-256.
+4. `scripts/smoke-binary.py`: unpack that archive and run it, refusing to start without settings, then over stdio and HTTP against a stand-in LibreNMS.
+
+Then every archive is checked together and `SHA256SUMS` made. Pull requests stop there, with the result kept as the `standalone-binaries` artefact. The builds that publish attest the archives' provenance first. Published files don't change. A release's build that's run again only adds the ones that are missing.
+
+## User guide and wiki
+
+The user guide is in [`docs/guide`](guide/README.md): getting started, installation, how-to pages and reference. It's for people who run the server or use it through an app, so keep developer material here instead. Keep installation pages in `installation/`, user tasks in `how-to/` and reference pages in `reference/`. Use relative Markdown links, images with alt text and simple Markdown.
+
+**Any change to what the server does must also be made in the user guide, in the same PR.** That covers a new tool or setting, a changed default, a limit, what's sent or kept, and anything in `reference/tools.md` or `reference/settings.md`. The README is the short version; keep the two saying the same thing.
+
+`docs/guide` is the source and the wiki is only where people read it, matching DashyNMS/desktop (#163). The **Wiki** workflow copies the guide to the [repository wiki](https://github.com/DashyNMS/mcp/wiki) whenever it changes on `main`. `scripts/Publish-WikiGuide.py`, the same script as Desktop's, names each page after its first heading, turns `README.md` into Home, rewrites links, and builds the sidebar from the order of `README.md`'s links, grouped under its level-two headings. Wiki pages are flat, so each page needs a unique title, and every page must be linked from `README.md`. Pull requests that touch the guide run the same conversion as a link check. Edits made in the wiki itself are replaced the next time it's published.
+
+Use synthetic data, `example.net` and documentation address ranges only. To preview the pages:
+
+```bash
+python3 scripts/Publish-WikiGuide.py docs/guide /tmp/wiki --repository DashyNMS/mcp
+```
+
+### The guides the help tool reads
+
+`dashynms_help` (#164) answers from guides embedded in `DashyNMS.Agent.Shared`: this repository's `docs/guide`, and copies of Desktop's and Mobile's under `src/DashyNMS.Agent.Shared/Help/Guides`. `guides.json` records the version and commit of each copy, and every result says the product and release it describes. Copy a guide with:
+
+```bash
+python3 scripts/update-guides.py desktop <commit>
+```
+
+Do it for both when a release is prepared, with the commits being released, after taking out wording such as "until 2.0 is released" here and there, and whenever a feature people will ask about changes. `HelpLookup` in Shared does the work, so other hosts run it in process: it needs no client, and `HelpLibrary` requests nothing unless its host turns refreshing on (`MCP_HELP_REFRESH` here). Say so in an app's privacy notice before turning it on there. Guide text goes through the redactor and counts as data, like anything else a tool returns.
+
+`MCP_TOOLS_ALLOW=dashynms_help` is the one configuration that starts without LibreNMS.
 
 ## Rules for tools
 
 - Every tool is read-only, and its MCP annotations say so. A test fails if one isn't.
 - Every string a tool returns goes through the redactor. Add a failing test to `RedactorTests` before fixing a gap.
+- A tool's `data` is a record listed in `ToolOutputs`, which its output schema is generated from (`ToolOutputSchema`). Every tool test holds its result to that schema through `OutputContract`, undeclared properties included. A client may refuse a whole result over one property, so a schema requires only what can't be missing and sets no formats.
 - Summaries and error messages are our own sentences. Device text goes only under `data` or `details`.
 - Tool and parameter descriptions are prompts: review them like code.
 - Logs go to stderr only, and never include a token or password.
@@ -78,6 +199,7 @@ type(scope): what changes, as the user would notice it
 - **Issue numbers:** never in the title. `Closes #NN` goes in the PR description, which then says briefly what changed and how it was checked.
 - **Breaking changes:** a `!` after the scope, and a sentence saying what breaks.
 - **Issue titles:** the same form, worded as the result the fixing PR will deliver, so the PR can reuse the title. An epic ends with `(epic)`. Labels carry the rest.
+- **Release notes:** a change users would notice adds its line to `docs/releases/<version>.md` in the same PR. See [Release notes](#release-notes).
 - **Attribution:** commits, PRs and release notes carry no AI attribution or `Co-Authored-By` lines.
 
 Examples:
@@ -229,7 +351,7 @@ the stdio smoke test holds the running server to it byte for byte. The tools are
 because the SDK lists them in no fixed order. The same test, and `ToolCatalogueTests` against the
 recording, hold the listed names, descriptions and schemas equal to the catalogue. When a tool's
 text changes on purpose, change `ToolText`, then replace the recording with the list the failing
-test prints (base64) and review the diff.
+test prints (gzipped, then base64) and review the diff.
 
 ### Verification and publication follow-up
 
@@ -266,9 +388,9 @@ acceptance remain separate consumer work; Diagnostics remains outside this migra
 
 ### Shared package for mobile
 
-`shared-package.yml` now defines a separate Shared package pipeline. It builds and
-runs solution tests, packs **the Shared package only**, inspects its metadata/licence/commit and
-restores, builds and executes a minimal package-only .NET 10 consumer in a fresh
+`shared-package.yml` runs `shared-checks.yml` and then publishes. The checks build and
+run solution tests, pack **the Shared package only**, inspect its metadata/licence/commit and
+restore, build and execute a minimal package-only .NET 10 consumer in a fresh
 NuGet package directory. The exact Shared ID maps to the local packed feed;
 `DashyNMS.*` dependencies still map to GitHub Packages. The smoke check rejects
 Agent/MCP packages and project dependencies, checks the resolved Core baseline,
@@ -276,8 +398,9 @@ and records the complete resolved library list and package SHA-256 in
 `shared-provenance.json`. This is an inventory and direct boundary check, not
 proof of mobile runtime compatibility or of the absence of dynamic loading.
 
-Package identity is `DashyNMS.Agent.Shared`, independently versioned from the MCP
-host, `2.0.0-ci.<GitHub run ID>.<run attempt>`. `2.0.0-dev` is for local
+Package identity is `DashyNMS.Agent.Shared`, with the same version as the build it
+comes from, such as `2.0.0-edge.12`. `2.0.0-ci.<run ID>.<attempt>` packages came before
+and rank below every edge package. `2.0.0-dev` is for local
 packs only. The Shared package's Version and PackageVersion share the same value; the SDK derives
 assembly and informational versions from it. CI builds with that value and repository
 commit, tests without rebuilding, then packs without building or restoring. The smoke
@@ -294,12 +417,11 @@ the image build does (see `docs/dependency-licences`).
 
 #### Core compatibility
 
-The Shared package is compiled against MCP's Core pin (`DashyNMSCoreVersion`), and its package
-declares that as a minimum, so a host that pins a newer Core gets that one instead.
-The `core-compatibility` job checks each Core a consumer actually pins. MCP's own
-and mobile's (the version in mobile's `DashyNMS.Mobile.Shared.csproj`) share one entry,
-`2.0.0-ci.74`: Shared now needs that Core, so mobile moves from `2.0.0-ci.64` to it
-before pinning this Shared (DashyNMS/mobile#665). For each entry it:
+The standalone server uses `DashyNMSCoreVersion` in `Directory.Build.props`. Shared
+builds and declares its minimum dependency using `DashyNMSSharedCoreVersion`. A
+host that pins a newer Core can use it with the same Shared package. The
+`core-compatibility` job checks the Shared minimum and the standalone server's
+pin. For each entry it:
 
 - builds the Shared package from source against that Core with warnings as errors (source
   compatibility, for a future producer pin), and
@@ -309,9 +431,11 @@ before pinning this Shared (DashyNMS/mobile#665). For each entry it:
   the verified package, and runs `DashyNMS.Agent.Shared.Tests` on that combination
   (`scripts/verify-shared-core-compatibility.py`). This is the binary a host runs.
 
-When mobile moves Core, update its matrix entry first; a failing entry blocks
-publication. Moving MCP's own pin can change alert and tool behaviour well beyond
-search, so each move needs its own review of what the Core range changes for MCP.
+Update the matching matrix entry when either pin changes. Add a consumer's
+exact Core version if the existing entries do not cover it. A failing entry
+blocks publication. Review changes to the standalone pin for their effects
+on alert and tool behaviour.
+
 The move from `2.0.0-ci.34` to `2.0.0-ci.64` (for the reported device state) was
 reviewed that way: MCP calls none of the changed alert actions or graph legends, the
 new transport members default or pass through, and Core's compatibility flags still
@@ -328,10 +452,57 @@ MCP's output: Spotlight's typed references (MCP doesn't call `AskAsync`), settin
 fields, the Network Search lookup and the new API members (all additive, none called
 by a tool).
 
+The move from `2.0.0-ci.74` to `2.0.0-ci.76` (#121, core#90 Batch 3) holds one Core
+change, core#75: request measurements count LibreNMS 26.10 `faults` polls as alert
+requests. MCP attaches no `RequestObserver`, so its output is unchanged; the move keeps
+MCP, the Shared package and mobile on one Core. The licence is unchanged.
+
+The move from `2.0.0-ci.76` to `2.0.0-ci.79` (core#90 Batch 4) holds two Core changes.
+core#95 names ignored and unreported devices in Intelligence status cards, which MCP
+doesn't build. core#98 shares the ChatGPT route's instructions and tool running with
+Desktop's agent providers and adds provider, handoff and personality settings: all
+additive, and none called by a tool (MCP doesn't call `AskAsync` or build instructions).
+MCP's output is unchanged; the move keeps MCP, the Shared package, mobile and Desktop on
+one Core. The licence is unchanged.
+
+The move from `2.0.0-ci.79` to `2.0.0-ci.83` (core#90 Batch 5) holds one Core change,
+core#99: an optional `RequestGate` on the three clients, null by default. MCP sets it to
+cap requests in flight (#38); Shared's operations are unchanged, and so is the licence.
+
+The move from `2.0.0-ci.83` to `2.0.0-ci.84` (core#90 Batch 6) holds one Core change,
+core#101: event and alert log reads that continue back from a time, which the windowed
+tools use on busy networks (#70). An `ILogsApi` that doesn't say it can, such as mobile's
+connection-bound wrappers, is read as before. The licence is unchanged.
+
+The move from `2.0.0-ci.84` to `2.0.0-edge.1` (core#90 Batch 7) holds core#104, the update
+channels Desktop offers, and core#103, how the package is built and published. No tool
+checks for updates or reads those settings, so MCP's output is unchanged. The licence is
+unchanged.
+
+The move to `2.0.0-nightly.1` uses Core's first nightly for 2.0.0.
+MCP and the Shared package use the same pin, with updated licence evidence.
+
+The move from `2.0.0-nightly.1` to `2.0.0-nightly.3` (core#90 Batch 8) holds core#118, the
+guide loader the help tool is built on, and build script changes. Nothing MCP already called
+has changed, so its other output is unchanged. The licence is unchanged.
+
+Batch 10 moves the standalone server to `2.0.0-nightly.5` for Desktop. Core #121
+adds instructions for Intelligence providers that cannot search the web. MCP tools
+do not use those instructions. Shared's minimum remains `2.0.0-nightly.3`.
+The Core licence is unchanged.
+
 #### Publication
 
-Every push to protected `main` whose `verify` and `core-compatibility` jobs pass runs
-the `publish` job; pull requests never reach it. It holds the only write token
+Every channel builds and smoke-tests the multi-platform image into an OCI archive
+before Shared publication. The archive has one canonical version reference so
+Skopeo can select it unambiguously. Channel aliases are added only during
+publication. `image-publish.yml` copies that archive to GHCR without
+rebuilding, preserving its digests, SBOM and provenance. Edge builds share one
+workflow concurrency group, so the `edge` image tag never moves back.
+They queue without cancelling an in-progress publisher.
+
+Edge, nightly and release builds on protected `main` whose `verify` and
+`core-compatibility` jobs pass run the `publish` job; pull requests never reach it. It holds the only write token
 (`packages: write`, plus `id-token`/`attestations: write` for the attestation) and:
 
 1. downloads the package from the same run and runs
@@ -340,18 +511,19 @@ the `publish` job; pull requests never reach it. It holds the only write token
    the verify job's output;
 2. creates a GitHub build provenance attestation for the exact `.nupkg`
    (`gh attestation verify <file> --repo DashyNMS/mcp` checks it);
-3. pushes it to `https://nuget.pkg.github.com/DashyNMS` **without**
-   `--skip-duplicate`, so an existing version fails the job rather than being
-   reported as published;
-4. downloads it back through the feed and fails unless the bytes match, then checks
+3. accepts an existing version only after verifying its attestation and source commit,
+   or pushes it to `https://nuget.pkg.github.com/DashyNMS` **without**
+   `--skip-duplicate`, so an unexplained existing version fails the job;
+4. downloads the new or accepted package through the feed and fails unless the bytes
+   match the verified package, then checks
    the package is public and linked to `DashyNMS/mcp` (`scripts/verify-published-shared.py`).
    The token is only ever sent over HTTPS to `nuget.pkg.github.com` and
    `api.github.com`, whatever download URL the feed's service index advertises;
    storage redirects are followed without it.
 
-A run's version includes its attempt number, and the verify job's attempt fixes it.
-Re-running only the failed publish job therefore fails provenance verification on
-purpose; re-run all jobs instead, which produces a new version.
+Re-running a failed publish job fails provenance verification on purpose, because the
+verify job recorded another attempt. Run the build again by hand: an edge or nightly takes a new version, and a release keeps a package
+that was already published from its commit.
 
 What this does and does not guarantee:
 
@@ -368,10 +540,10 @@ What this does and does not guarantee:
   New GitHub packages can start private, and GitHub has no API to change a
   package's visibility, so the workflow cannot fix it. If the first publish job
   fails on visibility, an organisation owner sets `DashyNMS.Agent.Shared` to public
-  in its package settings (this cannot be undone), then re-runs all jobs or merges
-  again, which publishes a new version that passes. Do not pin a version whose
-  publish job failed, including the private first one, which becomes visible when
-  the package turns public.
+  in its package settings (this cannot be undone), then starts the build again by
+  hand. Edge and nightly builds get a new version. A release keeps an existing
+  package only after verifying its attestation, source commit, feed bytes and
+  consumer access. Do not pin a version until its publication checks pass.
 - The visibility check fails closed. GitHub documents the packages REST API for
   classic personal access tokens only, so the Actions token may be refused package
   metadata. Then the job checks anonymously instead: a private package's page is a
@@ -513,6 +685,37 @@ Filtering and ranking still use the original reported status before paging.
 Caller cancellation propagates; an individual failed maintenance check leaves
 that row's reported state intact. The shared search fixtures record the extra
 requests and distinguish failed checks from known inactive maintenance.
+
+### Device status words
+
+Every tool's device `status` comes from Core's `ReportedState` through
+`DeviceSummary.StatusOf` (#121): `up`, `down`, `disabled`, `ignored` or
+`unknown`, plus `maintenance` on search rows whose maintenance read says so.
+Before, it came from Core's compatibility flags, which read an omitted flag as
+false and know nothing about ignoring. A device whose response left out
+`status`, `disabled` or `ignore` was called `down` (or `up`), and an ignored
+device read as `up` or `down`. Core decides precedence: disabled, then a missing
+`disabled` flag (unknown), then ignored, then a missing `ignore` or `status`
+flag (unknown), then up or down.
+
+- `find_device`: brief and verbose records, and the `status` filter, which now
+  also takes `ignored` and `unknown`.
+- `network_overview`: each device is counted once (`up`, `down`, `disabled`,
+  `ignored` and the new `unknown` add up to `total`). Only devices reported down
+  reach `down_devices` and `most_down_by_location`.
+- `list_groups_and_locations`: each location's `down` counts only devices
+  reported down; the new `ignored` and `unknown` counts sit beside it.
+- `active_alerts` and `alert_details`: `device_status`.
+- `device_health`: the summary says "Device state wasn't reported" rather than
+  calling such a device up or down.
+
+**Breaking change.** MCP clients that expect only `up`, `down`, `disabled` or
+`maintenance` in `status` must accept `ignored` and `unknown`. For Shared hosts,
+`OverviewDeviceCounts` and `ScopeLocation` gain positional parameters
+(`Unknown`; `Ignored` and `Unknown`), and `OverviewDeviceCounts.Disabled` and
+`Ignored` no longer overlap `Up` and `Down`. `DeviceSummary.Status` now agrees
+with `DeviceSummary.State`; hosts that read `State` need no change. Maintenance
+still needs a call per device, so overview and location counts don't include it.
 
 ### Alert details and rules for hosts
 

@@ -25,6 +25,7 @@ public sealed class DeviceDirectory(ILibreNmsClient client, TimeProvider time)
         cancellationToken.ThrowIfCancellationRequested();
         if (Fresh() is { } devices)
         {
+            SourceOutcomes.NoteCached();
             return devices;
         }
 
@@ -35,6 +36,7 @@ public sealed class DeviceDirectory(ILibreNmsClient client, TimeProvider time)
             cancellationToken.ThrowIfCancellationRequested();
             if (Fresh() is { } fetched)
             {
+                SourceOutcomes.NoteCached();
                 return fetched;
             }
 

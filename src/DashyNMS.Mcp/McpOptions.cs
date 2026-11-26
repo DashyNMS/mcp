@@ -1,8 +1,22 @@
 using System.Globalization;
+using System.Net;
+using System.Reflection;
+using System.Text.Json;
+using DashyNMS.Mcp.Auditing;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Configuration;
 
 namespace DashyNMS.Mcp;
+
+/// <summary>How clients reach the server.</summary>
+public enum McpTransport
+{
+    /// <summary>The client starts the server and talks over its stdin and stdout.</summary>
+    Stdio,
+
+    /// <summary>The server listens for MCP's Streamable HTTP, with bearer tokens.</summary>
+    Http,
+}
 
 /// <summary>
 /// The server's settings, read from environment variables (or anything else
@@ -36,6 +50,22 @@ public sealed class McpOptions
     public const string GraylogTrustedCerts = "GRAYLOG_TRUSTED_CERTS";
     public const string MaxResultBytesKey = "MCP_MAX_RESULT_BYTES";
     public const string ConfigTextKey = "MCP_CONFIG_TEXT";
+    public const string MaxConcurrentRequestsKey = "MCP_MAX_CONCURRENT_REQUESTS";
+    public const string ToolsAllow = "MCP_TOOLS_ALLOW";
+    public const string ToolsDeny = "MCP_TOOLS_DENY";
+    public const string AuditGelfUrl = "AUDIT_GELF_URL";
+    public const string AuditGelfTrustedCerts = "AUDIT_GELF_TRUSTED_CERTS";
+    public const string TransportKey = "MCP_TRANSPORT";
+    public const string HttpPortKey = "MCP_HTTP_PORT";
+    public const string HttpAddressKey = "MCP_HTTP_ADDRESS";
+    public const string HttpTokensKey = "MCP_HTTP_TOKENS";
+    public const string HttpAllowedOriginsKey = "MCP_HTTP_ALLOWED_ORIGINS";
+    public const string RateLimitPerMinuteKey = "MCP_RATE_LIMIT_PER_MINUTE";
+    public const string ResourcesDirectoryKey = "MCP_RESOURCES_DIR";
+    public const string LastKnownGoodKey = "MCP_LAST_KNOWN_GOOD";
+    public const string LastKnownGoodDirectoryKey = "MCP_LAST_KNOWN_GOOD_DIR";
+    public const string LastKnownGoodHoursKey = "MCP_LAST_KNOWN_GOOD_HOURS";
+    public const string HelpRefreshKey = "MCP_HELP_REFRESH";
 
     public const int DefaultTimeoutSeconds = 30;
     public const int DefaultMaxResultBytes = DashyNMS.Agent.AgentOptions.DefaultMaxResultBytes;
@@ -43,8 +73,34 @@ public sealed class McpOptions
     /// <summary>Below this a single device summary wouldn't fit, so a smaller cap is a mistake rather than a choice.</summary>
     public const int MinimumMaxResultBytes = 1024;
 
+    /// <summary>More than this in flight isn't a limit on anything, so a larger number is a mistake.</summary>
+    public const int MaximumConcurrentRequests = 256;
+
+    /// <summary>Past this nothing is being limited, and every allowed call is remembered for a minute.</summary>
+    public const int MaximumRateLimitPerMinute = 10_000;
+
+    public const int DefaultLastKnownGoodHours = 24;
+
+    /// <summary>A week: an answer older than that says little about the network now.</summary>
+    public const int MaximumLastKnownGoodHours = 168;
+
+    public const int DefaultHttpPort = 8080;
+
+    /// <summary>
+    /// Whether this build has the HTTP transport. A host that bundles the
+    /// server to run it over stdio builds without it (McpHttpTransport=false),
+    /// and ships neither ASP.NET Core nor a way to open a port.
+    /// </summary>
+#if MCP_HTTP
+    internal static bool HasHttp => true;
+#else
+    internal static bool HasHttp => false;
+#endif
+
+    private readonly LibreNmsConnection? _connection;
+
     private McpOptions(
-        LibreNmsConnection connection,
+        LibreNmsConnection? connection,
         bool timestampsAreUtc,
         UnimusConnection? unimus,
         string? unimusMyDomain,
@@ -54,7 +110,7 @@ public sealed class McpOptions
         int maxResultBytes,
         DashyNMS.Agent.ConfigText configText, AppSettings sensorSettings)
     {
-        Connection = connection;
+        _connection = connection;
         TimestampsAreUtc = timestampsAreUtc;
         Unimus = unimus;
         UnimusMyDomain = unimusMyDomain;
@@ -75,7 +131,13 @@ public sealed class McpOptions
     /// the desktop repo). There is deliberately no accept-everything switch.
     /// The same goes for Unimus and Graylog.
     /// </summary>
-    public LibreNmsConnection Connection { get; }
+    public LibreNmsConnection Connection => _connection ?? throw new InvalidOperationException("LibreNMS isn't set up.");
+
+    /// <summary>Whether LibreNMS is set up. It's only left out when help is the only tool on (#164).</summary>
+    public bool HasConnection => _connection is not null;
+
+    /// <summary>Whether the user guides may be refreshed from GitHub. Off unless the operator asks (#164).</summary>
+    public bool HelpRefresh { get; private init; }
 
     /// <summary>Thresholds owned by this standalone host, never read from app settings files.</summary>
     public AppSettings SensorSettings { get; }
@@ -114,6 +176,72 @@ public sealed class McpOptions
     /// <summary>The most JSON one tool call may return, in bytes.</summary>
     public int MaxResultBytes { get; }
 
+    /// <summary>The most requests in flight to each of LibreNMS, Unimus and Graylog; more queue (#38).</summary>
+    public int MaxConcurrentRequests { get; private init; }
+
+    /// <summary>The most tool calls one client may make in a minute, or null - the default - for no limit (#38).</summary>
+    public int? RateLimitPerMinute { get; private init; }
+
+    /// <summary>The folder of reference files offered as resources, or null for none (#20).</summary>
+    public string? ResourcesDirectory { get; private init; }
+
+    /// <summary>How old an answer may be given when LibreNMS can't be reached, or null to give none (#39).</summary>
+    public TimeSpan? LastKnownGood { get; private init; }
+
+    /// <summary>Where those answers are kept on disk as well as in memory; null for memory alone.</summary>
+    public string? LastKnownGoodDirectory { get; private init; }
+
+    /// <summary>
+    /// Everything one of those answers depends on: the LibreNMS account, the
+    /// settings that shape a result, and the build that shaped it. Holds the
+    /// token, so it's only ever made into keys.
+    /// </summary>
+    internal string AnswerIdentity => JsonSerializer.Serialize(new
+    {
+        Connection.WebRoot,
+        Connection.BackupWebRoot,
+        Connection.ApiToken,
+        TimestampsAreUtc,
+        MaxResultBytes,
+        SensorSettings.DbmThresholds,
+        SensorSettings.SignalThresholds,
+        SensorSettings.TemperatureThresholds,
+        SensorSettings.FanSpeedThresholds,
+        SensorSettings.OverrideSensorLimitsWithAppThresholds,
+        Build = typeof(McpOptions).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+    });
+
+    /// <summary>The tools the server offers: every one unless the operator's lists say otherwise (#37).</summary>
+    public required ToolPolicy Tools { get; init; }
+
+    /// <summary>A Graylog GELF input that gets the audit trail as well as stderr, or null for stderr alone (#18).</summary>
+    public GelfTarget? AuditGelf { get; private init; }
+
+    /// <summary>How clients reach the server: stdio unless the operator asks for HTTP (#17).</summary>
+    public McpTransport Transport { get; private init; }
+
+    public int HttpPort { get; private init; } = DefaultHttpPort;
+
+    /// <summary>The address to listen on, this machine only by default; null is every address.</summary>
+    public IPAddress? HttpAddress { get; private init; } = IPAddress.Loopback;
+
+    /// <summary>Who may use the server over HTTP. Never null when that's the transport.</summary>
+    public HttpTokens? HttpTokens { get; private init; }
+
+    /// <summary>The web origins that may call the server from a browser; none by default.</summary>
+    public IReadOnlyCollection<string> HttpAllowedOrigins { get; private init; } = [];
+
+    /// <summary>HTTP settings given without HTTP turned on, which is probably not what was meant.</summary>
+    private bool HasUnusedHttpSettings { get; init; }
+
+    /// <summary>
+    /// Every credential the server holds, for keeping them out of the audit
+    /// trail (#18). The Graylog username is one, as an access token is given
+    /// as the username.
+    /// </summary>
+    internal IReadOnlyList<string> Secrets
+        => new[] { _connection?.ApiToken, Unimus?.ApiToken, Graylog?.Username, Graylog?.Password }.OfType<string>().Concat(HttpTokens?.Values ?? []).ToArray();
+
     /// <summary>
     /// Settings that work but put credentials at risk: a service reached over
     /// plain http sends its token or password across the network unencrypted.
@@ -133,10 +261,25 @@ public sealed class McpOptions
                 }
             }
 
-            Check(Connection.WebRoot, LibreNmsUrl, "LibreNMS API token");
-            Check(Connection.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
+            Check(_connection?.WebRoot, LibreNmsUrl, "LibreNMS API token");
+            Check(_connection?.BackupWebRoot, LibreNmsBackupUrl, "LibreNMS API token");
             Check(Unimus?.WebRoot, UnimusUrl, "Unimus API token");
             Check(Graylog?.Root, GraylogUrl, "Graylog password");
+            if (AuditGelf?.IsUnencrypted == true)
+            {
+                warnings.Add($"{AuditGelfUrl} isn't https://, so the audit trail, which names devices and searches, crosses the network unencrypted. Use a GELF HTTP input behind https:// if you can.");
+            }
+
+            if (Transport == McpTransport.Http && (HttpAddress is null || !IPAddress.IsLoopback(HttpAddress)))
+            {
+                warnings.Add($"{TransportKey}=http serves plain HTTP, so tokens and answers are only private behind a reverse proxy that does TLS. Don't expose the port itself.");
+            }
+
+            if (HasUnusedHttpSettings)
+            {
+                warnings.Add($"MCP_HTTP_ settings are set but {TransportKey} isn't http, so they do nothing.");
+            }
+
             return warnings;
         }
     }
@@ -154,9 +297,16 @@ public sealed class McpOptions
         ArgumentNullException.ThrowIfNull(lookup);
         var problems = new List<string>();
 
+        var tools = ParseTools(lookup, problems);
         Uri? webRoot = null;
         var url = Value(lookup, LibreNmsUrl);
-        if (url is null)
+        var token = Value(lookup, LibreNmsToken);
+        var withoutLibreNms = url is null && token is null && !tools.NeedsLibreNms;
+        if (withoutLibreNms)
+        {
+            // Help is the only tool, and it reads the bundled guides.
+        }
+        else if (url is null)
         {
             problems.Add($"{LibreNmsUrl} is not set. Set it to the address of your LibreNMS server, e.g. https://librenms.example.com.");
         }
@@ -165,8 +315,7 @@ public sealed class McpOptions
             problems.Add($"{LibreNmsUrl}: {urlError}");
         }
 
-        var token = Value(lookup, LibreNmsToken);
-        if (token is null)
+        if (token is null && !withoutLibreNms)
         {
             problems.Add($"{LibreNmsToken} is not set. Create an API token for a read-only LibreNMS user and set it here.");
         }
@@ -187,6 +336,26 @@ public sealed class McpOptions
         var graylogField = Value(lookup, GraylogQueryField) ?? GraylogSettings.DefaultQueryField;
         var graylogMatchAny = ParseBool(lookup, GraylogMatchAnyAddressKey, fallback: false, problems);
         var maxResultBytes = ParseInt(lookup, MaxResultBytesKey, DefaultMaxResultBytes, MinimumMaxResultBytes, problems);
+        var maxConcurrentRequests = ParseInt(lookup, MaxConcurrentRequestsKey, DashyNMS.Agent.AgentOptions.DefaultMaxConcurrentRequests, minimum: 1, problems, MaximumConcurrentRequests);
+        var rateLimit = ParseInt(lookup, RateLimitPerMinuteKey, fallback: 0, minimum: 0, problems, MaximumRateLimitPerMinute);
+        var lastKnownGood = ParseBool(lookup, LastKnownGoodKey, fallback: true, problems);
+        var lastKnownGoodHours = ParseInt(lookup, LastKnownGoodHoursKey, DefaultLastKnownGoodHours, minimum: 1, problems, MaximumLastKnownGoodHours);
+        var lastKnownGoodDirectory = ParseDirectory(lookup, LastKnownGoodDirectoryKey, problems);
+        var helpRefresh = ParseBool(lookup, HelpRefreshKey, fallback: false, problems);
+        var resourcesDirectory = ParseDirectory(lookup, ResourcesDirectoryKey, problems);
+        if (resourcesDirectory is not null && !Directory.Exists(resourcesDirectory))
+        {
+            // The operator meant the model to have it, so going without isn't a detail.
+            problems.Add($"{ResourcesDirectoryKey}: there's no such folder, or the server can't see it.");
+        }
+
+        var transport = ParseTransport(lookup, problems);
+        var http = transport == McpTransport.Http;
+        var httpPort = http ? ParseInt(lookup, HttpPortKey, DefaultHttpPort, minimum: 1, problems, maximum: 65535) : DefaultHttpPort;
+        var httpAddress = http ? ParseHttpAddress(lookup, problems) : IPAddress.Loopback;
+        var httpTokens = http ? ParseHttpTokens(lookup, problems) : null;
+        var httpOrigins = http ? ParseOrigins(lookup, problems) : [];
+        var auditGelf = ParseGelf(lookup, problems);
         var configText = ParseConfigText(lookup, problems);
         var sensorSettings = LoadSensorSettings(lookup, problems);
 
@@ -196,7 +365,7 @@ public sealed class McpOptions
             return null;
         }
 
-        var connection = new LibreNmsConnection(
+        var connection = withoutLibreNms ? null : new LibreNmsConnection(
             webRoot!,
             token!,
             allowUntrustedCertificate: true,
@@ -204,7 +373,126 @@ public sealed class McpOptions
             backupWebRoot: backupWebRoot,
             trustedCertificates: trusted);
 
-        return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings);
+        return new McpOptions(connection, timestampsAreUtc, unimus, unimusMyDomain, graylog, graylogField, graylogMatchAny, maxResultBytes, configText, sensorSettings)
+        {
+            Tools = tools,
+            AuditGelf = auditGelf,
+            Transport = transport,
+            HttpPort = httpPort,
+            HttpAddress = httpAddress,
+            HttpTokens = httpTokens,
+            HttpAllowedOrigins = httpOrigins,
+            HasUnusedHttpSettings = !http && new[] { HttpPortKey, HttpTokensKey, HttpAllowedOriginsKey }.Any(key => Value(lookup, key) is not null),
+            MaxConcurrentRequests = maxConcurrentRequests,
+            RateLimitPerMinute = rateLimit > 0 ? rateLimit : null,
+            ResourcesDirectory = resourcesDirectory,
+            LastKnownGood = lastKnownGood && !withoutLibreNms ? TimeSpan.FromHours(lastKnownGoodHours) : null,
+            LastKnownGoodDirectory = lastKnownGood && !withoutLibreNms ? lastKnownGoodDirectory : null,
+            HelpRefresh = helpRefresh,
+        };
+    }
+
+    /// <summary>A folder's full path: a relative one would depend on where the client happened to start the server.</summary>
+    private static string? ParseDirectory(Func<string, string?> lookup, string key, List<string> problems)
+    {
+        var path = Value(lookup, key);
+        if (path is null || Path.IsPathFullyQualified(path))
+        {
+            return path;
+        }
+
+        problems.Add($"{key} isn't a full path.");
+        return null;
+    }
+
+    private static ToolPolicy ParseTools(Func<string, string?> lookup, List<string> problems)
+    {
+        // A list of its own: the policy only reports a list that leaves nothing on when the names in it were right.
+        var toolProblems = new List<string>();
+        var policy = ToolPolicy.Parse(Value(lookup, ToolsAllow), Value(lookup, ToolsDeny), toolProblems);
+        problems.AddRange(toolProblems);
+        return policy;
+    }
+
+    private static McpTransport ParseTransport(Func<string, string?> lookup, List<string> problems)
+    {
+        switch (Value(lookup, TransportKey)?.ToLowerInvariant())
+        {
+            case null or "stdio":
+                return McpTransport.Stdio;
+            case "http" when HasHttp:
+                return McpTransport.Http;
+            case "http":
+                problems.Add($"{TransportKey}: this build of the server only has stdio. Use the container image, or build without McpHttpTransport=false.");
+                return McpTransport.Stdio;
+            case var other:
+                problems.Add($"{TransportKey}: '{other}' should be stdio or http.");
+                return McpTransport.Stdio;
+        }
+    }
+
+    private static IPAddress? ParseHttpAddress(Func<string, string?> lookup, List<string> problems)
+    {
+        switch (Value(lookup, HttpAddressKey))
+        {
+            case null:
+                return IPAddress.Loopback;
+            case "*":
+                return null;
+            case var text when IPAddress.TryParse(text, out var address):
+                return address;
+            case var other:
+                problems.Add($"{HttpAddressKey}: '{other}' isn't an IP address. Use one of this machine's, 127.0.0.1 for this machine only, or * for every address.");
+                return IPAddress.Loopback;
+        }
+    }
+
+    private static HttpTokens? ParseHttpTokens(Func<string, string?> lookup, List<string> problems)
+    {
+        if (Value(lookup, HttpTokensKey) is { } text)
+        {
+            return HttpTokens.Parse(text, HttpTokensKey, problems);
+        }
+
+        problems.Add($"{HttpTokensKey} is not set. The server doesn't run over HTTP without a token: set one or more as label:token, such as alice:$(openssl rand -hex 32).");
+        return null;
+    }
+
+    /// <summary>Origins as a browser writes them: scheme, host and any port, with nothing after.</summary>
+    private static List<string> ParseOrigins(Func<string, string?> lookup, List<string> problems)
+    {
+        var origins = new List<string>();
+        foreach (var entry in (Value(lookup, HttpAllowedOriginsKey) ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Uri.TryCreate(entry, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && uri.GetLeftPart(UriPartial.Authority) == entry.TrimEnd('/') && uri.UserInfo.Length == 0)
+            {
+                origins.Add(uri.GetLeftPart(UriPartial.Authority));
+            }
+            else
+            {
+                problems.Add($"{HttpAllowedOriginsKey}: '{entry}' isn't an origin, such as https://tools.example.net.");
+            }
+        }
+
+        return origins;
+    }
+
+    private static GelfTarget? ParseGelf(Func<string, string?> lookup, List<string> problems)
+    {
+        var trusted = Fingerprints(lookup, AuditGelfTrustedCerts, problems);
+        if (Value(lookup, AuditGelfUrl) is not { } text)
+        {
+            return null;
+        }
+
+        var target = GelfTarget.TryParse(text, trusted);
+        if (target is null)
+        {
+            // Fixed rather than quoting the value, which may hold credentials.
+            problems.Add($"{AuditGelfUrl} isn't a GELF input's address. Use https://, http:// or udp:// with a host, such as https://graylog.example.net:12201/gelf or udp://graylog.example.net:12201, and no user name or password.");
+        }
+
+        return target;
     }
 
     private static AppSettings LoadSensorSettings(Func<string, string?> lookup, List<string> problems)
@@ -393,7 +681,7 @@ public sealed class McpOptions
         return trusted;
     }
 
-    private static int ParseInt(Func<string, string?> lookup, string key, int fallback, int minimum, List<string> problems)
+    private static int ParseInt(Func<string, string?> lookup, string key, int fallback, int minimum, List<string> problems, int maximum = int.MaxValue)
     {
         var text = Value(lookup, key);
         if (text is null)
@@ -401,9 +689,11 @@ public sealed class McpOptions
             return fallback;
         }
 
-        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value < minimum)
+        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value < minimum || value > maximum)
         {
-            problems.Add($"{key}: '{text}' is not a whole number of at least {minimum}.");
+            problems.Add(maximum == int.MaxValue
+                ? $"{key}: '{text}' is not a whole number of at least {minimum}."
+                : $"{key}: '{text}' is not a whole number from {minimum} to {maximum}.");
             return fallback;
         }
 

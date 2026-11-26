@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using DashyNMS.Agent.Redaction;
-using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Api;
+using DesktopNMS.Core.Models;
 
 namespace DashyNMS.Agent.Devices;
 
@@ -11,7 +11,12 @@ public sealed record ScopeGroup(int GroupId, string? Name, string? Description, 
     [JsonIgnore]
     public string? FilterName { get; init; }
 }
-public sealed record ScopeLocation(int? LocationId, string Name, int Devices, int Down)
+/// <summary>
+/// A location and its devices by reported state. <paramref name="Down"/> counts only devices
+/// LibreNMS reported down; ignored devices and those it reported no state for are counted
+/// apart, so a site with unreported devices isn't read as healthy or as down (#121).
+/// </summary>
+public sealed record ScopeLocation(int? LocationId, string Name, int Devices, int Down, int Ignored, int Unknown)
 {
     /// <summary>Exact server name for host-side filtering only, never model text.</summary>
     [JsonIgnore]
@@ -58,7 +63,8 @@ public sealed class GroupsAndLocations
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
             .Select(g => new ScopeLocation(
                 g.Select(d => d.LocationId).Distinct().ToArray() is [int id] && id > 0 ? id : null,
-                redactor.Redact(g.Key), g.Count(), g.Count(d => DeviceSummary.StatusOf(d) == "down"))
+                redactor.Redact(g.Key), g.Count(), g.Count(d => d.ReportedState == DeviceState.Down),
+                g.Count(d => d.ReportedState == DeviceState.Ignored), g.Count(d => d.ReportedState == DeviceState.Unknown))
                 { FilterName = g.First().Location! }).ToList();
         var groups = groupsTask.Result.Value?.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => new ScopeGroup(g.Id, Clean(g.Name), string.IsNullOrWhiteSpace(g.Description) ? null : Clean(g.Description), Clean(g.Type))

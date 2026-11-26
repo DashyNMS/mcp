@@ -2,7 +2,7 @@
 
 Usage: verify-shared-core-compatibility.py <DashyNMS.Core version>
 
-The Shared package is compiled against MCP's Core pin, but NuGet lets a host such as mobile
+The Shared package is compiled against its minimum supported Core. NuGet lets a host
 unify Core to a newer version. This restores the downloaded package (not a
 project reference) beside an exact Core pin in a fresh package directory,
 checks the resolved graph and DLL bytes, then runs the Shared-only tests on

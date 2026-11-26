@@ -76,6 +76,7 @@ public static class ToolErrors
     {
         404 => $"it doesn't have what was asked for (HTTP 404).",
         400 or 422 => $"it rejected {what} as invalid (HTTP {code}).",
+        429 => "it's limiting how often it can be asked (HTTP 429). Wait a little, then make fewer calls at once.",
         >= 500 => $"it had an error of its own (HTTP {code}). Try again shortly.",
         _ => $"it returned an error (HTTP {code}).",
     };

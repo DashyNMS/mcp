@@ -76,7 +76,7 @@ public sealed class SharedSearchFixtureTests
         var options = new AgentOptions();
         var directory = new DeviceDirectory(client, time);
         var tools = new DeviceTools(client, directory, new DeviceResolver(directory), new DeviceScope(client, directory, time),
-            new ToolRunner(new Redactor(), options, NullLogger<ToolRunner>.Instance), options);
+            new ToolRunner(new Redactor(), options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check }, options);
         return new(transport, client, tools);
     }
 
@@ -119,8 +119,9 @@ public sealed class SharedSearchFixtureTests
     }
 
     /// <summary>
-    /// The status word is MCP's output and filter, and stays as it was; the reported state
-    /// is the typed state hosts show, kept out of MCP's JSON in brief and verbose records.
+    /// The status word is MCP's output and filter, and the reported state is the typed state
+    /// hosts show: both say what LibreNMS reported (#121). The typed state is kept out of
+    /// MCP's JSON in brief and verbose records, since the status word carries it.
     /// </summary>
     [Theory]
     [InlineData(false)]

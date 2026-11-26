@@ -60,7 +60,7 @@ public sealed class HostDeviceSummaryTests
         var result = (await summary.ReadAsync(new(7))).Result!;
 
         Assert.Equal(DeviceState.Unknown, result.Device.State);
-        Assert.Equal("up", result.Device.Status);
+        Assert.Equal("unknown", result.Device.Status);
         Assert.Null(result.UptimeSeconds);
     }
 

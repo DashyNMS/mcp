@@ -1,0 +1,13 @@
+{
+  "package": "microsoft.extensions.fileproviders.physical/11.0.0",
+  "packageSha256": "ddea7788afac7ba58730b1fc908f3bbadea380b169e7b1c29ae8d7b624f1a996",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

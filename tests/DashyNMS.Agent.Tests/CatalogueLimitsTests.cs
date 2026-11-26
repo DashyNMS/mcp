@@ -28,6 +28,7 @@ public sealed class CatalogueLimitsTests
         { ToolText.ConfigBackup.Name, ConfigTools.DefaultLines, ConfigTools.MaxLines },
         { ToolText.RecentConfigChanges.Name, ConfigTools.DefaultChanges, ConfigTools.MaxChanges },
         { ToolText.SearchLogs.Name, LogTools.DefaultLines, LogTools.MaxLines },
+        { ToolText.DashynmsHelp.Name, HelpTools.DefaultResults, HelpTools.MaxResults },
     };
 
     [Theory]

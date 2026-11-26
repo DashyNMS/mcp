@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DashyNMS.Agent.Alerts;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
@@ -80,7 +81,7 @@ public sealed class AlertTools(
                 ? "No open alerts visible to this account" + (result.Filtered ? " match." : ".")
                 : $"{totals.Describe()} on {DeviceTools.Count(totals.Devices, "device")} ({totals.Critical} critical, {totals.Warning} warning)." +
                   PagingNote(page);
-            var output = ToolResult.Ok(summary, new { totals, devices = Shape(shown.Groups, now, verbose), page });
+            var output = ToolResult.Ok(summary, new ActiveAlertsData(totals, Shape(shown.Groups, now, verbose), page));
 
             if (take <= 1 || ToolResult.Fits(output, options.MaxResultBytes))
             {
@@ -96,41 +97,41 @@ public sealed class AlertTools(
     /// first few faults by name and state only; verbose gives up to
     /// <see cref="OpenAlerts.MaxFaults"/> with their entity IDs and times.
     /// </summary>
-    private static object Shape(IReadOnlyList<OpenAlertGroup> shown, DateTime now, bool verbose)
+    private static IReadOnlyList<AlertingDevice> Shape(IReadOnlyList<OpenAlertGroup> shown, DateTime now, bool verbose)
         => shown
             .GroupBy(g => g.DeviceId)
-            .Select(g => new
-            {
-                device_id = g.Key,
-                hostname = g.First().Hostname,
-                display = string.IsNullOrWhiteSpace(g.First().Device?.Display) ? null : g.First().Device!.Display,
-                device_status = g.First().Device?.Status,
-                alerts = g.Select(alert =>
+            .Select(g => new AlertingDevice(
+                g.Key,
+                g.First().Hostname,
+                string.IsNullOrWhiteSpace(g.First().Device?.Display) ? null : g.First().Device!.Display,
+                g.First().Device?.Status,
+                g.Select(alert =>
                 {
                     // A group of one names its fault in entity; only larger groups list faults.
                     var listed = alert.FaultCount > 1 ? alert.Faults.Take(verbose ? OpenAlerts.MaxFaults : BriefFaults).ToList() : null;
-                    return new
-                    {
-                        GroupId = alert.Key.ToString(),
-                        AlertId = alert.Representative.Id,
+                    return new ActiveAlert(
+                        alert.Key.ToString(),
+                        alert.Representative.Id,
                         alert.RuleId,
-                        source = alert.Representative.Source == AlertSource.Fault ? "fault" : "alert",
+                        alert.Representative.Source == AlertSource.Fault ? "fault" : "alert",
                         alert.Rule,
-                        Severity = alert.Severity.ToString().ToLowerInvariant(),
-                        State = StateText(alert.State),
+                        alert.Severity.ToString().ToLowerInvariant(),
+                        StateText(alert.State),
                         alert.FaultCount,
-                        acknowledged_count = alert.AcknowledgedCount > 0 && alert.FaultCount > 1 ? (int?)alert.AcknowledgedCount : null,
+                        alert.AcknowledgedCount > 0 && alert.FaultCount > 1 ? alert.AcknowledgedCount : null,
                         alert.Entity,
-                        since = verbose ? alert.Since : null,
-                        age_minutes = alert.Since is { } started ? (long?)Math.Max(0, (long)(now - started).TotalMinutes) : null,
-                        note = verbose ? alert.Note : null,
-                        faults = listed?.Select(f => verbose
-                            ? (object)new FaultBrief(f.Key.Id, f.Entity, f.EntityType, f.EntityId, f.State.ToString().ToLowerInvariant(), f.Since)
-                            : new { FaultId = f.Key.Id, f.Entity, State = f.State.ToString().ToLowerInvariant() }).ToList(),
-                        faults_omitted = listed is null || alert.FaultCount <= listed.Count ? (int?)null : alert.FaultCount - listed.Count,
-                    };
-                }).ToList(),
-            })
+                        verbose ? alert.Since : null,
+                        alert.Since is { } started ? Math.Max(0, (long)(now - started).TotalMinutes) : null,
+                        verbose ? alert.Note : null,
+                        listed?.Select(f => new FaultBrief(
+                            f.Key.Id,
+                            f.Entity,
+                            verbose ? f.EntityType : null,
+                            verbose ? f.EntityId : null,
+                            f.State.ToString().ToLowerInvariant(),
+                            verbose ? f.Since : null)).ToList(),
+                        listed is null || alert.FaultCount <= listed.Count ? null : alert.FaultCount - listed.Count);
+                }).ToList()))
             .ToList();
 
     /// <summary>The state words every alert tool uses: active, acknowledged or partly_acknowledged.</summary>

@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+# Licence evidence is checked by hash, so it's kept as it was fetched.
+docs/dependency-licences/** -text

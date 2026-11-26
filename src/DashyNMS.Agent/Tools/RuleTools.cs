@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DashyNMS.Agent.Catalogue;
 using DashyNMS.Agent.Alerts;
 using DashyNMS.Agent.Devices;
+using DashyNMS.Agent.Outputs;
 using DashyNMS.Agent.Summaries;
 using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Api;
@@ -63,22 +64,17 @@ public sealed class RuleTools(
         int offset, int limit, bool verbose, CancellationToken token)
     {
         var result = await Operation().ReadRulesAsync(new(name, severity, includeDisabled, sort, offset, limit, verbose), token).ConfigureAwait(false);
-        return ToolResult.Ok(result.Summary, new
-        {
-            rules = result.Data.Rules.Select(r => new
-            {
+        return ToolResult.Ok(result.Summary, new ListedRulesData(
+            result.Data.Rules.Select(r => new ListedRule(
                 r.RuleId, r.Name, r.Severity, r.Enabled, r.Condition,
-                applies_to = r.AppliesTo.AllDevices ? (object)"all devices" : new
-                {
+                r.AppliesTo.AllDevices ? "all devices" : new ListedRuleTargets(
                     r.AppliesTo.Targets!.Except,
-                    devices = r.AppliesTo.Targets.Devices?.Select(t => t.Name).ToList(),
-                    groups = r.AppliesTo.Targets.Groups?.Select(t => t.Name).ToList(),
-                    locations = r.AppliesTo.Targets.Locations?.Select(t => t.Name).ToList(),
-                },
+                    r.AppliesTo.Targets.Devices?.Select(t => t.Name).ToList(),
+                    r.AppliesTo.Targets.Groups?.Select(t => t.Name).ToList(),
+                    r.AppliesTo.Targets.Locations?.Select(t => t.Name).ToList()),
                 r.Template, r.NotifyPerEntity, r.MaxEntities, r.MaxEntitiesInherited, r.Acknowledging,
-                r.RemovedColumns, r.OpenAlerts, raised_last_7_days = r.RaisedLast7Days, r.Notes, r.Procedure,
-            }).ToList(),
-            result.Data.Page, result.Data.Unavailable,
-        });
+                r.RemovedColumns, r.OpenAlerts, r.RaisedLast7Days, r.Notes, r.Procedure)).ToList(),
+            result.Data.Page,
+            result.Data.Unavailable));
     }
 }

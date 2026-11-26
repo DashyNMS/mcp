@@ -17,9 +17,10 @@ Every name and address is invented: `example.net` and the documentation ranges
   and IP; ties by hostname, case-insensitive).
 - `states`: the shared status word for chosen devices (MCP's `status`) and the
   state LibreNMS actually reported (the summary's typed `State`, as Core's display
-  name). Device 9 is ignored and device 10's response leaves out `disabled`: both
-  are `up` in the status word, but `Ignored` and `Unknown` in the reported state.
-  Device 11 reports no flags at all: `down`, but `Unknown`.
+  name). Both come from the reported state (MCP #121): device 9 is ignored
+  (`ignored`, `Ignored`), device 10's response leaves out `disabled` and device 11
+  reports no flags at all (both `unknown`, `Unknown`). Neither is called up or
+  down, so the `down` status scope finds device 8 alone.
 - `failures`: the HTTP status of a failed device list and the
   `DeviceSearchFailure` the host search maps it to. The category is the host's
   contract: the MCP tool returns its own sentence per status instead, so the

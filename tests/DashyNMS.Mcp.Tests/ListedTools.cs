@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 
@@ -13,7 +14,7 @@ namespace DashyNMS.Mcp.Tests;
 /// property order included, rather than a parsed form that would forgive a changed escape. Only the
 /// order of the tools themselves is normalised, by name: the SDK lists them in no fixed order, and a
 /// client doesn't depend on it. When a change to the list is intended, the failure carries the new list
-/// as base64: decode it into the fixture and review the diff.
+/// as gzipped base64: unpack it into the fixture and review the diff.
 /// </remarks>
 internal static class ListedTools
 {
@@ -26,9 +27,21 @@ internal static class ListedTools
         if (!string.Equals(expected, listed, StringComparison.Ordinal))
         {
             Assert.Fail(
-                "The tools MCP lists differ from Fixtures/tools-list.json. If the change is intended, replace the fixture with this (base64, UTF-8):\n" +
-                "TOOLS-LIST-BASE64:" + Convert.ToBase64String(Encoding.UTF8.GetBytes(listed + "\n")) + ":END");
+                "The tools MCP lists differ from Fixtures/tools-list.json. If the change is intended, replace the fixture with this (gzip, then base64, UTF-8):\n" +
+                "TOOLS-LIST-GZIP-BASE64:\n" + Packed(listed + "\n") + "\n:END");
         }
+    }
+
+    /// <summary>Small enough, in short enough lines, that a CI log keeps all of it.</summary>
+    private static string Packed(string text)
+    {
+        using var packed = new MemoryStream();
+        using (var gzip = new GZipStream(packed, CompressionLevel.SmallestSize))
+        {
+            gzip.Write(Encoding.UTF8.GetBytes(text));
+        }
+
+        return Convert.ToBase64String(packed.ToArray(), Base64FormattingOptions.InsertLineBreaks);
     }
 
     /// <summary>One tool's raw JSON per line, sorted by name, as a JSON array.</summary>

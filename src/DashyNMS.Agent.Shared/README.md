@@ -36,17 +36,20 @@ hostname, display name, sysName or IP address) in MCP's tiers, under the same ru
 `Found` with the redacted device, `Ambiguous` with up to five redacted candidates and the rest
 counted, or `NoMatch`. A device list that can't be read is a `HostFailure`, never no match.
 
+`DashyNMS.Agent.Help.HelpLookup` answers how-to questions from the DashyNMS user guides bundled in
+the package (`HelpLibrary`), with the product and release of each result. It needs no client or
+connection, and requests nothing unless the host turns refreshing on.
+
 `DashyNMS.Agent.Catalogue.ToolCatalogue` lists every MCP tool with its name, title, description
 and parameters (type, required, default, documented values or range, description), and the other
 tools each description names. MCP's own attributes read the same text, so a host describing a tool
 from the catalogue tells its model exactly what MCP tells a client. Leave out what a host doesn't
 support; don't reword it.
 
-Each `DeviceSummary` keeps two views of a device's state. `Status` is MCP's word
-(`up`, `down` or `disabled`, also the status filter), read from Core's compatibility
-flags, so an omitted flag reads as down and an ignored device as up or down. `State`
-is Core's `ReportedState`: `Unknown` when LibreNMS left a flag out, and `Ignored`
-on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
+Each `DeviceSummary` gives a device's state two ways, both from Core's
+`ReportedState`. `Status` is MCP's word (`up`, `down`, `disabled`, `ignored` or
+`unknown`, also the status filter). `State` is the typed value: `Unknown` when
+LibreNMS left a flag out, and `Ignored` on its own. Show `State`. Search checks maintenance only for returned rows. Active maintenance sets both
 views to maintenance; a failed check preserves the reported state and leaves
 `UnderMaintenance` null, rather than claiming it is off. Other device summaries
 do not request maintenance. `State` is left out of JSON.
@@ -57,7 +60,7 @@ limits, sanitisation, deadlines and evidence ownership checks.
 
 ## Consumption status
 
-Each verified push to `main` in DashyNMS/mcp publishes `2.0.0-ci.<run-id>.<attempt>`
+Each verified commit to `main` in DashyNMS/mcp publishes `2.0.0-edge.<build>`
 to GitHub Packages (`https://nuget.pkg.github.com/DashyNMS/index.json`), with a GitHub
 build provenance attestation and the repository commit in the nuspec. Pull requests
 verify packages without publishing. `2.0.0-dev` identifies local packs and must not
@@ -69,11 +72,10 @@ check it with `gh attestation verify <nupkg> --repo DashyNMS/mcp`, and use a NuG
 lock file so restore fails if the content changes. Map `DashyNMS.*` to the GitHub
 feed and restore with a token that has `packages: read`.
 
-The package is built against Core `2.0.0-ci.74` (MCP's pin; mobile moves to it from `2.0.0-ci.64` before adopting this release) and
-declares it as a minimum. Before publication, CI runs the Shared tests on the exact
-packed binary with that Core. That is plain .NET
-evidence: a consumer must still verify its own restore, Release trimming/AOT and
-runtime behaviour in its CI.
+Shared builds against Core `2.0.0-nightly.3` and declares it as its minimum.
+Before publication, CI tests the packed binary with that version and with the
+standalone server's Core pin, `2.0.0-nightly.5`. Consumers still verify their own
+restore, Release trimming and runtime behaviour in their CI.
 
 ## Licence
 

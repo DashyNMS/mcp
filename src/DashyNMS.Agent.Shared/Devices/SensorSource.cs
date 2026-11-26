@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.Net;
 using System.Text.Json.Serialization;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Models;
@@ -21,9 +23,11 @@ namespace DashyNMS.Agent.Devices;
 /// The per-device route works for any token that can see the device:
 /// /devices/{id}/health lists its sensor types, each type lists its sensor
 /// IDs, and each ID gives the full sensor row. That's one request per sensor,
-/// so it's fine for a device or a small group and wrong for a whole network.
-/// Once the network-wide list is refused it isn't asked for again for an
-/// hour, so every call doesn't pay for a 403 first. This belongs in Core
+/// so it's fine for a device or a small group and wrong for a whole network
+/// in one go: <see cref="SweepAsync"/> reads one a part at a time, keeping
+/// what it has read (#71).
+/// Once the network-wide list is refused it isn't asked for again for a
+/// while, so every call doesn't pay for a 403 first. This belongs in Core
 /// alongside DeviceHealthApi, which reads processors, memory and storage the
 /// same way; until it's there, it's built on the transport here.
 /// </para>
@@ -43,10 +47,22 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
     /// <summary>Above this many devices, reading them one by one is too slow and too heavy to do.</summary>
     public const int MaxDevicesOneByOne = 25;
 
-    public static readonly TimeSpan ForbiddenRetry = TimeSpan.FromHours(1);
+    /// <summary>Short enough that giving the token's user the permission shows soon after.</summary>
+    public static readonly TimeSpan ForbiddenRetry = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long a sweep keeps a device's readings: two of LibreNMS's usual polls, so a long sweep isn't chasing its own tail.</summary>
+    public static readonly TimeSpan SweepLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>This many devices failing before any has been read is LibreNMS failing, not the devices.</summary>
+    private const int FailuresThatEndASweep = 5;
 
     /// <summary>The health types that aren't sensors: Core's DeviceHealthApi already covers these, and device_health uses them.</summary>
     private static readonly HashSet<string> NotSensors = new(StringComparer.OrdinalIgnoreCase) { "device_processor", "device_mempool", "device_storage" };
+
+    private readonly ConcurrentDictionary<(int DeviceId, string? Type), (IReadOnlyList<Sensor> Sensors, DateTimeOffset ReadAt)> _swept = new();
+
+    /// <summary>Devices the last sweep ran out of time on part way through: they go last next time, so a few huge ones can't hold up the rest for ever.</summary>
+    private readonly ConcurrentDictionary<int, byte> _unfinished = new();
 
     private DateTimeOffset? _fleetForbiddenAt;
 
@@ -121,6 +137,95 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
         return new SensorRead(sensors, lists.Count(l => l.Denied));
     }
 
+    /// <summary>
+    /// As many of <paramref name="deviceIds"/>' sensors as can be read in
+    /// <paramref name="budget"/>, in the order given (#71). Devices read in the last
+    /// <see cref="SweepLifetime"/> aren't read again, so asking again carries on
+    /// where this stopped until every device is covered.
+    /// </summary>
+    /// <param name="type">Only this sensor class, which takes far fewer requests; null for every class.</param>
+    /// <param name="requests">The most requests at once, over every device.</param>
+    public async Task<SensorSweep> SweepAsync(IReadOnlyList<int> deviceIds, string? type, int requests, TimeSpan budget, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(deviceIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var (key, value) in _swept)
+        {
+            if (time.GetUtcNow() - value.ReadAt >= SweepLifetime)
+            {
+                _swept.TryRemove(key, out _);
+            }
+        }
+
+        using var deadline = new CancellationTokenSource(budget, time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        using var gate = new SemaphoreSlim(requests, requests);
+        var read = new ConcurrentBag<(IReadOnlyList<Sensor> Sensors, DateTimeOffset ReadAt)>();
+        int denied = 0, failed = 0, done = 0;
+
+        await Parallel.ForEachAsync(
+            deviceIds.OrderBy(id => _unfinished.ContainsKey(id)),
+            new ParallelOptions { MaxDegreeOfParallelism = requests, CancellationToken = cancellationToken },
+            async (id, _) =>
+            {
+                if (Swept(id, type) is { } kept)
+                {
+                    read.Add(kept);
+                    Interlocked.Increment(ref done);
+                    return;
+                }
+
+                if (deadline.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var own = await ReadDeviceAsync(id, type, gate, linked.Token).ConfigureAwait(false);
+                    var now = (own, time.GetUtcNow());
+                    _swept[(id, type)] = now;
+                    _unfinished.TryRemove(id, out byte _);
+                    read.Add(now);
+                    Interlocked.Increment(ref done);
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    _unfinished[id] = 0;
+                }
+                catch (LibreNmsApiException ex) when (ex.IsPermissionDenied)
+                {
+                    Interlocked.Increment(ref denied);
+                }
+                catch (LibreNmsApiException ex) when (!ex.IsAuthenticationFailure)
+                {
+                    // One device's trouble is its own, until it's everyone's.
+                    if (Interlocked.Increment(ref failed) >= FailuresThatEndASweep && Volatile.Read(ref done) == 0)
+                    {
+                        throw;
+                    }
+                }
+            }).ConfigureAwait(false);
+
+        var sensors = read.SelectMany(r => r.Sensors).ToList();
+        await ApplyDefinitionsAsync(sensors, cancellationToken).ConfigureAwait(false);
+        return new SensorSweep(sensors, read.Count, denied, failed, deviceIds.Count - read.Count - denied - failed,
+            read.IsEmpty ? null : read.Min(r => r.ReadAt));
+    }
+
+    private (IReadOnlyList<Sensor> Sensors, DateTimeOffset ReadAt)? Swept(int deviceId, string? type)
+    {
+        var hasOwn = _swept.TryGetValue((deviceId, type), out var own);
+
+        // Every class was read for another question: the one wanted is among them, and may be newer.
+        if (type is not null && _swept.TryGetValue((deviceId, null), out var every) && (!hasOwn || every.ReadAt > own.ReadAt))
+        {
+            return (every.Sensors.Where(s => s.HasClass(type)).ToList(), every.ReadAt);
+        }
+
+        return hasOwn ? own : null;
+    }
+
     private async Task ApplyDefinitionsAsync(IReadOnlyList<Sensor> sensors, CancellationToken token)
     {
         if (definitions is null || devices is null) return;
@@ -131,10 +236,19 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
 
     private async Task<IReadOnlyList<Sensor>> ReadDeviceAsync(int deviceId, CancellationToken cancellationToken)
     {
-        var baseUrl = "devices/" + deviceId.ToString(CultureInfo.InvariantCulture) + "/health";
-        var types = await transport.GetCollectionAsync<HealthType>(baseUrl, "graphs", cancellationToken).ConfigureAwait(false);
-
         using var gate = new SemaphoreSlim(MaxConcurrency);
+        return await ReadDeviceAsync(deviceId, type: null, gate, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<Sensor>> ReadDeviceAsync(int deviceId, string? type, SemaphoreSlim gate, CancellationToken cancellationToken)
+    {
+        // Asked for by name, so it may be anything: one of these, or no class at all.
+        if (type is not null && (NotSensors.Contains("device_" + type) || !type.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')))
+        {
+            return [];
+        }
+
+        var baseUrl = "devices/" + deviceId.ToString(CultureInfo.InvariantCulture) + "/health";
         async Task<T> Gated<T>(Func<Task<T>> call)
         {
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -148,11 +262,29 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
             }
         }
 
-        var refs = await Task.WhenAll(types
-            .Where(t => t.Name is { } name && name.StartsWith("device_", StringComparison.OrdinalIgnoreCase) && !NotSensors.Contains(name))
-            .Select(t => Gated(async () => (Type: t.Name!, Sensors: await transport.GetCollectionAsync<SensorRef>(baseUrl + "/" + t.Name, "graphs", cancellationToken).ConfigureAwait(false)))))
-            .ConfigureAwait(false);
+        // A class the device may not have: an empty list, or a 404 for that.
+        async Task<IReadOnlyList<SensorRef>> OneClass()
+        {
+            try
+            {
+                return await transport.GetCollectionAsync<SensorRef>(baseUrl + "/device_" + type, "graphs", cancellationToken).ConfigureAwait(false);
+            }
+            catch (LibreNmsApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return [];
+            }
+        }
 
+        async Task<(string Type, IReadOnlyList<SensorRef> Sensors)[]> EveryClass()
+        {
+            var types = await Gated(() => transport.GetCollectionAsync<HealthType>(baseUrl, "graphs", cancellationToken)).ConfigureAwait(false);
+            return await Task.WhenAll(types
+                .Where(t => t.Name is { } name && name.StartsWith("device_", StringComparison.OrdinalIgnoreCase) && !NotSensors.Contains(name))
+                .Select(t => Gated(async () => (Type: t.Name!, Sensors: await transport.GetCollectionAsync<SensorRef>(baseUrl + "/" + t.Name, "graphs", cancellationToken).ConfigureAwait(false)))))
+                .ConfigureAwait(false);
+        }
+
+        var refs = type is null ? await EveryClass().ConfigureAwait(false) : [("device_" + type, await Gated(OneClass).ConfigureAwait(false))];
         var details = await Task.WhenAll(refs
             .SelectMany(r => r.Sensors.Select(s => (r.Type, s.SensorId)))
             .Select(r => Gated(async () =>
@@ -178,6 +310,13 @@ public sealed class SensorSource(Func<CancellationToken, Task<IReadOnlyList<Sens
         public int SensorId { get; set; }
     }
 }
+
+/// <summary>What one <see cref="SensorSource.SweepAsync"/> covered.</summary>
+/// <param name="Read">Devices whose sensors are in <paramref name="Sensors"/>, now or from an earlier sweep.</param>
+/// <param name="Failed">Devices LibreNMS couldn't answer for.</param>
+/// <param name="NotReached">Devices there wasn't time for.</param>
+/// <param name="OldestReadAt">When the oldest of these readings was read; null when there are none.</param>
+public sealed record SensorSweep(IReadOnlyList<Sensor> Sensors, int Read, int Denied, int Failed, int NotReached, DateTimeOffset? OldestReadAt);
 
 /// <summary>Sensors read device by device, and how many devices this account wasn't allowed to read.</summary>
 public sealed record SensorRead(IReadOnlyList<Sensor> Sensors, int DeniedDevices);

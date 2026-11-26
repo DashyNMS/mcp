@@ -98,8 +98,8 @@ internal sealed class FakeLibreNms
         Time = new FakeTimeProvider(Now);
         Directory = new DeviceDirectory(Client, Time);
         Resolver = new DeviceResolver(Directory);
-        Runner = new ToolRunner(new Redactor(), Options, NullLogger<ToolRunner>.Instance);
-        Timeline = new DeviceTimeline(Client, Options);
+        Runner = new ToolRunner(new Redactor(), Options, NullLogger<ToolRunner>.Instance) { Returned = OutputContract.Check };
+        Timeline = new DeviceTimeline(Client, Options, Time);
         Scope = new DeviceScope(Client, Directory, Time);
         Fleet = new FleetCache(Client, Time);
         Sensors = new SensorSource(Fleet.GetSensorsAsync, Transport, Time);
@@ -143,7 +143,7 @@ internal sealed class FakeLibreNms
         .On("devices/1", """
             {"status":"ok","devices":[
               {"device_id":1,"hostname":"core-sw1.example.com","sysName":"core-sw1","display":"Core switch 1","ip":"10.0.0.1",
-               "os":"arubaos-cx","status":1,"uptime":864100,"last_polled":"2026-10-17 09:58:00",
+               "os":"arubaos-cx","status":1,"disabled":0,"ignore":0,"uptime":864100,"last_polled":"2026-10-17 09:58:00",
                "location":{"id":1,"location":"Paddock","lat":51.2788,"lng":7.1598,"fixed_coordinates":true}}
             ]}
             """)

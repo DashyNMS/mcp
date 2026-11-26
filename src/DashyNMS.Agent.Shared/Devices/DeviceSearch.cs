@@ -147,13 +147,19 @@ public sealed partial class DeviceSearch
 
     private sealed record MaintenanceState(bool Active);
 
+    /// <summary>
+    /// The status words a search can filter by, the same words results carry (#121).
+    /// Maintenance isn't one: it needs a call per device, and only the returned page gets one.
+    /// </summary>
     private static string? ParseStatus(string? status) => status?.Trim().ToLowerInvariant() switch
     {
         null or "" or "any" or "all" => null,
         "up" => "up",
         "down" => "down",
         "disabled" => "disabled",
-        _ => throw new ToolException("Status must be up, down or disabled."),
+        "ignored" => "ignored",
+        "unknown" => "unknown",
+        _ => throw new ToolException("Status must be up, down, disabled, ignored or unknown."),
     };
 
     /// <summary>0 exact, 1 starts with, 2 contains, -1 no match - over the fields people call a device by.</summary>
