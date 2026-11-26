@@ -1,0 +1,13 @@
+{
+  "package": "system.diagnostics.diagnosticsource/11.0.0",
+  "packageSha256": "16e694e83a96da9e27e15038b10c0a37a87605433287cb464fc4d1f9e4597647",
+  "upstreamRepository": "https://github.com/dotnet/dotnet",
+  "upstreamRevision": "297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f",
+  "files": {
+    "LICENSE.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/dotnet/297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "role": "licence"
+    }
+  }
+}

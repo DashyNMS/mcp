@@ -1,0 +1,18 @@
+{
+  "package": "microsoft.extensions.timeprovider.testing/11.0.0",
+  "packageSha256": "1d16349dabeb4bf06a6f4d564ec4381283533cc3f2bf09e6d382929b088bf2d3",
+  "upstreamRepository": "https://github.com/dotnet/extensions",
+  "upstreamRevision": "c60d72e7973a90cd4e4300d9153e97b93315e4b7",
+  "files": {
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/dotnet/extensions/c60d72e7973a90cd4e4300d9153e97b93315e4b7/LICENSE",
+      "sha256": "47f0ad8ba753eae5de6178291cd8f38bbb42d2368b177f8e11714ad17c701275",
+      "role": "licence"
+    },
+    "THIRD-PARTY-NOTICES.TXT": {
+      "url": "https://raw.githubusercontent.com/dotnet/extensions/c60d72e7973a90cd4e4300d9153e97b93315e4b7/THIRD-PARTY-NOTICES.TXT",
+      "sha256": "07f3e74329ed32ac9229a75ae994b98b30aadb1d9947eee926eed3d3fc4cf0c6",
+      "role": "notice"
+    }
+  }
+}
