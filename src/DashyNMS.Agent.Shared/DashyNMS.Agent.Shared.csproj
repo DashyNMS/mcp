@@ -18,7 +18,7 @@
     <Description>Typed read-only LibreNMS operations shared by DashyNMS hosts over host-owned clients, without MCP.</Description>
   </PropertyGroup>
   <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' == ''">
-    <PackageReference Include="DashyNMS.Core" Version="$(DashyNMSCoreVersion)" />
+    <PackageReference Include="DashyNMS.Core" Version="$(DashyNMSSharedCoreVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(DASHYNMS_LOCAL_CORE)' != ''">
     <ProjectReference Include="$(DASHYNMS_LOCAL_CORE)/src/DesktopNMS.Core/DesktopNMS.Core.csproj" />

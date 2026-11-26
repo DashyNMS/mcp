@@ -77,10 +77,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # MCP's own pin (Directory.Build.props), which mobile moves to before it
-          # pins this Shared: the help lookup needs Core's guide loader.
-          - consumer: mcp and mobile
+          # The published Shared minimum and the standalone server's pin.
+          - consumer: shared
             core: 2.0.0-nightly.3
+          - consumer: mcp
+            core: 2.0.0-nightly.5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,7 +94,7 @@ jobs:
           name: ${{ inputs.artifact }}
           path: artifacts
       - name: Build the Shared package from source against this Core
-        run: dotnet build src/DashyNMS.Agent.Shared -c Release -warnaserror -p:DashyNMSCoreVersion=${{ matrix.core }}
+        run: dotnet build src/DashyNMS.Agent.Shared -c Release -warnaserror -p:DashyNMSSharedCoreVersion=${{ matrix.core }}
       - name: Test the packed Shared binary with this Core
         env:
           EXPECTED_SHARED_SHA256: ${{ needs.verify.outputs.sha256 }}
