@@ -17,8 +17,7 @@ registries:
 updates:
   - package-ecosystem: github-actions
     commit-message:
-      prefix: build
-      include: scope
+      prefix: build(deps)
     directory: /
     schedule:
       interval: weekly
@@ -34,8 +33,7 @@ updates:
   # together. A major framework migration is reviewed separately.
   - package-ecosystem: docker
     commit-message:
-      prefix: build
-      include: scope
+      prefix: build(deps)
     directory: /
     ignore:
       # global.json and the application target .NET 10; keep digest updates
@@ -53,8 +51,7 @@ updates:
 
   - package-ecosystem: nuget
     commit-message:
-      prefix: build
-      include: scope
+      prefix: build(deps)
     directories:
       - /src/*
       - /tests/*
